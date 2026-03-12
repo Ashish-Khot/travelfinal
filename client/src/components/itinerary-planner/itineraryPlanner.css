@@ -1,0 +1,209 @@
+.itinerary-root {
+  padding-bottom: 48px;
+}
+
+.itinerary-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 1100px) {
+  .itinerary-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+.itinerary-chat {
+  background: #ffffff;
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 720px;
+}
+
+.itinerary-chat-header {
+  padding: 20px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(120deg, #f8fafc 0%, #ecfeff 100%);
+}
+
+.itinerary-chat-form {
+  padding: 20px 22px;
+  background: #ffffff;
+}
+
+.itinerary-chat-body {
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 260px;
+  overflow: auto;
+  background: #f8fafc;
+}
+
+.itinerary-chat-compose {
+  padding: 18px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.itinerary-bubble {
+  padding: 12px 14px;
+  border-radius: 16px;
+  max-width: 90%;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.bubble-assistant {
+  align-self: flex-start;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.bubble-user {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #0f766e 0%, #0ea5a4 100%);
+  color: #ffffff;
+}
+
+.itinerary-output {
+  background: #ffffff;
+  border-radius: 28px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, 0.1);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.itinerary-output-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.itinerary-live-card {
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(120deg, #f8fafc 0%, #ecfeff 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.itinerary-live-step {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  background: #ffffff;
+  color: #64748b;
+}
+
+.itinerary-live-step.is-active {
+  border-style: solid;
+  border-color: rgba(15, 118, 110, 0.4);
+  background: rgba(15, 118, 110, 0.08);
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.itinerary-empty-card {
+  padding: 22px;
+  border-radius: 18px;
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  background: #f8fafc;
+}
+
+.itinerary-module-tabs {
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.itinerary-module-tabs .MuiTab-root {
+  text-transform: none;
+  font-weight: 600;
+}
+
+.itinerary-module-tabs .MuiTabs-indicator {
+  height: 0;
+}
+
+.itinerary-module-tabs .Mui-selected {
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 12px;
+}
+
+.itinerary-module-panel {
+  padding-top: 12px;
+}
+
+.story-root {
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.story-card {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 16px 26px rgba(15, 23, 42, 0.08);
+}
+
+.story-card-title {
+  font-family: "Sora", "Plus Jakarta Sans", sans-serif;
+}
+
+.story-day-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.story-day-tagline {
+  font-size: 0.95rem;
+  color: #475569;
+}
+
+.story-block-title {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.story-activity {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.story-activity-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.story-activity-time {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.story-chip {
+  font-size: 0.72rem;
+  height: 22px;
+}
