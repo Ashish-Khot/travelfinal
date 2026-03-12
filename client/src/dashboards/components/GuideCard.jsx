@@ -1,7 +1,7 @@
 // GuideCard.jsx - Premium professional guide card with all real data and features
 import React, { useState } from 'react';
 import Card from '@mui/material/Card';
-import CardMedia from '@mui/material/CardMedia';
+import PremiumImage from '../../components/PremiumImage';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Rating from '@mui/material/Rating';
@@ -77,28 +77,32 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
             position: 'relative',
             height: 220,
             overflow: 'hidden',
-            background: '#f0f0f0',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
+          background: '#f0f0f0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          '&:hover .guide-card-image': {
+            transform: 'scale(1.06)',
+          },
           }}
           onClick={() => guide.guideVideo && setVideoOpen(true)}
         >
-          <CardMedia
-            component="img"
-            image={guide.avatar ? (guide.avatar.startsWith('http') ? guide.avatar : `http://localhost:3001${guide.avatar}`) : '/avatar.png'}
+          <PremiumImage
+            src={guide.avatar}
             alt={guide.name}
-            sx={{
+            name={guide.name}
+            height="100%"
+            width="100%"
+            showLabel={false}
+            imgSx={{
               width: '100%',
               height: '100%',
               objectFit: 'cover',
               objectPosition: 'center',
               transition: 'transform 0.3s ease',
-              '&:hover': {
-                transform: 'scale(1.06)',
-              },
             }}
+            imgProps={{ className: 'guide-card-image' }}
           />
 
           {/* Video Play Button - if video exists */}

@@ -4,7 +4,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Avatar from '@mui/material/Avatar';
 import Checkbox from '@mui/material/Checkbox';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
@@ -25,29 +24,14 @@ import Tooltip from '@mui/material/Tooltip';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import HotelRoundedIcon from '@mui/icons-material/HotelRounded';
-import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 import io from 'socket.io-client';
 import api from '../../api';
+import PremiumAvatar from '../../components/PremiumAvatar';
+import { buildMediaUrl } from '../../utils/media';
 
 const SOCKET_URL = 'http://localhost:3001';
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
-const BACKEND_BASE_URL = api.defaults?.baseURL?.replace(/\/api\/?$/, '') || 'http://localhost:3001';
-
-const buildImageUrl = (value) => {
-  if (!value) return '';
-  if (value.startsWith('http') || value.startsWith('data:')) return value;
-  return `${BACKEND_BASE_URL}${value.startsWith('/') ? '' : '/'}${value}`;
-};
-
-const getInitials = (name) => {
-  if (!name) return '??';
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0].toUpperCase())
-    .join('');
-};
+const buildImageUrl = buildMediaUrl;
 const emojiList = ['😀', '😊', '😍', '👍', '🙏', '🎉', '😢', '😮', '🔥', '✅'];
 
 const getDateKey = (value) => {
@@ -552,11 +536,6 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
   };
 
   const myUserId = user?.userId || user?._id;
-  const myAvatar = useMemo(() => buildImageUrl(user?.avatar || ''), [user]);
-  const selectedAvatar = useMemo(
-    () => buildImageUrl(selectedContact?.avatar || ''),
-    [selectedContact]
-  );
   const selectedMessages = useMemo(() => {
     if (!selectedMessageIds.length) return [];
     const idSet = new Set(selectedMessageIds);
@@ -703,7 +682,6 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
             </Typography>
           ) : (
             filteredContacts.map((contact) => {
-              const avatarSrc = buildImageUrl(contact.avatar);
               return (
               <Box
                 key={contact.userId}
@@ -725,24 +703,17 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                 }}
                 onClick={() => setSelectedContact(contact)}
               >
-                <Avatar
-                  src={avatarSrc}
-                  alt={contact.name}
+                <PremiumAvatar
+                  src={contact.avatar}
+                  name={contact.name}
+                  size={44}
                   variant={contact.type === 'hotel' ? 'rounded' : 'circular'}
+                  fallbackIcon={contact.type === 'hotel' ? HotelRoundedIcon : undefined}
                   sx={{
-                    width: 44,
-                    height: 44,
                     border: selectedContact?.userId === contact.userId ? '2px solid #0ea783' : '2px solid #e9f3ee',
                     boxShadow: selectedContact?.userId === contact.userId ? '0 0 0 4px rgba(14, 167, 131, 0.15)' : 'none',
-                    bgcolor: avatarSrc ? 'transparent' : 'rgba(15, 23, 42, 0.08)'
                   }}
-                >
-                  {!avatarSrc && (contact.type === 'hotel' ? (
-                    <HotelRoundedIcon sx={{ fontSize: 20, color: '#0f172a' }} />
-                  ) : (
-                    <PersonRoundedIcon sx={{ fontSize: 20, color: '#0f172a' }} />
-                  ))}
-                </Avatar>
+                />
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography fontWeight={700} fontSize={17} noWrap sx={{ color: '#10352c' }}>{contact.name || 'No Name'}</Typography>
                   <Typography fontSize={13} sx={{ color: '#5d7d71' }} noWrap>{contact.subtitle || ''}</Typography>
@@ -778,18 +749,14 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Avatar
-                src={selectedAvatar}
-                alt={selectedContact.name}
+              <PremiumAvatar
+                src={selectedContact.avatar}
+                name={selectedContact.name}
+                size={44}
                 variant={selectedContact.type === 'hotel' ? 'rounded' : 'circular'}
-                sx={{ width: 44, height: 44, mr: 2, bgcolor: selectedAvatar ? 'transparent' : 'rgba(15, 23, 42, 0.08)' }}
-              >
-                {!selectedAvatar && (selectedContact.type === 'hotel' ? (
-                  <HotelRoundedIcon sx={{ fontSize: 20, color: '#0f172a' }} />
-                ) : (
-                  <PersonRoundedIcon sx={{ fontSize: 20, color: '#0f172a' }} />
-                ))}
-              </Avatar>
+                fallbackIcon={selectedContact.type === 'hotel' ? HotelRoundedIcon : undefined}
+                sx={{ mr: 2 }}
+              />
               <Box>
                 <Typography fontWeight={800} fontSize={20} sx={{ color: '#10352c' }}>{selectedContact.name}</Typography>
                 <Typography fontSize={13} sx={{ color: '#55786c' }}>{selectedContact.subtitle || ''}</Typography>
@@ -898,24 +865,19 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                   ? 'Delete for everyone (available for 1 hour)'
                   : 'Delete for me (delete for everyone is only available for your messages within 1 hour)';
                 const attachmentUrl = msg.attachmentUrl
-                  ? msg.attachmentUrl.startsWith('http')
-                    ? msg.attachmentUrl
-                    : `http://localhost:3001${msg.attachmentUrl}`
+                  ? buildImageUrl(msg.attachmentUrl)
                   : '';
                 return (
                   <Box key={row.id || idx} sx={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', mb: 1 }}>
                     {!isMe && (
-                      <Avatar
-                        src={selectedAvatar}
+                      <PremiumAvatar
+                        src={selectedContact?.avatar}
+                        name={selectedContact?.name}
+                        size={32}
                         variant={selectedContact?.type === 'hotel' ? 'rounded' : 'circular'}
-                        sx={{ width: 32, height: 32, mr: 1, bgcolor: selectedAvatar ? 'transparent' : '#cbd5f5' }}
-                      >
-                        {!selectedAvatar && (selectedContact?.type === 'hotel' ? (
-                          <HotelRoundedIcon sx={{ fontSize: 16, color: '#0f172a' }} />
-                        ) : (
-                          <PersonRoundedIcon sx={{ fontSize: 16, color: '#0f172a' }} />
-                        ))}
-                      </Avatar>
+                        fallbackIcon={selectedContact?.type === 'hotel' ? HotelRoundedIcon : undefined}
+                        sx={{ mr: 1 }}
+                      />
                     )}
                     <Box sx={{
                       background: isMe
@@ -1024,12 +986,12 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                       </Typography>
                     </Box>
                     {isMe && (
-                      <Avatar
-                        src={myAvatar}
-                        sx={{ width: 32, height: 32, ml: 1, bgcolor: myAvatar ? 'transparent' : '#cbd5f5' }}
-                      >
-                        {!myAvatar && getInitials(user?.name)}
-                      </Avatar>
+                      <PremiumAvatar
+                        src={user?.avatar}
+                        name={user?.name}
+                        size={32}
+                        sx={{ ml: 1 }}
+                      />
                     )}
                   </Box>
                 );

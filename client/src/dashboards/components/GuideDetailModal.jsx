@@ -27,6 +27,7 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import LanguageIcon from '@mui/icons-material/Language';
 import { motion } from 'framer-motion';
+import PremiumImage from '../../components/PremiumImage';
 
 export default function GuideDetailModal({ open, guide, onClose, onBook, isFavorite, onFavoriteToggle }) {
   const [tabValue, setTabValue] = useState(0);
@@ -37,6 +38,8 @@ export default function GuideDetailModal({ open, guide, onClose, onBook, isFavor
   }, [isFavorite]);
 
   if (!guide) return null;
+
+  const languages = Array.isArray(guide.languages) ? guide.languages : [];
 
   const mockReviews = [
     {
@@ -110,15 +113,13 @@ export default function GuideDetailModal({ open, guide, onClose, onBook, isFavor
       <DialogContent sx={{ p: 0, overflow: 'hidden' }}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
           {/* Cover Image */}
-          <Box
-            component="img"
+          <PremiumImage
             src={guide.avatar}
             alt={guide.name}
-            sx={{
-              width: '100%',
-              height: 240,
-              objectFit: 'cover',
-            }}
+            name={guide.name}
+            height={240}
+            width="100%"
+            showLabel
           />
 
           {/* Header Info */}
@@ -235,9 +236,18 @@ export default function GuideDetailModal({ open, guide, onClose, onBook, isFavor
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={0.8} flexWrap="wrap">
-                    {guide.languages.map((lang) => (
-                      <Chip key={lang} label={lang} size="small" sx={{ bgcolor: '#f0f4ff', color: '#667eea', fontWeight: 600 }} />
-                    ))}
+                    {languages.map((lang, idx) => {
+                      const label = typeof lang === 'string' ? lang : lang?.name;
+                      if (!label) return null;
+                      return (
+                        <Chip
+                          key={`${label}-${idx}`}
+                          label={label}
+                          size="small"
+                          sx={{ bgcolor: '#f0f4ff', color: '#667eea', fontWeight: 600 }}
+                        />
+                      );
+                    })}
                   </Stack>
                 </Box>
 
@@ -265,7 +275,7 @@ export default function GuideDetailModal({ open, guide, onClose, onBook, isFavor
                       { label: 'Tours Completed', value: '127' },
                       { label: 'Satisfied Tourists', value: '500+' },
                       { label: 'Experience', value: '8 years' },
-                      { label: 'Languages', value: guide.languages.length },
+                      { label: 'Languages', value: languages.length },
                     ].map((item, idx) => (
                       <Stack direction="row" justifyContent="space-between" alignItems="center" key={idx}>
                         <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.9rem' }}>

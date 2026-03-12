@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import Avatar from '@mui/material/Avatar';
 import Checkbox from '@mui/material/Checkbox';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
@@ -17,6 +16,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import io from 'socket.io-client';
 import api from '../../api';
+import PremiumAvatar from '../../components/PremiumAvatar';
 
 const SOCKET_URL = 'http://localhost:3001';
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
@@ -370,7 +370,12 @@ export default function GuideChatPanel({ guideId }) {
               }}
               onClick={() => setSelectedTourist(tourist)}
             >
-              <Avatar src={tourist.avatar} alt={tourist.name} sx={{ width: 44, height: 44, border: selectedTourist?._id === tourist._id ? '2px solid #388e3c' : '2px solid #fff' }} />
+              <PremiumAvatar
+                src={tourist.avatar}
+                name={tourist.name}
+                size={44}
+                sx={{ border: selectedTourist?._id === tourist._id ? '2px solid #388e3c' : '2px solid #fff' }}
+              />
               <Box>
                 <Typography fontWeight={700} fontSize={17}>{tourist.name || 'No Name'}</Typography>
                 <Typography fontSize={13} color="text.secondary">{tourist.country || ''}</Typography>
@@ -384,7 +389,12 @@ export default function GuideChatPanel({ guideId }) {
         {selectedTourist && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 3, bgcolor: '#f4fbf6', borderBottom: '1.5px solid #e0e0e0' }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Avatar src={selectedTourist.avatar} alt={selectedTourist.name} sx={{ width: 44, height: 44, mr: 2 }} />
+              <PremiumAvatar
+                src={selectedTourist.avatar}
+                name={selectedTourist.name}
+                size={44}
+                sx={{ mr: 2 }}
+              />
               <Box>
                 <Typography fontWeight={700} fontSize={18}>{selectedTourist.name}</Typography>
                 <Typography fontSize={13} color="text.secondary">{selectedTourist.country}</Typography>
@@ -472,14 +482,21 @@ export default function GuideChatPanel({ guideId }) {
                 const canSelect = selectionMode && messageId && !msg.isDeleted;
                 // Get guide avatar from localStorage user
                 let guideAvatar = '';
+                let guideName = 'Guide';
                 try {
                   const user = JSON.parse(localStorage.getItem('user'));
                   guideAvatar = user?.avatar || '';
+                  guideName = user?.name || guideName;
                 } catch {}
                 return (
                   <Box key={row.id || idx} sx={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', mb: 1 }}>
                     {!isMe && (
-                      <Avatar src={selectedTourist?.avatar} sx={{ width: 32, height: 32, mr: 1, bgcolor: '#bdbdbd' }} />
+                      <PremiumAvatar
+                        src={selectedTourist?.avatar}
+                        name={selectedTourist?.name}
+                        size={32}
+                        sx={{ mr: 1 }}
+                      />
                     )}
                     <Box sx={{
                       bgcolor: isMe ? '#dcf8c6' : '#fff',
@@ -532,7 +549,12 @@ export default function GuideChatPanel({ guideId }) {
                       </Typography>
                     </Box>
                     {isMe && (
-                      <Avatar src={guideAvatar} sx={{ width: 32, height: 32, ml: 1, bgcolor: '#bdbdbd' }} />
+                      <PremiumAvatar
+                        src={guideAvatar}
+                        name={guideName}
+                        size={32}
+                        sx={{ ml: 1 }}
+                      />
                     )}
                   </Box>
                 );

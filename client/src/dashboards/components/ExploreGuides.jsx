@@ -87,21 +87,27 @@ export default function ExploreGuides() {
               const successRate = completedBookings > 0 ? 95 + Math.floor(Math.random() * 5) : 0;
 
               // Format languages properly
-              const languageList = Array.isArray(g.languages) 
-                ? g.languages.map(lang => 
-                    typeof lang === 'string' 
+              const languageList = Array.isArray(g.languages)
+                ? g.languages.map((lang) =>
+                    typeof lang === 'string'
                       ? { name: lang, level: 'Fluent' }
                       : lang
                   )
                 : [];
+              const languageNames = languageList
+                .map((lang) => (typeof lang === 'string' ? lang : lang?.name))
+                .filter(Boolean);
+              const rawAvatar =
+                g.userId?.avatar || g.userId?.profileImage || g.avatar || '';
 
               return {
                 _id: g._id,
                 userId: g.userId._id,
-                name: g.userId.name,
-                avatar: g.userId.avatar || 'https://randomuser.me/api/portraits/men/1.jpg',
+                name: g.userId?.name || 'Guide',
+                avatar: rawAvatar,
                 location: g.userId.country || 'Global',
                 languages: languageList,
+                languageNames,
                 price: g.price || 0,
                 currency: g.currency || 'USD',
                 rateType: g.rateType || 'daily',
@@ -141,19 +147,19 @@ export default function ExploreGuides() {
   }, []);
 
   const allLanguages = Array.from(
-    new Set(guides.flatMap((g) => g.languages))
+    new Set(guides.flatMap((g) => g.languageNames || []))
   );
 
   const filteredGuides = guides.filter((guide) => {
     const matchesSearch =
       guide.name.toLowerCase().includes(search.toLowerCase()) ||
       guide.location.toLowerCase().includes(search.toLowerCase()) ||
-      guide.languages.some((lang) =>
+      (guide.languageNames || []).some((lang) =>
         lang.toLowerCase().includes(search.toLowerCase())
       );
 
     const matchesLanguage =
-      language === 'All Languages' || guide.languages.includes(language);
+      language === 'All Languages' || (guide.languageNames || []).includes(language);
 
     const matchesRating = !minRating || guide.rating >= parseFloat(minRating);
     const matchesPrice = !maxPrice || guide.price <= parseFloat(maxPrice);
