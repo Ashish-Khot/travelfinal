@@ -66,6 +66,17 @@ const formatMessageTime = (value) => {
   return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 };
 
+const resolveId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const candidate = value._id || value.id || value.userId;
+    if (!candidate) return '';
+    return typeof candidate === 'string' ? candidate : String(candidate);
+  }
+  return String(value);
+};
+
 export default function ChatPanel({ chatTarget, onChatHandled }) {
   const [contacts, setContacts] = useState([]);
   const [filteredContacts, setFilteredContacts] = useState([]);
@@ -313,6 +324,7 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+
   // Chat status and input control
   useEffect(() => {
     let notice = '';
@@ -536,6 +548,7 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
   };
 
   const myUserId = user?.userId || user?._id;
+  const myUserIdValue = myUserId ? String(myUserId) : '';
   const selectedMessages = useMemo(() => {
     if (!selectedMessageIds.length) return [];
     const idSet = new Set(selectedMessageIds);
@@ -544,14 +557,14 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
   const canDeleteForEveryone =
     deleteTarget &&
     !deleteTarget.isDeleted &&
-    deleteTarget.senderId === myUserId &&
+    resolveId(deleteTarget?.senderId) === myUserIdValue &&
     isWithinDeleteWindow(deleteTarget.createdAt);
   const canBulkDeleteForEveryone =
     selectedMessages.length > 0 &&
     selectedMessages.every(
       (message) =>
         !message.isDeleted &&
-        message.senderId === myUserId &&
+        resolveId(message?.senderId) === myUserIdValue &&
         isWithinDeleteWindow(message.createdAt)
     );
 
@@ -851,8 +864,25 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                 }
 
                 const msg = row.message;
-                const myUserId = user?.userId || user?._id;
-                const isMe = msg.senderId === myUserId;
+                const senderId = resolveId(msg?.senderId);
+                const senderRole = msg?.senderRole || '';
+                const isTouristUser = user?.role === 'tourist';
+                const isGuideLikeUser = user?.role === 'guide' || user?.role === 'hotel';
+                let isMe = false;
+                if (senderRole) {
+                  if (isTouristUser) {
+                    isMe = senderRole === 'tourist';
+                  } else if (isGuideLikeUser) {
+                    isMe = senderRole === 'guide';
+                  } else {
+                    isMe = senderId && myUserIdValue ? senderId === myUserIdValue : false;
+                  }
+                } else {
+                  isMe = senderId && myUserIdValue ? senderId === myUserIdValue : false;
+                }
+                const senderAvatar = msg?.senderAvatar || msg?.senderId?.avatar || '';
+                const incomingAvatar = senderAvatar || selectedContact?.avatar;
+                const outgoingAvatar = user?.avatar || senderAvatar;
                 const messageId = msg?._id || msg?.id;
                 const isSelected = selectionMode && messageId
                   ? selectedMessageIds.includes(messageId)
@@ -869,16 +899,6 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                   : '';
                 return (
                   <Box key={row.id || idx} sx={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', mb: 1 }}>
-                    {!isMe && (
-                      <PremiumAvatar
-                        src={selectedContact?.avatar}
-                        name={selectedContact?.name}
-                        size={32}
-                        variant={selectedContact?.type === 'hotel' ? 'rounded' : 'circular'}
-                        fallbackIcon={selectedContact?.type === 'hotel' ? HotelRoundedIcon : undefined}
-                        sx={{ mr: 1 }}
-                      />
-                    )}
                     <Box sx={{
                       background: isMe
                         ? 'linear-gradient(135deg, #0f766e 0%, #0ea5a4 100%)'
@@ -985,14 +1005,6 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                         {formatMessageTime(msg.createdAt)}
                       </Typography>
                     </Box>
-                    {isMe && (
-                      <PremiumAvatar
-                        src={user?.avatar}
-                        name={user?.name}
-                        size={32}
-                        sx={{ ml: 1 }}
-                      />
-                    )}
                   </Box>
                 );
               })}

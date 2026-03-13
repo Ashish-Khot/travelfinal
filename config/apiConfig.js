@@ -26,7 +26,7 @@ module.exports = {
   OPENROUTER: {
     API_KEY: process.env.OPENROUTER_API_KEY || '',
     BASE_URL: 'https://openrouter.ai/api/v1',
-    MODEL: 'mistralai/mistral-7b-instruct:free', // Free model
+    MODEL: 'openrouter/free', // Free models router
   },
 
   // Google Gemini API - Multimodal AI (text + images)

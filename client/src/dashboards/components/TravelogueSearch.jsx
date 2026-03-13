@@ -13,7 +13,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import { motion } from 'framer-motion';
 import API from '../../api';
 import TravelogueDetailView from './TravelogueDetailView';
-import { buildImageUrl } from '../../utils/imageHelper';
+import { buildImageUrl, isVideoFile } from '../../utils/imageHelper';
 
 const difficulties = ['Easy', 'Moderate', 'Challenging'];
 const seasons = ['Spring', 'Summer', 'Autumn', 'Winter'];
@@ -54,12 +54,12 @@ export default function TravelogueSearch() {
         ...(filterDifficulty && { difficulty: filterDifficulty }),
         ...(filterSeason && { season: filterSeason }),
         ...(filterDestination && { destination: filterDestination }),
-        ...(sortBy && { sort: sortBy })
+        ...(sortBy && { sortBy })
       });
 
       const response = await API.get(`/travelogue/all?${params}`);
       setTravelogues(response.data.travelogues || []);
-      setTotalPages(response.data.pages || 1);
+      setTotalPages(response.data.pagination?.pages || 1);
     } catch (err) {
       setError('Failed to fetch travelogues');
       console.error(err);
@@ -439,9 +439,9 @@ export default function TravelogueSearch() {
             {/* Travelogues Grid */}
             <Grid container spacing={2.5} mb={4}>
               {travelogues.map(travelogue => {
-                const thumbnailUrl = travelogue.images && travelogue.images[0]
-                  ? buildImageUrl(travelogue.images[0])
-                  : buildImageUrl(null);
+                const mediaPath = travelogue.images && travelogue.images[0] ? travelogue.images[0] : '';
+                const thumbnailUrl = buildImageUrl(mediaPath);
+                const mediaIsVideo = isVideoFile(mediaPath);
 
                 return (
                   <Grid item xs={12} sm={6} md={4} key={travelogue._id}>
@@ -472,22 +472,41 @@ export default function TravelogueSearch() {
                           bgcolor: '#f0f0f0'
                         }}
                       >
-                        <Box
-                          component="img"
-                          src={thumbnailUrl}
-                          alt={travelogue.title}
-                          sx={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover'
-                          }}
-                          onError={(e) => {
-                            e.target.src = '/no-image.png';
-                          }}
-                        />
+                        {mediaIsVideo ? (
+                          <Box
+                            component="video"
+                            src={thumbnailUrl}
+                            muted
+                            loop
+                            playsInline
+                            preload="metadata"
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            component="img"
+                            src={thumbnailUrl}
+                            alt={travelogue.title}
+                            sx={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                            onError={(e) => {
+                              e.target.src = '/no-image.png';
+                            }}
+                          />
+                        )}
 
                         {/* Rating Badge */}
                         {travelogue.rating && (

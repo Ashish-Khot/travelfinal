@@ -38,6 +38,17 @@ const formatDateDivider = (value) => {
   return date.toLocaleDateString('en-GB');
 };
 
+const resolveId = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    const candidate = value._id || value.id || value.userId;
+    if (!candidate) return '';
+    return typeof candidate === 'string' ? candidate : String(candidate);
+  }
+  return String(value);
+};
+
 export default function GuideChatPanel({ guideId }) {
   const [tourists, setTourists] = useState([]);
   const [filteredTourists, setFilteredTourists] = useState([]);
@@ -325,12 +336,13 @@ export default function GuideChatPanel({ guideId }) {
     closeBulkDeleteDialog();
   };
 
+  const guideIdValue = guideId ? String(guideId) : '';
   const canBulkDeleteForEveryone =
     selectedMessages.length > 0 &&
     selectedMessages.every(
       (message) =>
         !message.isDeleted &&
-        message.senderId === guideId &&
+        resolveId(message?.senderId) === guideIdValue &&
         isWithinDeleteWindow(message.createdAt)
     );
 
@@ -474,7 +486,14 @@ export default function GuideChatPanel({ guideId }) {
                 }
 
                 const msg = row.message;
-                const isMe = msg.senderId === guideId;
+                const senderId = resolveId(msg?.senderId);
+                const senderRole = msg?.senderRole || '';
+                let isMe = false;
+                if (senderRole) {
+                  isMe = senderRole === 'guide';
+                } else {
+                  isMe = senderId && guideIdValue ? senderId === guideIdValue : false;
+                }
                 const messageId = msg?._id || msg?.id;
                 const isSelected = selectionMode && messageId
                   ? selectedMessageIds.includes(messageId)
@@ -488,11 +507,14 @@ export default function GuideChatPanel({ guideId }) {
                   guideAvatar = user?.avatar || '';
                   guideName = user?.name || guideName;
                 } catch {}
+                const senderAvatar = msg?.senderAvatar || msg?.senderId?.avatar || '';
+                const incomingAvatar = senderAvatar || selectedTourist?.avatar;
+                const outgoingAvatar = guideAvatar || senderAvatar;
                 return (
                   <Box key={row.id || idx} sx={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', mb: 1 }}>
                     {!isMe && (
                       <PremiumAvatar
-                        src={selectedTourist?.avatar}
+                        src={incomingAvatar}
                         name={selectedTourist?.name}
                         size={32}
                         sx={{ mr: 1 }}
@@ -550,7 +572,7 @@ export default function GuideChatPanel({ guideId }) {
                     </Box>
                     {isMe && (
                       <PremiumAvatar
-                        src={guideAvatar}
+                        src={outgoingAvatar}
                         name={guideName}
                         size={32}
                         sx={{ ml: 1 }}

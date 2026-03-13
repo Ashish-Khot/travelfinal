@@ -90,6 +90,17 @@ const formatDateTime = (value) => {
   });
 };
 
+const resolveId = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    const candidate = value._id || value.id || value.userId;
+    if (!candidate) return "";
+    return typeof candidate === "string" ? candidate : String(candidate);
+  }
+  return String(value);
+};
+
 const emojiList = ["😀", "😊", "😍", "👍", "🙏", "🎉", "😢", "😮", "🔥", "✅"];
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
 
@@ -111,6 +122,7 @@ export default function HotelChat({ showHeader = true }) {
   const selectedChatIdRef = useRef(null);
   const refreshTouristsRef = useRef(null);
   const userId = localStorage.getItem("userId");
+  const userIdValue = userId ? String(userId) : "";
   const userRole = localStorage.getItem("role") || "hotel";
 
   const filteredTourists = useMemo(() => {
@@ -574,14 +586,14 @@ export default function HotelChat({ showHeader = true }) {
   const canDeleteForEveryone =
     deleteTarget &&
     !deleteTarget.isDeleted &&
-    deleteTarget.senderId === userId &&
+    resolveId(deleteTarget?.senderId) === userIdValue &&
     isWithinDeleteWindow(deleteTarget.createdAt);
   const canBulkDeleteForEveryone =
     selectedMessages.length > 0 &&
     selectedMessages.every(
       (message) =>
         !message.isDeleted &&
-        message.senderId === userId &&
+        resolveId(message?.senderId) === userIdValue &&
         isWithinDeleteWindow(message.createdAt)
     );
 
@@ -829,11 +841,18 @@ export default function HotelChat({ showHeader = true }) {
                   </Box>
                 );
               }
-              const message = row.message;
-              const isAdmin = message.senderRole
-                ? message.senderRole !== "tourist"
-                : message.sender === "admin";
-              const isMe = message.senderId === userId;
+                const message = row.message;
+                const isAdmin = message.senderRole
+                  ? message.senderRole !== "tourist"
+                  : message.sender === "admin";
+                const senderId = resolveId(message?.senderId);
+                const senderRole = message?.senderRole || "";
+                let isMe = false;
+                if (senderRole) {
+                  isMe = userRole === "hotel" ? senderRole === "guide" : senderRole === userRole;
+                } else {
+                  isMe = senderId && userIdValue ? senderId === userIdValue : false;
+                }
               const messageId = message?._id || message?.id;
               const isSelected = selectionMode && messageId
                 ? selectedMessageIds.includes(messageId)

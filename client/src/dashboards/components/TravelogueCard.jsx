@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Card, Box, CardMedia, CardContent, CardActions, Typography, IconButton, Chip, Stack, Avatar, Rating, Tooltip, Menu, MenuItem
+  Card, Box, CardContent, CardActions, Typography, IconButton, Chip, Stack, Avatar, Tooltip, Menu, MenuItem
 } from '@mui/material';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -11,12 +11,12 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import GroupIcon from '@mui/icons-material/Group';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { motion } from 'framer-motion';
 import api from '../../api';
-import { buildImageUrl } from '../../utils/imageHelper';
+import { buildImageUrl, isVideoFile } from '../../utils/imageHelper';
 
 export default function TravelogueCard({ travelogue, onViewDetails, onRefresh }) {
   const [liked, setLiked] = useState(false);
@@ -85,12 +85,14 @@ export default function TravelogueCard({ travelogue, onViewDetails, onRefresh })
     return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const imageUrl = React.useMemo(() => {
-    if (!travelogue?.images || !travelogue.images[imageIndex]) {
+  const mediaPath = travelogue?.images?.[imageIndex] || '';
+  const mediaUrl = React.useMemo(() => {
+    if (!mediaPath) {
       return '/no-image.png';
     }
-    return buildImageUrl(travelogue.images[imageIndex]);
-  }, [travelogue?.images, imageIndex]);
+    return buildImageUrl(mediaPath);
+  }, [mediaPath]);
+  const mediaIsVideo = isVideoFile(mediaPath);
 
   return (
     <motion.div
@@ -115,23 +117,42 @@ export default function TravelogueCard({ travelogue, onViewDetails, onRefresh })
       >
         {/* Image Section with Carousel */}
         <Box sx={{ position: 'relative', paddingBottom: '66.67%', overflow: 'hidden', bgcolor: '#f0f0f0' }}>
-          <Box
-            component="img"
-            src={imageUrl}
-            alt={travelogue.title}
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transition: 'transform 0.3s ease'
-            }}
-            onError={(e) => {
-              e.target.src = '/no-image.png';
-            }}
-          />
+          {mediaIsVideo ? (
+            <Box
+              component="video"
+              src={mediaUrl}
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            <Box
+              component="img"
+              src={mediaUrl}
+              alt={travelogue.title}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                transition: 'transform 0.3s ease'
+              }}
+              onError={(e) => {
+                e.target.src = '/no-image.png';
+              }}
+            />
+          )}
 
           {/* Image Navigation */}
           {travelogue.images && travelogue.images.length > 1 && (
@@ -224,6 +245,30 @@ export default function TravelogueCard({ travelogue, onViewDetails, onRefresh })
                 {travelogue.rating.toFixed(1)}
               </span>
               <span style={{ color: '#F9ED69', fontSize: '0.9rem' }}>★</span>
+            </Box>
+          )}
+
+          {mediaIsVideo && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 12,
+                left: 12,
+                bgcolor: 'rgba(15, 23, 42, 0.8)',
+                color: '#fff',
+                borderRadius: '14px',
+                px: 1,
+                py: 0.4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.4,
+                zIndex: 2
+              }}
+            >
+              <PlayArrowIcon sx={{ fontSize: 14 }} />
+              <Typography variant="caption" fontWeight={700}>
+                Video
+              </Typography>
             </Box>
           )}
 

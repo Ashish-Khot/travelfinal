@@ -18,7 +18,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { motion } from 'framer-motion';
 import api from '../../api';
-import { buildImageUrl } from '../../utils/imageHelper';
+import { buildImageUrl, isVideoFile } from '../../utils/imageHelper';
 
 export default function TravelogueDetailView({ travelogueId, travelogue: initialTravelogue, onClose, open }) {
   const [travelogue, setTravelogue] = useState(initialTravelogue || null);
@@ -156,18 +156,16 @@ export default function TravelogueDetailView({ travelogueId, travelogue: initial
     setImageError(false);
   }, [imageIndex]);
 
-  const imageUrl = React.useMemo(() => {
-    if (!travelogue?.images || !travelogue.images[imageIndex]) {
+  const mediaPath = travelogue?.images?.[imageIndex] || '';
+  const mediaUrl = React.useMemo(() => {
+    if (!mediaPath) {
       return '/no-image.png';
     }
 
-    const imgPath = travelogue.images[imageIndex];
-    console.log('Building image URL for:', imgPath);
-    
-    const url = buildImageUrl(imgPath);
-    console.log('Final image URL:', url);
+    const url = buildImageUrl(mediaPath);
     return url;
-  }, [travelogue?.images, imageIndex]);
+  }, [mediaPath]);
+  const mediaIsVideo = isVideoFile(mediaPath);
 
   return (
     <Dialog
@@ -219,34 +217,49 @@ export default function TravelogueDetailView({ travelogueId, travelogue: initial
           }}
         >
           {/* Loading State */}
-          {!imageUrl && (
+          {!mediaUrl && (
             <CircularProgress sx={{ color: '#4F8A8B' }} />
           )}
 
-          {/* Image with proper error handling */}
-          <img
-            key={`img-${imageIndex}`}
-            src={imageUrl}
-            alt={travelogue.title}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              display: imageError ? 'none' : 'block'
-            }}
-            onError={(e) => {
-              console.error('Image load error:', imageUrl, e);
-              setImageError(true);
-              e.target.style.display = 'none';
-            }}
-            onLoad={(e) => {
-              console.log('Image loaded successfully:', imageUrl);
-              setImageError(false);
-            }}
-          />
+          {/* Media with proper error handling */}
+          {mediaIsVideo ? (
+            <video
+              key={`vid-${imageIndex}`}
+              src={mediaUrl}
+              controls
+              autoPlay
+              muted
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            <img
+              key={`img-${imageIndex}`}
+              src={mediaUrl}
+              alt={travelogue.title}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: imageError ? 'none' : 'block'
+              }}
+              onError={(e) => {
+                console.error('Image load error:', mediaUrl, e);
+                setImageError(true);
+                e.target.style.display = 'none';
+              }}
+              onLoad={() => {
+                setImageError(false);
+              }}
+            />
+          )}
 
           {/* Fallback Image */}
-          {imageError && (
+          {imageError && !mediaIsVideo && (
             <Box
               sx={{
                 position: 'absolute',
@@ -265,7 +278,7 @@ export default function TravelogueDetailView({ travelogueId, travelogue: initial
                 <Box sx={{ fontSize: '48px' }}>🖼️</Box>
                 <Typography>Image not available</Typography>
                 <Typography variant="caption" color="#9ca3af">
-                  {imageUrl}
+                  {mediaUrl}
                 </Typography>
               </Stack>
             </Box>

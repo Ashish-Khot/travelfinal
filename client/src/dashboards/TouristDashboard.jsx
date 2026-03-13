@@ -23,7 +23,7 @@ import TouristProfile from './components/TouristProfile';
 import TouristSettings from './components/TouristSettings';
 import CreateTravelogue from './components/CreateTravelogue';
 import MyTravelogues from './components/MyTravelogues';
-import TravelogueSearch from './components/TravelogueSearch';
+import TravelogueStories from './components/TravelogueStories';
 import WelcomeSection from './components/WelcomeSection';
 import DashboardMetrics from './components/DashboardMetrics';
 import AIRecommendations from './components/AIRecommendations';
@@ -278,14 +278,14 @@ function TouristDashboard() {
                 >
                   <Tab value="create" label="Create Travelogue" />
                   <Tab value="my" label="My Travelogues" />
-                  <Tab value="explore" label="Explore Stories" />
+                  <Tab value="explore" label="Stories & Feed" />
                 </Tabs>
               </Box>
 
               {/* Sub-tab Content */}
               {travelogueSubTab === 'create' && <CreateTravelogue />}
               {travelogueSubTab === 'my' && <MyTravelogues />}
-              {travelogueSubTab === 'explore' && <TravelogueSearch />}
+              {travelogueSubTab === 'explore' && <TravelogueStories />}
             </Box>
           )}
           {selectedTab === 'Travel Tips' && <TravelTipsPanel />}
