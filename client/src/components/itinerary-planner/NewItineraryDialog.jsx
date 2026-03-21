@@ -150,7 +150,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       return;
     }
     if (formData.budget < 100) {
-      setError('Budget should be at least $100');
+      setError('Budget should be at least ₹100');
       return;
     }
     if (formData.interests.length === 0) {
@@ -176,6 +176,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
         destination: formData.destination,
         days: parseInt(formData.days),
         budget: parseFloat(formData.budget),
+        currency: 'INR',
         numberOfTravelers: parseInt(formData.numberOfTravelers),
         travelStyle: formData.travelStyle,
         interests: formData.interests,
@@ -265,7 +266,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
             <Grid item xs={6}>
               <TextField
                 fullWidth
-                label="Total Budget ($)"
+                label="Total Budget (₹)"
                 type="number"
                 name="budget"
                 value={formData.budget}

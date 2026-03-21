@@ -531,6 +531,21 @@ export default function TravelogueDetailView({ travelogueId, travelogue: initial
             </Stack>
           </Stack>
 
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" mb={2}>
+            <Chip
+              label={`${travelogue.likes?.length || 0} likes`}
+              sx={{ bgcolor: 'rgba(239,68,68,0.1)', color: '#ef4444', fontWeight: 700 }}
+            />
+            <Chip
+              label={`${travelogue.comments?.length || 0} comments`}
+              sx={{ bgcolor: 'rgba(79,138,139,0.12)', color: '#4F8A8B', fontWeight: 700 }}
+            />
+            <Chip
+              label={`${travelogue.saves?.length || 0} saves`}
+              sx={{ bgcolor: 'rgba(249,237,105,0.2)', color: '#B8860B', fontWeight: 700 }}
+            />
+          </Stack>
+
           <Divider sx={{ my: 3 }} />
 
           {/* Author Info */}

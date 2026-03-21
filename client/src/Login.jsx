@@ -1,22 +1,21 @@
 import React, { useState } from "react";
-import Snackbar from '@mui/material/Snackbar';
+import Snackbar from "@mui/material/Snackbar";
 import { Link } from "react-router-dom";
-import api from './api';
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Avatar from '@mui/material/Avatar';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import PersonIcon from '@mui/icons-material/Person';
-import RoomIcon from '@mui/icons-material/Room';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import HotelIcon from '@mui/icons-material/Hotel';
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
-import styles from './Login.module.css';
+import api from "./api";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import PersonIcon from "@mui/icons-material/Person";
+import RoomIcon from "@mui/icons-material/Room";
+import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import HotelIcon from "@mui/icons-material/Hotel";
+import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
+import TravelExploreIcon from "@mui/icons-material/TravelExplore";
+import styles from "./Login.module.css";
 
 const roles = [
   { label: "Tourist", icon: <PersonIcon color="success" /> },
@@ -84,82 +83,116 @@ export default function Login() {
 
   return (
     <>
-      <Box className={styles.bg} minHeight="100vh" display="flex" alignItems="center" justifyContent="center">
-        <Paper elevation={6} className={styles.paper}>
-          <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
-            <Avatar className={styles.avatar} sx={{ bgcolor: 'success.main', width: 64, height: 64 }}>
-              <LockOutlinedIcon fontSize="large" />
-            </Avatar>
-            <Typography component="h1" variant="h4" fontWeight={700} mt={2}>
-              Welcome Back
+      <Box className={styles.authShell}>
+        <Box className={styles.authFrame}>
+          <Box className={styles.brandPanel}>
+            <Box className={styles.brandBadge}>
+              <TravelExploreIcon fontSize="small" />
+              Travelogue
+            </Box>
+            <Typography component="h1" className={styles.brandTitle}>
+              Your premium travel studio for stays, guides, and stories.
             </Typography>
-            <Typography variant="subtitle1" color="text.secondary" mb={2}>
-              Sign in to your Travelogue account
+            <Typography className={styles.brandSub}>
+              Sign in to keep your bookings, itineraries, and travelogues perfectly in sync.
             </Typography>
+            <Box className={styles.brandStats}>
+              <Box className={styles.statCard}>
+                <Typography className={styles.statValue}>4.9</Typography>
+                <Typography className={styles.statLabel}>Guest rating</Typography>
+              </Box>
+              <Box className={styles.statCard}>
+                <Typography className={styles.statValue}>120+</Typography>
+                <Typography className={styles.statLabel}>Countries covered</Typography>
+              </Box>
+              <Box className={styles.statCard}>
+                <Typography className={styles.statValue}>24/7</Typography>
+                <Typography className={styles.statLabel}>Trip support</Typography>
+              </Box>
+            </Box>
+            <Box className={styles.brandTags}>
+              <Box className={styles.tag}>Verified guides</Box>
+              <Box className={styles.tag}>Secure payments</Box>
+              <Box className={styles.tag}>Instant confirmations</Box>
+            </Box>
           </Box>
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>
-            Login As
-          </Typography>
-          <ToggleButtonGroup
-            value={selectedRole}
-            exclusive
-            onChange={handleRole}
-            fullWidth
-            className={styles.roleGroup}
-            sx={{ mb: 3 }}
-          >
-            {roles.map((role) => (
-              <ToggleButton key={role.label} value={role.label} className={styles.roleBtn}>
-                <Box display="flex" flexDirection="column" alignItems="center">
-                  {role.icon}
-                  <Typography variant="caption" fontWeight={600}>{role.label}</Typography>
-                </Box>
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="email"
-              label="Email"
-              name="email"
-              autoComplete="email"
-              autoFocus
-              value={form.email}
-              onChange={handleChange}
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="password"
-              label="Password"
-              type="password"
-              id="password"
-              autoComplete="current-password"
-              value={form.password}
-              onChange={handleChange}
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              size="large"
-              className={styles.loginBtn}
-              sx={{ mt: 3, mb: 2, fontWeight: 700, fontSize: 18, background: 'linear-gradient(90deg, #22c55e 0%, #06b6d4 100%)' }}
+
+          <Box className={styles.formPanel}>
+            <Box className={styles.formHeader}>
+              <Box className={styles.iconHalo}>
+                <LockOutlinedIcon />
+              </Box>
+              <Typography component="h2" className={styles.formTitle}>
+                Welcome back
+              </Typography>
+              <Typography className={styles.formSubtitle}>
+                Access your Travelogue account in seconds.
+              </Typography>
+            </Box>
+
+            <Typography className={styles.sectionLabel}>Login as</Typography>
+            <ToggleButtonGroup
+              value={selectedRole}
+              exclusive
+              onChange={handleRole}
+              className={styles.roleGroup}
             >
-              Sign In
-            </Button>
-          </form>
-          <Box textAlign="center" mt={2}>
-            <Typography variant="body2" color="text.secondary">
-              Don't have an account?{' '}
-              <Link to="/register" className={styles.registerLink}>Register</Link>
-            </Typography>
+              {roles.map((role) => (
+                <ToggleButton key={role.label} value={role.label} className={styles.roleBtn}>
+                  <Box className={styles.roleInner}>
+                    {role.icon}
+                    <Typography className={styles.roleLabel}>{role.label}</Typography>
+                  </Box>
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+
+            <form onSubmit={handleSubmit} className={styles.form}>
+              <TextField
+                required
+                fullWidth
+                id="email"
+                label="Email"
+                name="email"
+                autoComplete="email"
+                autoFocus
+                value={form.email}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                required
+                fullWidth
+                name="password"
+                label="Password"
+                type="password"
+                id="password"
+                autoComplete="current-password"
+                value={form.password}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                className={styles.loginBtn}
+              >
+                Sign in
+              </Button>
+            </form>
+
+            <Box className={styles.footerText}>
+              <Typography variant="body2">
+                Do not have an account?{" "}
+                <Link to="/register" className={styles.registerLink}>
+                  Register
+                </Link>
+              </Typography>
+            </Box>
           </Box>
-        </Paper>
+        </Box>
       </Box>
       <Snackbar
         open={snackbar.open}

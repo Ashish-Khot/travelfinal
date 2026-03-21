@@ -28,6 +28,7 @@ import {
 import { Delete as DeleteIcon, Edit as EditIcon, Add as AddIcon } from '@mui/icons-material';
 
 const ActivityList = ({ itinerary, onActivityAdd, onActivityUpdate, onActivityRemove }) => {
+  const currency = itinerary?.budget?.currency || 'INR';
   const [openDialog, setOpenDialog] = useState(false);
   const [editingActivity, setEditingActivity] = useState(null);
   const [formData, setFormData] = useState({
@@ -136,6 +137,20 @@ const ActivityList = ({ itinerary, onActivityAdd, onActivityUpdate, onActivityRe
     }
   };
 
+  const formatMoney = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '';
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(0)}`;
+    }
+  };
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -222,7 +237,7 @@ const ActivityList = ({ itinerary, onActivityAdd, onActivityUpdate, onActivityRe
                               }}
                             />
                             <Chip
-                              label={`$${activity.estimatedCost}`}
+                              label={formatMoney(activity.estimatedCost)}
                               size="small"
                               variant="outlined"
                               sx={{ mr: 0.5, mb: 0.5 }}
@@ -243,8 +258,10 @@ const ActivityList = ({ itinerary, onActivityAdd, onActivityUpdate, onActivityRe
 
               <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #eee' }}>
                 <Typography variant="body2">
-                  <strong>Day Total:</strong> $
-                  {activities.reduce((sum, a) => sum + (a.estimatedCost || 0), 0).toFixed(2)}
+                  <strong>Day Total:</strong>{' '}
+                  {formatMoney(
+                    activities.reduce((sum, a) => sum + (a.estimatedCost || 0), 0)
+                  )}
                 </Typography>
               </Box>
             </CardContent>
@@ -367,7 +384,7 @@ const ActivityList = ({ itinerary, onActivityAdd, onActivityUpdate, onActivityRe
               </Grid>
             </Grid>
             <TextField
-              label="Estimated Cost ($)"
+              label="Estimated Cost (₹)"
               type="number"
               value={formData.estimatedCost}
               onChange={(e) => setFormData({ ...formData, estimatedCost: parseFloat(e.target.value) || 0 })}

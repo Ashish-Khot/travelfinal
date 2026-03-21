@@ -38,6 +38,7 @@ const voiceAssistantRouter = require('./routes/voiceAssistant');
 const itineraryRouter = require('./routes/itinerary');
 const reviewRouter = require('./routes/review');
 const healthRouter = require('./routes/health');
+const virtualGuideRouter = require('./routes/virtualGuide');
 
 
 const path = require('path');
@@ -94,6 +95,7 @@ app.use('/api/hotelProfileInfo', hotelProfileInfoRouter); // (legacy, for migrat
 app.use('/api/voiceAssistant', voiceAssistantRouter); // Voice assistant endpoints
 app.use('/api/itinerary', itineraryRouter); // Itinerary planner endpoints
 app.use('/api/health', healthRouter); // External API health checks
+app.use('/api/virtual-guide', virtualGuideRouter); // Virtual guide AI chat
 
 app.use('/api/room', roomRouter); // Hotel room endpoints
 app.use('/api/review', reviewRouter); // Guide review endpoints

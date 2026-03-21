@@ -10,7 +10,6 @@ import {
   CardContent,
   Typography,
   Chip,
-  Grid,
   Paper,
 } from '@mui/material';
 
@@ -43,146 +42,195 @@ const TimelineView = ({ itinerary, onActivityUpdate }) => {
     return colors[importance] || '#757575';
   };
 
-  return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Day-by-Day Timeline
-      </Typography>
+  const formatDate = (startDate, dayNumber) => {
+    if (!startDate) return '';
+    const base = new Date(startDate);
+    if (Number.isNaN(base.getTime())) return '';
+    base.setDate(base.getDate() + (dayNumber - 1));
+    return base.toLocaleDateString('en-IN', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
 
-      {/* Timeline for each day */}
+  const formatMoney = (value, currency) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '';
+    const normalizedCurrency = currency || 'INR';
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: normalizedCurrency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${normalizedCurrency} ${amount.toFixed(0)}`;
+    }
+  };
+
+  const formatTimeRange = (start, end) => {
+    if (!start && !end) return '';
+    if (!end) return start;
+    return `${start} – ${end}`;
+  };
+
+  const extractTips = (text) => {
+    if (!text || typeof text !== 'string') return [];
+    const cleaned = text
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/•/g, '\n')
+      .replace(/\s+-\s+/g, '\n');
+    return cleaned
+      .split(/\n|;|\u2022/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+  };
+
+  const currency = itinerary?.budget?.currency || 'INR';
+
+  return (
+    <Box className="schedule-root">
+      <Box className="schedule-header">
+        <Box>
+          <Typography variant="h6" className="schedule-title">
+            Premium Schedule Timeline
+          </Typography>
+          <Typography variant="body2" className="schedule-subtitle">
+            Clean, day-by-day flow with time blocks, highlights, and tips.
+          </Typography>
+        </Box>
+        <Box className="schedule-summary">
+          <Box className="schedule-summary-item">
+            <Typography variant="caption">Total days</Typography>
+            <Typography variant="subtitle1">{itinerary?.numberOfDays || 0}</Typography>
+          </Box>
+          <Box className="schedule-summary-item">
+            <Typography variant="caption">Total activities</Typography>
+            <Typography variant="subtitle1">{itinerary?.activities?.length || 0}</Typography>
+          </Box>
+          <Box className="schedule-summary-item">
+            <Typography variant="caption">Budget</Typography>
+            <Typography variant="subtitle1">
+              {formatMoney(itinerary?.budget?.totalBudget || 0, currency)}
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
+
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {Array.from({ length: itinerary?.numberOfDays || 0 }).map((_, dayIdx) => {
           const dayNumber = dayIdx + 1;
           const activities = getHourActivities(dayNumber);
+          const dateLabel = formatDate(itinerary?.startDate, dayNumber);
+          const totalDuration = activities.reduce((sum, a) => sum + (a.duration || 0), 0);
+          const totalCost = activities.reduce((sum, a) => sum + (a.estimatedCost || 0), 0);
 
           return (
-            <Card key={dayNumber}>
-              <CardContent>
-                {/* Day Header */}
+            <Card key={dayNumber} className="schedule-day-card">
+              <CardContent className="schedule-day-content">
                 <Box
-                  sx={{
-                    backgroundColor: getDayColor(dayNumber),
-                    color: 'white',
-                    p: 2,
-                    borderRadius: 1,
-                    mb: 2,
-                  }}
+                  className="schedule-day-header"
+                  style={{ background: `linear-gradient(135deg, ${getDayColor(dayNumber)} 0%, #111827 120%)` }}
                 >
-                  <Typography variant="h6">
-                    Day {dayNumber}
-                  </Typography>
-                  <Typography variant="caption">
-                    {activities.length} activities
-                  </Typography>
+                  <Box>
+                    <Typography variant="overline">Day {dayNumber}</Typography>
+                    <Typography variant="h6">{dateLabel || 'Custom day plan'}</Typography>
+                  </Box>
+                  <Box className="schedule-day-stats">
+                    <Box>
+                      <Typography variant="caption">Duration</Typography>
+                      <Typography variant="subtitle2">{totalDuration} min</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption">Activities</Typography>
+                      <Typography variant="subtitle2">{activities.length}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption">Spend</Typography>
+                      <Typography variant="subtitle2">{formatMoney(totalCost, currency)}</Typography>
+                    </Box>
+                  </Box>
                 </Box>
 
-                {/* Activities Timeline */}
                 {activities.length > 0 ? (
-                  <Box>
-                    {activities.map((activity, idx) => (
-                      <Box
-                        key={activity._id || idx}
-                        sx={{
-                          display: 'flex',
-                          mb: 2,
-                          pb: 2,
-                          borderBottom: idx < activities.length - 1 ? '1px dashed #ccc' : 'none',
-                        }}
-                      >
-                        {/* Time Column */}
-                        <Box sx={{ minWidth: 100, mr: 2 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 'bold',
-                              color: '#1976d2',
-                              fontSize: '1rem',
-                            }}
-                          >
-                            {activity.startTime}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: '#666' }}>
-                            {activity.duration} min
-                          </Typography>
-                        </Box>
+                  <Box className="schedule-grid">
+                    <Box className="schedule-row schedule-head">
+                      <Typography variant="subtitle2">Time</Typography>
+                      <Typography variant="subtitle2">Activity</Typography>
+                      <Typography variant="subtitle2">Details & Tips</Typography>
+                    </Box>
 
-                        {/* Activity Content */}
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                            {activity.name}
-                          </Typography>
-                          {activity.description && (
-                            <Typography variant="caption" display="block" sx={{ mb: 0.5 }}>
-                              {activity.description}
+                    {activities.map((activity, idx) => {
+                      const tips = extractTips(activity.notes);
+                      return (
+                        <Box key={activity._id || idx} className="schedule-row">
+                          <Box className="schedule-time">
+                            <Typography className="schedule-time-range">
+                              {formatTimeRange(activity.startTime, activity.endTime)}
                             </Typography>
-                          )}
-                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
-                            <Chip
-                              label={activity.category}
-                              size="small"
-                              variant="outlined"
-                            />
-                            <Chip
-                              label={activity.importance}
-                              size="small"
-                              sx={{
-                                backgroundColor: getImportanceColor(activity.importance),
-                                color: 'white',
-                              }}
-                            />
-                            {activity.estimatedCost > 0 && (
+                            <Typography className="schedule-time-meta">
+                              {activity.duration ? `${activity.duration} min` : 'Flexible'}
+                            </Typography>
+                          </Box>
+
+                          <Box className="schedule-activity">
+                            <Typography className="schedule-activity-title">
+                              {activity.name}
+                            </Typography>
+                            {activity.location?.address && (
+                              <Typography className="schedule-location">
+                                {activity.location.address}
+                              </Typography>
+                            )}
+                            <Box className="schedule-chip-row">
+                              <Chip label={activity.category} size="small" className="schedule-chip" />
                               <Chip
-                                label={`$${activity.estimatedCost}`}
+                                label={activity.importance}
                                 size="small"
-                                variant="outlined"
+                                className="schedule-chip"
+                                sx={{
+                                  backgroundColor: getImportanceColor(activity.importance),
+                                  color: 'white',
+                                }}
                               />
+                              {Number.isFinite(activity.estimatedCost) && (
+                                <Chip
+                                  label={formatMoney(activity.estimatedCost, currency)}
+                                  size="small"
+                                  variant="outlined"
+                                  className="schedule-chip"
+                                />
+                              )}
+                            </Box>
+                          </Box>
+
+                          <Box className="schedule-details">
+                            {activity.description && (
+                              <Typography className="schedule-detail-text">
+                                {activity.description}
+                              </Typography>
+                            )}
+                            {tips.length > 0 && (
+                              <Box component="ul" className="schedule-tips">
+                                {tips.map((tip, tipIdx) => (
+                                  <li key={`${activity._id || idx}-tip-${tipIdx}`}>{tip}</li>
+                                ))}
+                              </Box>
                             )}
                           </Box>
                         </Box>
-                      </Box>
-                    ))}
+                      );
+                    })}
                   </Box>
                 ) : (
-                  <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', py: 3 }}>
-                    No activities scheduled for this day
-                  </Typography>
+                  <Paper className="schedule-empty">
+                    <Typography variant="body2" color="textSecondary">
+                      No activities scheduled for this day.
+                    </Typography>
+                  </Paper>
                 )}
-
-                {/* Day Summary */}
-                <Box
-                  sx={{
-                    mt: 2,
-                    pt: 2,
-                    borderTop: '1px solid #eee',
-                    display: 'flex',
-                    justifyContent: 'space-around',
-                  }}
-                >
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Total Duration
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {activities.reduce((sum, a) => sum + a.duration, 0)} min
-                    </Typography>
-                  </Box>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Total Cost
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      ${activities.reduce((sum, a) => sum + a.estimatedCost, 0).toFixed(2)}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Activities
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {activities.length}
-                    </Typography>
-                  </Box>
-                </Box>
               </CardContent>
             </Card>
           );

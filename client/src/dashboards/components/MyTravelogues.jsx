@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box, Typography, Paper, Button, Grid, Card, CardContent, Stack, Chip, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Menu, MenuItem
+  Box, Typography, Paper, Button, Grid, Card, CardContent, Stack, Chip, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions, IconButton, Menu, MenuItem, TextField
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -24,6 +24,8 @@ export default function MyTravelogues() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedTravelogue, setSelectedTravelogue] = useState(null);
@@ -44,6 +46,7 @@ export default function MyTravelogues() {
       
       setTravelogues(response.data.travelogues || []);
       setTotalPages(response.data.pages || 1);
+      setTotalCount(response.data.total || 0);
     } catch (err) {
       setError('Failed to fetch travelogues');
       console.error(err);
@@ -64,9 +67,12 @@ export default function MyTravelogues() {
     }
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
+  const filteredTravelogues = travelogues.filter((t) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    const haystack = `${t.title || ''} ${t.description || ''} ${t.destination || ''} ${t.location || ''}`.toLowerCase();
+    return haystack.includes(query);
+  });
 
   return (
     <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: '#F8FAFB', pb: 4 }}>
@@ -84,21 +90,70 @@ export default function MyTravelogues() {
             p: { xs: 2, sm: 3, md: 4 }
           }}
         >
-          <Typography
-            variant="h4"
-            fontWeight={800}
-            color="#1a1a1a"
-            mb={2}
-            sx={{ letterSpacing: '0.5px' }}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }}>
+            <Box>
+              <Typography
+                variant="h4"
+                fontWeight={800}
+                color="#1a1a1a"
+                mb={1}
+                sx={{ letterSpacing: '0.5px' }}
+              >
+                My Travelogues
+              </Typography>
+              <Typography variant="body1" color="#6B7280">
+                Manage, refine, and publish your travel stories.
+              </Typography>
+            </Box>
+            <Button
+              variant="contained"
+              onClick={() => window.dispatchEvent(new CustomEvent('travelogueSubTab', { detail: { tab: 'create' } }))}
+              sx={{
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #4F8A8B 0%, #6BA8AC 100%)',
+                px: 3,
+                py: 1.2,
+                fontWeight: 700,
+                boxShadow: '0 10px 24px rgba(79,138,139,0.25)'
+              }}
+            >
+              Create Travelogue
+            </Button>
+          </Stack>
+
+          <Box
+            sx={{
+              mt: 3,
+              p: 2,
+              borderRadius: '14px',
+              bgcolor: 'rgba(79,138,139,0.08)',
+              border: '1px solid rgba(79,138,139,0.12)'
+            }}
           >
-            My Travelogues
-          </Typography>
-          <Typography variant="body1" color="#6B7280" mb={3}>
-            Manage and track all your travel stories
-          </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} justifyContent="space-between">
+              <Box>
+                <Typography variant="subtitle2" fontWeight={700} color="#4F8A8B">
+                  Total stories
+                </Typography>
+                <Typography variant="h5" fontWeight={800} color="#0F172A">
+                  {totalCount}
+                </Typography>
+              </Box>
+              <TextField
+                size="small"
+                placeholder="Search your travelogues..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                sx={{
+                  minWidth: { xs: '100%', sm: 260 },
+                  '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#fff' }
+                }}
+              />
+            </Stack>
+          </Box>
 
           {/* Status Filters */}
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap">
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap" sx={{ mt: 3 }}>
             {['all', 'draft', 'pending', 'approved', 'rejected'].map(status => (
               <Button
                 key={status}
@@ -150,6 +205,7 @@ export default function MyTravelogues() {
             </Typography>
             <Button
               variant="contained"
+              onClick={() => window.dispatchEvent(new CustomEvent('travelogueSubTab', { detail: { tab: 'create' } }))}
               sx={{
                 borderRadius: '10px',
                 background: 'linear-gradient(135deg, #4F8A8B 0%, #6BA8AC 100%)',
@@ -165,7 +221,7 @@ export default function MyTravelogues() {
           <>
             {/* Travelogues Grid */}
             <Grid container spacing={2.5} mb={4}>
-              {travelogues.map(travelogue => {
+              {filteredTravelogues.map(travelogue => {
                 const statusInfo = statusColors[travelogue.status];
                 const thumbnailUrl = travelogue.images && travelogue.images[0]
                   ? (travelogue.images[0].startsWith('http')
@@ -339,6 +395,14 @@ export default function MyTravelogues() {
                 );
               })}
             </Grid>
+
+            {filteredTravelogues.length === 0 && (
+              <Card elevation={0} sx={{ p: 3, textAlign: 'center', borderRadius: '16px', border: '1px dashed rgba(79,138,139,0.3)' }}>
+                <Typography variant="subtitle1" fontWeight={700} color="#64748B">
+                  No matching travelogues found.
+                </Typography>
+              </Card>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (

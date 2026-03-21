@@ -29,12 +29,20 @@ import DashboardMetrics from './components/DashboardMetrics';
 import AIRecommendations from './components/AIRecommendations';
 import WeatherForecastCard from './components/WeatherForecastCard';
 import WeatherSearch from './components/WeatherSearch';
+import VirtualGuide from './components/VirtualGuide';
 import ItineraryPlanner from '../components/itinerary-planner/ItineraryPlanner';
 import { Tabs, Tab } from '@mui/material';
 
 function TouristDashboard() {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarCompact, setSidebarCompact] = useState(() => {
+    const saved = localStorage.getItem('travelogue_sidebar_compact');
+    return saved ? JSON.parse(saved) : false;
+  });
+  const [sidebarHidden, setSidebarHidden] = useState(() => {
+    const saved = localStorage.getItem('travelogue_sidebar_hidden');
+    return saved ? JSON.parse(saved) : false;
+  });
   const isMobile = useMediaQuery('(max-width:900px)');
   const [selectedTab, setSelectedTab] = useState('Dashboard');
   const [weatherModal, setWeatherModal] = useState(false);
@@ -105,8 +113,33 @@ function TouristDashboard() {
     }
   }, [selectedTab]);
 
+  // Save sidebar preferences
+  useEffect(() => {
+    localStorage.setItem('travelogue_sidebar_compact', JSON.stringify(sidebarCompact));
+  }, [sidebarCompact]);
+
+  useEffect(() => {
+    localStorage.setItem('travelogue_sidebar_hidden', JSON.stringify(sidebarHidden));
+  }, [sidebarHidden]);
+
   // Responsive sidebar toggle
-  const handleSidebarToggle = () => setSidebarOpen((open) => !open);
+  const handleSidebarToggle = () => setSidebarCompact((compact) => !compact);
+
+  const handleSidebarVisibilityToggle = () => {
+    setSidebarHidden((hidden) => {
+      const nextHidden = !hidden;
+      if (!nextHidden && isMobile) {
+        setSidebarCompact(true);
+      }
+      return nextHidden;
+    });
+  };
+
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarHidden(true);
+    }
+  }, [isMobile]);
 
   // Theme toggle handler
   const handleThemeToggle = () => {
@@ -132,6 +165,8 @@ function TouristDashboard() {
         Profile: 'Profile',
         ExploreDestinations: 'Explore Destinations',
         Dashboard: 'Dashboard',
+        VirtualGuide: 'Virtual Guide',
+        GuideAI: 'Virtual Guide',
       };
 
       const tabName = navigationMap[section] || section;
@@ -159,12 +194,25 @@ function TouristDashboard() {
     };
   }, [isMobile]);
 
+  // Travelogue sub-tab navigation from child components
+  useEffect(() => {
+    const handleTravelogueSubTab = (event) => {
+      if (event?.detail?.tab) {
+        setSelectedTab('Travelogue');
+        setTravelogueSubTab(event.detail.tab);
+      }
+    };
+    window.addEventListener('travelogueSubTab', handleTravelogueSubTab);
+    return () => window.removeEventListener('travelogueSubTab', handleTravelogueSubTab);
+  }, []);
+
   // Sidebar navigation items (Profile and Settings removed - now in top-right profile menu)
   const navItems = [
     { label: 'Dashboard', value: 'Dashboard' },
     { label: 'Itinerary Planner', value: 'Itinerary Planner' },
     { label: 'Explore Destinations', value: 'Explore Destinations' },
     { label: 'Explore Guides', value: 'Explore Guides' },
+    { label: 'Virtual Guide', value: 'Virtual Guide' },
     { label: 'Hotel Booking', value: 'Hotel Booking' },
     { label: 'My Bookings', value: 'My Bookings' },
     { label: 'Chat', value: 'Chat' },
@@ -185,12 +233,28 @@ function TouristDashboard() {
         onThemeToggle={handleThemeToggle}
         chatNotifications={chatNotifications}
         onChatClick={() => setSelectedTab('Chat')}
+        sidebarHidden={sidebarHidden}
+        sidebarCompact={sidebarCompact}
+        onSidebarToggle={handleSidebarToggle}
+        onSidebarVisibilityToggle={handleSidebarVisibilityToggle}
       />
-      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Box
+        sx={(theme) => ({
+          display: 'flex',
+          minHeight: '100vh',
+          bgcolor: 'background.default',
+          backgroundImage:
+            theme.palette.mode === 'dark'
+              ? 'radial-gradient(circle at 10% 10%, rgba(15,118,110,0.15), transparent 35%), radial-gradient(circle at 90% 20%, rgba(148,163,184,0.08), transparent 40%)'
+              : 'radial-gradient(circle at 10% 10%, rgba(14,116,144,0.12), transparent 35%), radial-gradient(circle at 90% 20%, rgba(15,118,110,0.12), transparent 40%)',
+        })}
+      >
         {/* Sidebar Navigation */}
         <SidebarNav
-          open={!isMobile && sidebarOpen}
+          open={!sidebarCompact}
+          hidden={sidebarHidden}
           onToggle={handleSidebarToggle}
+          onHide={handleSidebarVisibilityToggle}
           navItems={navItems}
           selectedTab={selectedTab}
           onSelect={setSelectedTab}
@@ -205,7 +269,8 @@ function TouristDashboard() {
             pt: { xs: 9, sm: 11 }, // Add top padding for fixed AppBar
             maxWidth: '1600px',
             mx: 'auto',
-            transition: 'padding 0.2s',
+            width: '100%',
+            transition: 'padding 0.2s ease, max-width 0.2s ease',
           }}
         >
           {selectedTab === 'Dashboard' && (
@@ -229,6 +294,7 @@ function TouristDashboard() {
           {selectedTab === 'Itinerary Planner' && <ItineraryPlanner user={user} />}
           {selectedTab === 'Explore Destinations' && <ExploreDestinations />}
           {selectedTab === 'Explore Guides' && <ExploreGuides />}
+          {selectedTab === 'Virtual Guide' && <VirtualGuide />}
           {selectedTab === 'Hotel Booking' && (
             <ExploreHotels
               onOpenChat={(target) => {
@@ -247,6 +313,51 @@ function TouristDashboard() {
           {selectedTab === 'Reviews' && <ReviewsPanel refreshTrigger={reviewsRefreshTrigger} />}
           {selectedTab === 'Travelogue' && (
             <Box>
+              {/* Travelogue Hero */}
+              <Box
+                sx={{
+                  borderRadius: '20px',
+                  p: { xs: 2.5, md: 3.5 },
+                  mb: 3,
+                  color: '#0F172A',
+                  background: 'linear-gradient(135deg, rgba(79,138,139,0.12) 0%, rgba(249,237,105,0.12) 100%)',
+                  border: '1px solid rgba(79,138,139,0.12)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+              >
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    right: -40,
+                    top: -40,
+                    width: 180,
+                    height: 180,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(79,138,139,0.2), transparent 70%)'
+                  }}
+                />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: -60,
+                    bottom: -60,
+                    width: 220,
+                    height: 220,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(15,23,42,0.18), transparent 70%)'
+                  }}
+                />
+                <Box sx={{ position: 'relative', zIndex: 1 }}>
+                  <Box sx={{ fontWeight: 800, fontSize: { xs: '1.4rem', md: '2rem' }, mb: 1 }}>
+                    Travelogue Studio
+                  </Box>
+                  <Box sx={{ color: '#475569', fontWeight: 500, maxWidth: 520 }}>
+                    Share cinematic travel stories, discover authentic experiences, and keep your travel memory vault in one place.
+                  </Box>
+                </Box>
+              </Box>
+
               {/* Travelogue Sub-tabs */}
               <Box sx={{
                 bgcolor: '#ffffff',

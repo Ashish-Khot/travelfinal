@@ -1,7 +1,7 @@
-/**
+﻿/**
  * ROUTING SERVICE
  * Handles directions, route optimization, and travel time calculations
- * Uses OpenRouteService API for real routing information
+ * Uses OpenRouteService with OSRM fallback for real routing information
  */
 
 import axios from 'axios';
@@ -25,8 +25,8 @@ const clearExpiredCache = () => {
 /**
  * Generate cache key
  */
-const generateCacheKey = (coordinates, profile, avoidPolygons) => {
-  return `${coordinates.join(',')}_${profile}_${JSON.stringify(avoidPolygons || {})}`;
+const generateCacheKey = (coordinates, profile, avoidPolygons, provider = 'auto') => {
+  return `${coordinates.join(',')}_${profile}_${provider}_${JSON.stringify(avoidPolygons || {})}`;
 };
 
 /**
@@ -64,6 +64,218 @@ const formatCoordinates = (coords) => {
 };
 
 /**
+ * Parse route instructions from OpenRouteService segments
+ */
+const parseRouteInstructions = (feature) => {
+  const segments = feature?.properties?.segments || [];
+  const geometryCoords = feature?.geometry?.coordinates || [];
+  const latLngCoords = geometryCoords.map((coord) => [coord[1], coord[0]]);
+  const instructions = [];
+  let stepNumber = 1;
+
+  segments.forEach((segment, segmentIndex) => {
+    (segment?.steps || []).forEach((step, stepIndex) => {
+      const wayPoints = Array.isArray(step?.way_points) ? step.way_points : [];
+      const fromIndex = Number.isInteger(wayPoints[0]) ? wayPoints[0] : 0;
+      const toIndex = Number.isInteger(wayPoints[1]) ? wayPoints[1] : fromIndex;
+
+      instructions.push({
+        id: `${segmentIndex}-${stepIndex}`,
+        stepNumber,
+        text: step?.instruction || 'Continue',
+        name: step?.name || '',
+        type: step?.type ?? null,
+        distance: step?.distance || 0,
+        distanceText: formatDistance(step?.distance || 0),
+        duration: step?.duration || 0,
+        durationText: formatDuration(step?.duration || 0),
+        fromIndex,
+        toIndex,
+        fromCoord: latLngCoords[fromIndex] || null,
+        toCoord: latLngCoords[toIndex] || latLngCoords[fromIndex] || null,
+      });
+
+      stepNumber += 1;
+    });
+  });
+
+  return instructions;
+};
+
+const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1';
+
+const getProfileForOSRM = (profile = ROUTING_CONFIG.DEFAULT_PROFILE) => {
+  if (String(profile).includes('cycling')) return 'cycling';
+  if (String(profile).includes('foot')) return 'walking';
+  return 'driving';
+};
+
+const buildInstructionTextFromOSRM = (step) => {
+  const maneuver = step?.maneuver || {};
+  const type = maneuver?.type || '';
+  const modifier = maneuver?.modifier || '';
+  const road = step?.name ? ` onto ${step.name}` : '';
+
+  if (type === 'depart') return `Head ${modifier || 'forward'}${road}`;
+  if (type === 'arrive') return 'You have arrived at your destination';
+  if (type === 'roundabout') return `Enter roundabout and take exit${road}`;
+  if (type === 'merge') return `Merge ${modifier || ''}${road}`.trim();
+  if (type === 'fork') return `Keep ${modifier || 'forward'}${road}`;
+  if (type === 'end of road') return `Turn ${modifier || 'ahead'}${road}`;
+  if (type === 'on ramp') return `Take ramp ${modifier || ''}${road}`.trim();
+  if (type === 'off ramp') return `Take exit ${modifier || ''}${road}`.trim();
+  if (modifier) return `Turn ${modifier}${road}`;
+  if (step?.name) return `Continue on ${step.name}`;
+  return 'Continue straight';
+};
+
+const parseOSRMInstructions = (route) => {
+  const instructions = [];
+  const legs = route?.legs || [];
+  let stepNumber = 1;
+
+  legs.forEach((leg, legIndex) => {
+    (leg?.steps || []).forEach((step, stepIndex) => {
+      const geometry = step?.geometry?.coordinates || [];
+      const firstCoord = geometry[0];
+      const lastCoord = geometry[geometry.length - 1] || firstCoord;
+      const maneuver = step?.maneuver || {};
+
+      instructions.push({
+        id: `${legIndex}-${stepIndex}`,
+        stepNumber,
+        text: buildInstructionTextFromOSRM(step),
+        name: step?.name || '',
+        type: maneuver?.type || null,
+        modifier: maneuver?.modifier || null,
+        distance: step?.distance || 0,
+        distanceText: formatDistance(step?.distance || 0),
+        duration: step?.duration || 0,
+        durationText: formatDuration(step?.duration || 0),
+        fromIndex: null,
+        toIndex: null,
+        fromCoord: firstCoord ? [firstCoord[1], firstCoord[0]] : null,
+        toCoord: lastCoord ? [lastCoord[1], lastCoord[0]] : null,
+      });
+
+      stepNumber += 1;
+    });
+  });
+
+  return instructions;
+};
+
+const normalizeOpenRouteServiceData = (response, options, profile, waypoints) => {
+  return {
+    success: true,
+    provider: 'openrouteservice',
+    routes: response.data.features.map((feature, index) => ({
+      id: index,
+      type: 'route',
+      geometry: feature.geometry,
+      distance: feature.properties.summary.distance,
+      duration: feature.properties.summary.duration,
+      ascent: feature.properties.summary.ascent || 0,
+      descent: feature.properties.summary.descent || 0,
+      distanceKM: (feature.properties.summary.distance / 1000).toFixed(2),
+      durationHM: formatDuration(feature.properties.summary.duration),
+      color: options.color || getRouteColor(profile),
+      isAlternative: index > 0,
+      segments: feature.properties.segments || [],
+      instructions: parseRouteInstructions(feature),
+      waypoints: feature.geometry.coordinates.map((coord) => [coord[1], coord[0]]),
+    })),
+    waypoints,
+    profile,
+    timestamp: Date.now(),
+  };
+};
+
+const normalizeOSRMData = (response, options, profile, waypoints) => {
+  const routes = response?.data?.routes || [];
+  return {
+    success: true,
+    provider: 'osrm',
+    routes: routes.map((route, index) => ({
+      id: index,
+      type: 'route',
+      geometry: route.geometry,
+      distance: route.distance || 0,
+      duration: route.duration || 0,
+      ascent: 0,
+      descent: 0,
+      distanceKM: ((route.distance || 0) / 1000).toFixed(2),
+      durationHM: formatDuration(route.duration || 0),
+      color: options.color || getRouteColor(profile),
+      isAlternative: index > 0,
+      segments: route.legs || [],
+      instructions: parseOSRMInstructions(route),
+      waypoints: (route.geometry?.coordinates || []).map((coord) => [coord[1], coord[0]]),
+    })),
+    waypoints,
+    profile,
+    timestamp: Date.now(),
+  };
+};
+
+const getRouteFromOpenRouteService = async (coordinates, waypoints, profile, options) => {
+  const requestBody = {
+    coordinates,
+    profile,
+    format: 'geojson',
+    locale: 'en',
+    elevation: options.elevation || false,
+    instructions: options.instructions !== false,
+    ...options.routeOptions,
+  };
+
+  if (ROUTING_CONFIG.ALTERNATIVE_ROUTES.enabled && !options.noAlternatives) {
+    requestBody.alternative_routes = {
+      share_factor: ROUTING_CONFIG.ALTERNATIVE_ROUTES.shareFactor,
+      target_count: ROUTING_CONFIG.ALTERNATIVE_ROUTES.count,
+    };
+  }
+
+  const response = await axios.post(
+    `${ROUTING_CONFIG.API_BASE}${ROUTING_CONFIG.DIRECTIONS_ENDPOINT}/${profile}`,
+    requestBody,
+    {
+      headers: {
+        Authorization: `Bearer ${ROUTING_CONFIG.API_KEY}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      timeout: ROUTING_CONFIG.REQUEST_OPTIONS.timeout,
+    }
+  );
+
+  return normalizeOpenRouteServiceData(response, options, profile, waypoints);
+};
+
+const getRouteFromOSRM = async (coordinates, waypoints, profile, options) => {
+  const osrmProfile = getProfileForOSRM(profile);
+  const coordinateParam = coordinates.map((coord) => `${coord[0]},${coord[1]}`).join(';');
+  const alternatives = options.noAlternatives ? 'false' : 'true';
+
+  const response = await axios.get(`${OSRM_BASE_URL}/${osrmProfile}/${coordinateParam}`, {
+    params: {
+      overview: 'full',
+      geometries: 'geojson',
+      steps: options.instructions !== false,
+      alternatives,
+      annotations: false,
+    },
+    timeout: ROUTING_CONFIG.REQUEST_OPTIONS.timeout,
+  });
+
+  if (!Array.isArray(response?.data?.routes) || response.data.routes.length === 0) {
+    throw new Error('OSRM did not return a route');
+  }
+
+  return normalizeOSRMData(response, options, profile, waypoints);
+};
+
+/**
  * Get route between two or more points
  * @param {Array<Array>} waypoints - Array of [lat, lng] coordinates
  * @param {Object} options - Route options
@@ -71,90 +283,47 @@ const formatCoordinates = (coords) => {
  */
 export const getRoute = async (waypoints, options = {}) => {
   try {
-    if (!isRoutingConfigured()) {
-      throw new Error('OpenRouteService API key not configured');
-    }
-
     if (!waypoints || waypoints.length < 2) {
       throw new Error('At least 2 waypoints are required');
     }
 
     const profile = options.profile || ROUTING_CONFIG.DEFAULT_PROFILE;
-    const cacheKey = generateCacheKey(waypoints, profile, options.avoidPolygons);
+    const provider = options.provider || 'auto';
+    const cacheKey = generateCacheKey(waypoints, profile, options.avoidPolygons, provider);
 
-    // Check cache
     const cachedRoute = getCachedRoute(cacheKey);
-    if (cachedRoute) {
-      console.log('📦 Using cached route');
-      return cachedRoute;
-    }
+    if (cachedRoute) return cachedRoute;
 
     const coordinates = formatCoordinates(waypoints);
+    let routeData = null;
+    let lastError = null;
 
-    // Build request body
-    const requestBody = {
-      coordinates,
-      profile,
-      format: 'geojson',
-      locale: 'en',
-      elevation: options.elevation || false,
-      instructions: options.instructions !== false,
-      ...options.routeOptions,
-    };
-
-    // Add alternative routes if enabled
-    if (ROUTING_CONFIG.ALTERNATIVE_ROUTES.enabled && !options.noAlternatives) {
-      requestBody.alternative_routes = {
-        share_factor: ROUTING_CONFIG.ALTERNATIVE_ROUTES.shareFactor,
-        target_count: ROUTING_CONFIG.ALTERNATIVE_ROUTES.count,
-      };
+    if ((provider === 'auto' || provider === 'openrouteservice') && isRoutingConfigured()) {
+      try {
+        routeData = await getRouteFromOpenRouteService(coordinates, waypoints, profile, options);
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    // Make API request
-    const response = await axios.post(
-      `${ROUTING_CONFIG.API_BASE}${ROUTING_CONFIG.DIRECTIONS_ENDPOINT}/${profile}`,
-      requestBody,
-      {
-        headers: {
-          'Authorization': `Bearer ${ROUTING_CONFIG.API_KEY}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        timeout: ROUTING_CONFIG.REQUEST_OPTIONS.timeout,
-      }
-    );
+    if (!routeData && (provider === 'auto' || provider === 'osrm')) {
+      routeData = await getRouteFromOSRM(coordinates, waypoints, profile, options);
+    }
 
-    // Process response
-    const routeData = {
-      success: true,
-      routes: response.data.features.map((feature, index) => ({
-        id: index,
-        type: 'route',
-        geometry: feature.geometry,
-        distance: feature.properties.summary.distance, // meters
-        duration: feature.properties.summary.duration, // seconds
-        ascent: feature.properties.summary.ascent || 0,
-        descent: feature.properties.summary.descent || 0,
-        distanceKM: (feature.properties.summary.distance / 1000).toFixed(2),
-        durationHM: formatDuration(feature.properties.summary.duration),
-        color: options.color || getRouteColor(profile),
-        isAlternative: index > 0,
-        waypoints: feature.geometry.coordinates.map((c) => [c[1], c[0]]), // [lng, lat] -> [lat, lng]
-      })),
-      waypoints,
-      profile,
-      timestamp: Date.now(),
-    };
+    if (!routeData) {
+      if (lastError?.message) throw lastError;
+      throw new Error('No routing provider available');
+    }
 
-    // Cache the result
     cacheRoute(cacheKey, routeData);
 
     return routeData;
   } catch (error) {
-    console.error('❌ Routing Error:', error.message);
+    const message = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Routing failed';
+    console.error('Routing Error:', message);
     throw {
       success: false,
-      error: error.message,
+      error: message,
       code: error.response?.status || 'UNKNOWN_ERROR',
     };
   }
@@ -204,7 +373,7 @@ export const getIsochrone = async (center, options = {}) => {
       timestamp: Date.now(),
     };
   } catch (error) {
-    console.error('❌ Isochrone Error:', error.message);
+    console.error('âŒ Isochrone Error:', error.message);
     throw {
       success: false,
       error: error.message,
@@ -254,7 +423,7 @@ export const getTravelMatrix = async (sources, destinations, options = {}) => {
       timestamp: Date.now(),
     };
   } catch (error) {
-    console.error('❌ Travel Matrix Error:', error.message);
+    console.error('âŒ Travel Matrix Error:', error.message);
     throw {
       success: false,
       error: error.message,
@@ -304,7 +473,6 @@ export const formatDistance = (meters) => {
 export const optimizeRoute = async (waypoints, options = {}) => {
   try {
     const startPoint = waypoints[0];
-    const endPoint = waypoints[waypoints.length - 1];
     const middlePoints = waypoints.slice(1, -1);
 
     if (middlePoints.length === 0) {
@@ -329,7 +497,6 @@ export const optimizeRoute = async (waypoints, options = {}) => {
       let nearest = -1;
       let minDistance = Infinity;
 
-      const currIndex = waypoints.indexOf(current);
       const row = response.durations[0];
 
       for (let i = 0; i < waypoints.length; i++) {
@@ -351,7 +518,7 @@ export const optimizeRoute = async (waypoints, options = {}) => {
       optimized: true,
     };
   } catch (error) {
-    console.error('❌ Route Optimization Error:', error.message);
+    console.error('âŒ Route Optimization Error:', error.message);
     return {
       success: false,
       error: error.message,
@@ -365,7 +532,7 @@ export const optimizeRoute = async (waypoints, options = {}) => {
  */
 export const clearRouteCache = () => {
   routeCache.clear();
-  console.log('✓ Route cache cleared');
+  console.log('âœ“ Route cache cleared');
 };
 
 /**
@@ -389,3 +556,4 @@ export default {
   clearRouteCache,
   getCacheStats,
 };
+

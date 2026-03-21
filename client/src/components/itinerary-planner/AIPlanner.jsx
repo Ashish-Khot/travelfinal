@@ -25,11 +25,26 @@ import { AutoFixHigh as AIIcon, CloudDownload as WeatherIcon } from '@mui/icons-
 import itineraryService from '../../services/itineraryService.js';
 
 const AIPlanner = ({ itinerary }) => {
+  const currency = itinerary?.budget?.currency || 'INR';
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const[recommendations, setRecommendations] = useState([]);
   const [dayForSuggestion, setDayForSuggestion] = useState(1);
   const [openSuggestionsDialog, setOpenSuggestionsDialog] = useState(false);
+
+  const formatMoney = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '';
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(0)}`;
+    }
+  };
 
   const handleGetSuggestions = async () => {
     if (!itinerary?._id) {
@@ -338,7 +353,7 @@ const AIPlanner = ({ itinerary }) => {
                       <Chip label={suggestion.timeSlot} size="small" variant="outlined" />
                     )}
                     {suggestion.estimatedCost > 0 && (
-                      <Chip label={`$${suggestion.estimatedCost}`} size="small" />
+                      <Chip label={formatMoney(suggestion.estimatedCost)} size="small" />
                     )}
                   </Box>
                 </Paper>

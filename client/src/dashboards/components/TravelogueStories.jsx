@@ -2,6 +2,7 @@
 import {
   Box,
   Paper,
+  Grid,
   Stack,
   Typography,
   Avatar,
@@ -271,21 +272,37 @@ export default function TravelogueStories() {
                 Discover real travel moments and share yours instantly.
               </Typography>
             </Box>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => setComposerOpen(true)}
-              sx={{
-                borderRadius: '12px',
-                px: 3,
-                py: 1.2,
-                fontWeight: 700,
-                background: 'linear-gradient(135deg, #4F8A8B 0%, #6BA8AC 100%)',
-                boxShadow: '0 10px 24px rgba(79,138,139,0.25)'
-              }}
-            >
-              Add Story
-            </Button>
+            <Stack direction="row" spacing={1.5}>
+              <Button
+                variant="outlined"
+                onClick={() => window.dispatchEvent(new CustomEvent('travelogueSubTab', { detail: { tab: 'create' } }))}
+                sx={{
+                  borderRadius: '12px',
+                  px: 2.5,
+                  py: 1.1,
+                  fontWeight: 700,
+                  borderColor: 'rgba(79,138,139,0.4)',
+                  color: '#4F8A8B'
+                }}
+              >
+                Create Travelogue
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setComposerOpen(true)}
+                sx={{
+                  borderRadius: '12px',
+                  px: 3,
+                  py: 1.2,
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #4F8A8B 0%, #6BA8AC 100%)',
+                  boxShadow: '0 10px 24px rgba(79,138,139,0.25)'
+                }}
+              >
+                Add Story
+              </Button>
+            </Stack>
           </Stack>
         </Paper>
 
@@ -486,7 +503,7 @@ export default function TravelogueStories() {
               </Typography>
             </Box>
             <Chip
-              label={`${travelogues.length} stories today`}
+              label={`${travelogues.length} stories available`}
               sx={{
                 bgcolor: 'rgba(79,138,139,0.12)',
                 color: '#4F8A8B',
@@ -506,15 +523,16 @@ export default function TravelogueStories() {
               </Typography>
             </Box>
           ) : (
-            <Stack spacing={3}>
+            <Grid container spacing={2.5}>
               {travelogues.map((travelogue) => (
-                <TravelogueCard
-                  key={travelogue._id}
-                  travelogue={travelogue}
-                  onViewDetails={handleViewDetails}
-                />
+                <Grid item xs={12} md={6} key={travelogue._id}>
+                  <TravelogueCard
+                    travelogue={travelogue}
+                    onViewDetails={handleViewDetails}
+                  />
+                </Grid>
               ))}
-            </Stack>
+            </Grid>
           )}
         </Paper>
       </Box>

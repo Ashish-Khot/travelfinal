@@ -21,6 +21,14 @@ class AIService {
       API_CONFIG.GEMINI?.VISION_MODEL || this.geminiModel;
     this.maxImageMb = API_CONFIG.GEMINI?.MAX_IMAGE_MB || 4;
     this.hasGeminiAccess = Boolean(this.geminiKey);
+
+    this.openaiKey = (API_CONFIG.OPENAI?.API_KEY || '').trim();
+    this.openaiBaseUrl = API_CONFIG.OPENAI?.BASE_URL || 'https://api.openai.com/v1';
+    this.openaiModel = API_CONFIG.OPENAI?.MODEL || 'gpt-oss-120b';
+    this.openaiMaxOutputTokens = Number(API_CONFIG.OPENAI?.MAX_OUTPUT_TOKENS || 7000);
+    this.hasOpenAIAccess = Boolean(this.openaiKey);
+
+    this.preferredProvider = (API_CONFIG.AI?.PROVIDER || '').trim().toLowerCase();
   }
 
   normalizeImagePayload(imageData, imageMimeType) {
@@ -44,6 +52,39 @@ class AIService {
   estimateBase64Bytes(base64Data) {
     if (!base64Data) return 0;
     return Math.floor((base64Data.length * 3) / 4);
+  }
+
+  getProviderSequence() {
+    const providers = ['openai', 'gemini', 'openrouter'];
+    if (providers.includes(this.preferredProvider)) {
+      return [
+        this.preferredProvider,
+        ...providers.filter((provider) => provider !== this.preferredProvider),
+      ];
+    }
+    return providers;
+  }
+
+  extractOpenAIOutputText(responseData) {
+    if (!responseData) return '';
+    if (typeof responseData.output_text === 'string') {
+      return responseData.output_text.trim();
+    }
+
+    const output = Array.isArray(responseData.output) ? responseData.output : [];
+    const chunks = [];
+
+    output.forEach((item) => {
+      if (item?.type !== 'message') return;
+      const content = Array.isArray(item.content) ? item.content : [];
+      content.forEach((part) => {
+        if (part?.type === 'output_text' && part.text) {
+          chunks.push(part.text);
+        }
+      });
+    });
+
+    return chunks.join('').trim();
   }
 
   extractJsonBlock(content, fallback = null) {
@@ -106,6 +147,65 @@ class AIService {
     return partsOut.map((part) => part.text || '').join('').trim();
   }
 
+  async callOpenAIResponse({
+    prompt,
+    temperature = 0.7,
+    maxOutputTokens,
+    responseFormat = 'json_object',
+  }) {
+    if (!this.hasOpenAIAccess) {
+      throw new Error('OpenAI API key is missing');
+    }
+
+    const input = [
+      {
+        role: 'system',
+        content: [
+          {
+            type: 'input_text',
+            text: 'You are a travel planning assistant. Respond ONLY with valid JSON.',
+          },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: prompt,
+          },
+        ],
+      },
+    ];
+
+    const requestBody = {
+      model: this.openaiModel,
+      input,
+      temperature,
+      max_output_tokens: Number.isFinite(maxOutputTokens)
+        ? maxOutputTokens
+        : this.openaiMaxOutputTokens,
+    };
+
+    if (responseFormat) {
+      requestBody.text = { format: { type: responseFormat } };
+    }
+
+    const response = await axios.post(
+      `${this.openaiBaseUrl}/responses`,
+      requestBody,
+      {
+        timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+        headers: {
+          Authorization: `Bearer ${this.openaiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return this.extractOpenAIOutputText(response.data);
+  }
+
   /**
    * Generate a complete itinerary using AI
    * @param {Object} params - Itinerary generation parameters
@@ -137,47 +237,71 @@ class AIService {
         travelers,
       });
 
-      if (this.hasGeminiAccess) {
-        try {
-          const content = await this.callGemini({
-            prompt,
-            maxOutputTokens: 2000,
-            responseMimeType: 'application/json',
-          });
-          return this.parseItineraryResponse(content, days);
-        } catch (error) {
-          console.error('Gemini itinerary generation error:', error.message);
+      const providers = this.getProviderSequence();
+
+      for (const provider of providers) {
+        if (provider === 'openai' && this.hasOpenAIAccess) {
+          try {
+            const content = await this.callOpenAIResponse({
+              prompt,
+              maxOutputTokens: this.openaiMaxOutputTokens,
+              responseFormat: 'json_object',
+            });
+            const parsed = this.tryParseItineraryResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenAI itinerary generation error:', error.message);
+          }
+        }
+
+        if (provider === 'gemini' && this.hasGeminiAccess) {
+          try {
+            const content = await this.callGemini({
+              prompt,
+              maxOutputTokens: 2000,
+              responseMimeType: 'application/json',
+            });
+            const parsed = this.tryParseItineraryResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('Gemini itinerary generation error:', error.message);
+          }
+        }
+
+        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+          try {
+            const response = await axios.post(
+              `${this.openRouterBaseUrl}/chat/completions`,
+              {
+                model: this.openRouterModel,
+                messages: [
+                  {
+                    role: 'user',
+                    content: prompt,
+                  },
+                ],
+                temperature: 0.7,
+                max_tokens: 2000,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.openRouterKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+              }
+            );
+
+            const content = response.data.choices?.[0]?.message?.content;
+            const parsed = this.tryParseItineraryResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenRouter itinerary generation error:', error.message);
+          }
         }
       }
 
-      if (!this.hasOpenRouterAccess) {
-        return this.generateDefaultItinerary(params);
-      }
-
-      const response = await axios.post(
-        `${this.openRouterBaseUrl}/chat/completions`,
-        {
-          model: this.openRouterModel,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 2000,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openRouterKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-        }
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      return this.parseItineraryResponse(content, days);
+      return this.generateDefaultItinerary(params);
     } catch (error) {
       console.error('AI itinerary generation error:', error.message);
       return this.generateDefaultItinerary(params);
@@ -217,47 +341,71 @@ class AIService {
         Return ONLY valid JSON, no other text.
       `;
 
-      if (this.hasGeminiAccess) {
-        try {
-          const content = await this.callGemini({
-            prompt,
-            maxOutputTokens: 1000,
-            responseMimeType: 'application/json',
-          });
-          return this.parseActivitiesResponse(content);
-        } catch (error) {
-          console.error('Gemini activity suggestions error:', error.message);
+      const providers = this.getProviderSequence();
+
+      for (const provider of providers) {
+        if (provider === 'openai' && this.hasOpenAIAccess) {
+          try {
+            const content = await this.callOpenAIResponse({
+              prompt,
+              maxOutputTokens: 1000,
+              responseFormat: 'json_object',
+            });
+            const parsed = this.tryParseActivitiesResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenAI activity suggestions error:', error.message);
+          }
+        }
+
+        if (provider === 'gemini' && this.hasGeminiAccess) {
+          try {
+            const content = await this.callGemini({
+              prompt,
+              maxOutputTokens: 1000,
+              responseMimeType: 'application/json',
+            });
+            const parsed = this.tryParseActivitiesResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('Gemini activity suggestions error:', error.message);
+          }
+        }
+
+        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+          try {
+            const response = await axios.post(
+              `${this.openRouterBaseUrl}/chat/completions`,
+              {
+                model: this.openRouterModel,
+                messages: [
+                  {
+                    role: 'user',
+                    content: prompt,
+                  },
+                ],
+                temperature: 0.7,
+                max_tokens: 1000,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.openRouterKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+              }
+            );
+
+            const content = response.data.choices?.[0]?.message?.content;
+            const parsed = this.tryParseActivitiesResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenRouter activity suggestions error:', error.message);
+          }
         }
       }
 
-      if (!this.hasOpenRouterAccess) {
-        return this.getDefaultActivitySuggestions(destination, interests);
-      }
-
-      const response = await axios.post(
-        `${this.openRouterBaseUrl}/chat/completions`,
-        {
-          model: this.openRouterModel,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 1000,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openRouterKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-        }
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      return this.parseActivitiesResponse(content);
+      return this.getDefaultActivitySuggestions(destination, interests);
     } catch (error) {
       console.error('Activity suggestions error:', error.message);
       return this.getDefaultActivitySuggestions(destination, interests);
@@ -291,47 +439,71 @@ class AIService {
         Return ONLY valid JSON, no other text.
       `;
 
-      if (this.hasGeminiAccess) {
-        try {
-          const content = await this.callGemini({
-            prompt,
-            maxOutputTokens: 800,
-            responseMimeType: 'application/json',
-          });
-          return this.parseRecommendationsResponse(content);
-        } catch (error) {
-          console.error('Gemini weather recommendations error:', error.message);
+      const providers = this.getProviderSequence();
+
+      for (const provider of providers) {
+        if (provider === 'openai' && this.hasOpenAIAccess) {
+          try {
+            const content = await this.callOpenAIResponse({
+              prompt,
+              maxOutputTokens: 800,
+              responseFormat: 'json_object',
+            });
+            const parsed = this.tryParseRecommendationsResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenAI weather recommendations error:', error.message);
+          }
+        }
+
+        if (provider === 'gemini' && this.hasGeminiAccess) {
+          try {
+            const content = await this.callGemini({
+              prompt,
+              maxOutputTokens: 800,
+              responseMimeType: 'application/json',
+            });
+            const parsed = this.tryParseRecommendationsResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('Gemini weather recommendations error:', error.message);
+          }
+        }
+
+        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+          try {
+            const response = await axios.post(
+              `${this.openRouterBaseUrl}/chat/completions`,
+              {
+                model: this.openRouterModel,
+                messages: [
+                  {
+                    role: 'user',
+                    content: prompt,
+                  },
+                ],
+                temperature: 0.7,
+                max_tokens: 800,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.openRouterKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+              }
+            );
+
+            const content = response.data.choices?.[0]?.message?.content;
+            const parsed = this.tryParseRecommendationsResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenRouter weather recommendations error:', error.message);
+          }
         }
       }
 
-      if (!this.hasOpenRouterAccess) {
-        return this.getDefaultRecommendations();
-      }
-
-      const response = await axios.post(
-        `${this.openRouterBaseUrl}/chat/completions`,
-        {
-          model: this.openRouterModel,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 800,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openRouterKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-        }
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      return this.parseRecommendationsResponse(content);
+      return this.getDefaultRecommendations();
     } catch (error) {
       console.error('Weather recommendations error:', error.message);
       return this.getDefaultRecommendations();
@@ -377,47 +549,71 @@ class AIService {
         Return ONLY valid JSON, no other text.
       `;
 
-      if (this.hasGeminiAccess) {
-        try {
-          const content = await this.callGemini({
-            prompt,
-            maxOutputTokens: 1000,
-            responseMimeType: 'application/json',
-          });
-          return this.parseScheduleResponse(content);
-        } catch (error) {
-          console.error('Gemini schedule optimization error:', error.message);
+      const providers = this.getProviderSequence();
+
+      for (const provider of providers) {
+        if (provider === 'openai' && this.hasOpenAIAccess) {
+          try {
+            const content = await this.callOpenAIResponse({
+              prompt,
+              maxOutputTokens: 1000,
+              responseFormat: 'json_object',
+            });
+            const parsed = this.tryParseScheduleResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenAI schedule optimization error:', error.message);
+          }
+        }
+
+        if (provider === 'gemini' && this.hasGeminiAccess) {
+          try {
+            const content = await this.callGemini({
+              prompt,
+              maxOutputTokens: 1000,
+              responseMimeType: 'application/json',
+            });
+            const parsed = this.tryParseScheduleResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('Gemini schedule optimization error:', error.message);
+          }
+        }
+
+        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+          try {
+            const response = await axios.post(
+              `${this.openRouterBaseUrl}/chat/completions`,
+              {
+                model: this.openRouterModel,
+                messages: [
+                  {
+                    role: 'user',
+                    content: prompt,
+                  },
+                ],
+                temperature: 0.7,
+                max_tokens: 1000,
+              },
+              {
+                headers: {
+                  Authorization: `Bearer ${this.openRouterKey}`,
+                  'Content-Type': 'application/json',
+                },
+                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+              }
+            );
+
+            const content = response.data.choices?.[0]?.message?.content;
+            const parsed = this.tryParseScheduleResponse(content);
+            if (parsed) return parsed;
+          } catch (error) {
+            console.error('OpenRouter schedule optimization error:', error.message);
+          }
         }
       }
 
-      if (!this.hasOpenRouterAccess) {
-        return this.getDefaultScheduleOptimization(activities);
-      }
-
-      const response = await axios.post(
-        `${this.openRouterBaseUrl}/chat/completions`,
-        {
-          model: this.openRouterModel,
-          messages: [
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 1000,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.openRouterKey}`,
-            'Content-Type': 'application/json',
-          },
-          timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-        }
-      );
-
-      const content = response.data.choices?.[0]?.message?.content;
-      return this.parseScheduleResponse(content);
+      return this.getDefaultScheduleOptimization(activities);
     } catch (error) {
       console.error('Schedule optimization error:', error.message);
       return this.getDefaultScheduleOptimization(activities);
@@ -544,6 +740,66 @@ class AIService {
       
       Return ONLY valid JSON, no other text.
     `;
+  }
+
+  /**
+   * Try to parse itinerary response from AI without fallback
+   * @private
+   */
+  tryParseItineraryResponse(content) {
+    try {
+      const jsonBlock = this.extractJsonBlock(content);
+      if (!jsonBlock) return null;
+      const parsed = JSON.parse(jsonBlock);
+      return parsed.itinerary || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Try to parse activities response from AI without fallback
+   * @private
+   */
+  tryParseActivitiesResponse(content) {
+    try {
+      const jsonBlock = this.extractJsonBlock(content);
+      if (!jsonBlock) return null;
+      const parsed = JSON.parse(jsonBlock);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Try to parse recommendations response from AI without fallback
+   * @private
+   */
+  tryParseRecommendationsResponse(content) {
+    try {
+      const jsonBlock = this.extractJsonBlock(content);
+      if (!jsonBlock) return null;
+      const parsed = JSON.parse(jsonBlock);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Try to parse schedule response from AI without fallback
+   * @private
+   */
+  tryParseScheduleResponse(content) {
+    try {
+      const jsonBlock = this.extractJsonBlock(content);
+      if (!jsonBlock) return null;
+      const parsed = JSON.parse(jsonBlock);
+      return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

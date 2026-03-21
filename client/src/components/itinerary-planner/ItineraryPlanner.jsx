@@ -77,6 +77,20 @@ const progressSteps = [
   'Final polish',
 ];
 
+const formatMoney = (value, currency = 'INR') => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return '';
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(0)}`;
+  }
+};
+
 function ItineraryPlanner() {
   const [openAdvanced, setOpenAdvanced] = useState(false);
   const [activeModule, setActiveModule] = useState('overview');
@@ -136,8 +150,9 @@ function ItineraryPlanner() {
     const days = itinerary?.numberOfDays || itinerary?.days || '';
     const travelers = itinerary?.numberOfTravelers || '';
     const budget = itinerary?.budget?.totalBudget || '';
+    const currency = itinerary?.budget?.currency || 'INR';
     return `${destinationName}${days ? `, ${days} days` : ''}${travelers ? `, ${travelers} travelers` : ''}${
-      budget ? `, budget ${budget}` : ''
+      budget ? `, budget ${formatMoney(budget, currency)}` : ''
     }`;
   }, [itinerary]);
 
@@ -147,7 +162,10 @@ function ItineraryPlanner() {
     if (itinerary?.numberOfDays) chips.push(`${itinerary.numberOfDays} days`);
     if (itinerary?.numberOfTravelers) chips.push(`${itinerary.numberOfTravelers} travelers`);
     if (itinerary?.season) chips.push(`Season: ${itinerary.season}`);
-    if (itinerary?.budget?.totalBudget) chips.push(`Budget: ${itinerary.budget.totalBudget} ${itinerary.budget.currency || 'USD'}`);
+    if (itinerary?.budget?.totalBudget) {
+      const currency = itinerary?.budget?.currency || 'INR';
+      chips.push(`Budget: ${formatMoney(itinerary.budget.totalBudget, currency)}`);
+    }
     return chips;
   }, [itinerary]);
 
@@ -176,7 +194,7 @@ function ItineraryPlanner() {
       return;
     }
 
-    const userSummary = `${formData.days}-day ${formData.travelStyle} trip to ${formData.destination} for ${formData.numberOfTravelers} traveler(s). Budget ${formData.budget}. Start ${formData.startDate}. Interests: ${formData.interests.join(', ')}. ${formData.aiNotes ? `Notes: ${formData.aiNotes}` : ''}`;
+    const userSummary = `${formData.days}-day ${formData.travelStyle} trip to ${formData.destination} for ${formData.numberOfTravelers} traveler(s). Budget ₹${formData.budget}. Start ${formData.startDate}. Interests: ${formData.interests.join(', ')}. ${formData.aiNotes ? `Notes: ${formData.aiNotes}` : ''}`;
     addMessage('user', userSummary);
     addMessage('assistant', 'Generating your itinerary now. I will post updates as soon as it is ready.');
 
@@ -188,6 +206,7 @@ function ItineraryPlanner() {
         destination: formData.destination,
         days: parseInt(formData.days, 10),
         budget: parseFloat(formData.budget),
+        currency: 'INR',
         numberOfTravelers: parseInt(formData.numberOfTravelers, 10),
         travelStyle: formData.travelStyle,
         interests: formData.interests,
@@ -265,7 +284,7 @@ function ItineraryPlanner() {
                   fullWidth
                 />
                 <TextField
-                  label="Budget"
+                  label="Budget (₹)"
                   type="number"
                   value={formData.budget}
                   onChange={(e) => handleInputChange('budget', e.target.value)}

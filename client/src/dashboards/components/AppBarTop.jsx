@@ -16,15 +16,29 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import Tooltip from '@mui/material/Tooltip';
 import { alpha, styled } from '@mui/material/styles';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import ViewSidebarIcon from '@mui/icons-material/ViewSidebar';
+import ViewSidebarOutlinedIcon from '@mui/icons-material/ViewSidebarOutlined';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import MenuIcon from '@mui/icons-material/Menu';
 import NotificationPanel from './NotificationPanel';
 
 const Search = styled('div')(({ theme }) => ({
   position: 'relative',
-  borderRadius: theme.shape.borderRadius,
-  backgroundColor: alpha(theme.palette.common.white, 0.15),
+  borderRadius: 999,
+  backgroundColor: alpha(
+    theme.palette.background.paper,
+    theme.palette.mode === 'dark' ? 0.35 : 0.75
+  ),
   '&:hover': {
-    backgroundColor: alpha(theme.palette.common.white, 0.25),
+    backgroundColor: alpha(
+      theme.palette.background.paper,
+      theme.palette.mode === 'dark' ? 0.45 : 0.9
+    ),
   },
+  border: `1px solid ${alpha(theme.palette.text.primary, 0.1)}`,
+  boxShadow: theme.palette.mode === 'dark'
+    ? '0 8px 20px rgba(15, 23, 42, 0.4)'
+    : '0 8px 20px rgba(15, 23, 42, 0.08)',
   marginLeft: 0,
   width: '100%',
   [theme.breakpoints.up('sm')]: {
@@ -44,7 +58,7 @@ const SearchIconWrapper = styled('div')(({ theme }) => ({
 }));
 
 const StyledInputBase = styled(InputBase)(({ theme }) => ({
-  color: 'inherit',
+  color: theme.palette.text.primary,
   '& .MuiInputBase-input': {
     padding: theme.spacing(1, 1, 1, 0),
     paddingLeft: `calc(1em + ${theme.spacing(4)})`,
@@ -62,7 +76,11 @@ export default function AppBarTop({
   isDarkMode = false, 
   onThemeToggle = () => {},
   chatNotifications = {},
-  onChatClick = () => {}
+  onChatClick = () => {},
+  sidebarHidden = false,
+  sidebarCompact = false,
+  onSidebarToggle = () => {},
+  onSidebarVisibilityToggle = () => {}
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
 
@@ -91,12 +109,41 @@ export default function AppBarTop({
   };
 
   return (
-    <AppBar position="fixed" color="inherit" elevation={1} sx={{ zIndex: 1201 }}>
-      <Toolbar>
-        <TravelExploreIcon sx={{ fontSize: 32, color: 'primary.main', mr: 1 }} />
-        <Typography variant="h6" noWrap sx={{ color: 'primary.main', fontWeight: 700 }}>
+    <AppBar
+      position="fixed"
+      color="transparent"
+      elevation={0}
+      sx={(theme) => ({
+        zIndex: 1201,
+        backdropFilter: 'blur(18px)',
+        backgroundColor: alpha(
+          theme.palette.background.paper,
+          theme.palette.mode === 'dark' ? 0.9 : 0.82
+        ),
+        borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+      })}
+    >
+      <Toolbar sx={{ gap: 1.5 }}>
+        <TravelExploreIcon sx={{ fontSize: 32, color: 'primary.main', mr: 0.5 }} />
+        <Typography
+          variant="h6"
+          noWrap
+          sx={{ color: 'primary.main', fontWeight: 700, letterSpacing: '-0.4px' }}
+        >
           Travelogue
         </Typography>
+        <Tooltip title={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'}>
+          <IconButton onClick={onSidebarVisibilityToggle} sx={{ ml: 0.5 }}>
+            {sidebarHidden ? <ViewSidebarOutlinedIcon /> : <ViewSidebarIcon />}
+          </IconButton>
+        </Tooltip>
+        {!sidebarHidden && (
+          <Tooltip title={sidebarCompact ? 'Expand sidebar' : 'Compact sidebar'}>
+            <IconButton onClick={onSidebarToggle}>
+              {sidebarCompact ? <MenuIcon /> : <MenuOpenIcon />}
+            </IconButton>
+          </Tooltip>
+        )}
         <Search>
           <SearchIconWrapper>
             <SearchIcon />

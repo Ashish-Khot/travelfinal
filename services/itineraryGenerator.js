@@ -42,6 +42,14 @@ const TIME_BLOCKS = [
   },
 ];
 
+const BLOCK_LABELS = {
+  morning: 'Morning',
+  lunch: 'Lunch',
+  afternoon: 'Afternoon',
+  evening: 'Evening',
+  night: 'Night',
+};
+
 const KIND_QUERIES = {
   culture: 'historic,archaeology,museums,monuments,temples,churches,castles,palaces',
   nature: 'natural,parks,gardens,beaches,viewpoints,waterfalls,lakes',
@@ -152,6 +160,33 @@ const shuffle = (items) => {
 const parseTimeToMinutes = (timeStr) => {
   const [h, m] = String(timeStr || '00:00').split(':').map(Number);
   return (h * 60) + (m || 0);
+};
+
+const normalizePlaceName = (value) => String(value || '').trim().toLowerCase();
+
+const ensureUniqueName = (name, usedNames, suffix) => {
+  const normalized = normalizePlaceName(name);
+  if (!normalized) return name;
+  if (!usedNames.has(normalized)) {
+    usedNames.add(normalized);
+    return name;
+  }
+
+  const fallback = suffix ? `${name} ${suffix}` : `${name} (Alternate)`;
+  const fallbackNormalized = normalizePlaceName(fallback);
+  if (!usedNames.has(fallbackNormalized)) {
+    usedNames.add(fallbackNormalized);
+    return fallback;
+  }
+
+  let counter = 2;
+  let candidate = `${name} (${counter})`;
+  while (usedNames.has(normalizePlaceName(candidate))) {
+    counter += 1;
+    candidate = `${name} (${counter})`;
+  }
+  usedNames.add(normalizePlaceName(candidate));
+  return candidate;
 };
 
 const hashString = (value) => {
@@ -300,12 +335,15 @@ class ItineraryGenerator {
     };
   }
 
-  pickNextPlace(pool, usedIds) {
+  pickNextPlace(pool, usedIds, usedNames) {
     while (pool.length > 0) {
       const candidate = pool.shift();
       const id = candidate?.id || candidate?.externalPlaceId || candidate?.name;
+      const nameKey = normalizePlaceName(candidate?.name);
       if (!id || usedIds.has(id)) continue;
+      if (nameKey && usedNames?.has(nameKey)) continue;
       usedIds.add(id);
+      if (nameKey && usedNames) usedNames.add(nameKey);
       return candidate;
     }
     return null;
@@ -496,6 +534,7 @@ class ItineraryGenerator {
     ]);
 
     const usedIds = new Set();
+    const usedNames = new Set();
     const activities = [];
     const shuffledBlocks = TIME_BLOCKS;
 
@@ -524,23 +563,29 @@ class ItineraryGenerator {
             'sightseeing';
 
           const pool = pools[preferredCategory] || pools.sightseeing || [];
-          const place = this.pickNextPlace(pool, usedIds);
+          const place = this.pickNextPlace(pool, usedIds, usedNames);
 
           const importance =
             block.key === 'morning' && slotIndex === 0 ? 'must-do' : 'recommended';
 
           if (place) {
-            activities.push(
-              this.buildActivityFromPlace({
-                place,
-                dayNumber,
-                timeBlock: block.key,
-                startTime: slot.start,
-                endTime: slot.end,
-                fallbackCoordinates: coordinates,
-                importance,
-              })
-            );
+            const built = this.buildActivityFromPlace({
+              place,
+              dayNumber,
+              timeBlock: block.key,
+              startTime: slot.start,
+              endTime: slot.end,
+              fallbackCoordinates: coordinates,
+              importance,
+            });
+            if (built?.name) {
+              built.name = ensureUniqueName(
+                built.name,
+                usedNames,
+                `(${BLOCK_LABELS[block.key] || 'Slot'})`
+              );
+            }
+            activities.push(built);
           } else {
             const fallbackCategory =
               block.key === 'lunch' || block.key === 'evening'
@@ -553,18 +598,24 @@ class ItineraryGenerator {
             const fallbackName = fallbackCategory === 'food'
               ? `${foodItem} in ${destination}`
               : null;
-            activities.push(
-              this.buildGenericActivity({
-                destination,
-                dayNumber,
-                timeBlock: block.key,
-                startTime: slot.start,
-                endTime: slot.end,
-                category: fallbackCategory,
-                fallbackCoordinates: coordinates,
-                name: fallbackName,
-              })
-            );
+            const fallbackActivity = this.buildGenericActivity({
+              destination,
+              dayNumber,
+              timeBlock: block.key,
+              startTime: slot.start,
+              endTime: slot.end,
+              category: fallbackCategory,
+              fallbackCoordinates: coordinates,
+              name: fallbackName,
+            });
+            if (fallbackActivity?.name) {
+              fallbackActivity.name = ensureUniqueName(
+                fallbackActivity.name,
+                usedNames,
+                `(${BLOCK_LABELS[block.key] || 'Slot'})`
+              );
+            }
+            activities.push(fallbackActivity);
           }
         });
 

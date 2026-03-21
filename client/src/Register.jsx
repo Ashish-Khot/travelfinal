@@ -2,15 +2,12 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "./api";
 
-
 import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Avatar from "@mui/material/Avatar";
 import MenuItem from "@mui/material/MenuItem";
 
 import PersonIcon from "@mui/icons-material/Person";
@@ -18,7 +15,7 @@ import RoomIcon from "@mui/icons-material/Room";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HotelIcon from "@mui/icons-material/Hotel";
 import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
-
+import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 
 import styles from "./Register.module.css";
 
@@ -96,36 +93,54 @@ export default function Register() {
   };
 
   return (
-    <Box
-      className={styles.bg}
-      minHeight="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-    >
-      <Paper elevation={6} className={styles.paper}>
-        <Box display="flex" flexDirection="column" alignItems="center" mb={2}>
-          <Avatar
-            className={styles.avatar}
-            sx={{ bgcolor: "success.main", width: 64, height: 64 }}
-          >
-            <PersonIcon fontSize="large" />
-          </Avatar>
-
-          <Typography component="h1" variant="h4" fontWeight={700} mt={2}>
-            Create Account
+    <Box className={styles.authShell}>
+      <Box className={styles.authFrame}>
+        <Box className={styles.brandPanel}>
+          <Box className={styles.brandBadge}>
+            <TravelExploreIcon fontSize="small" />
+            Travelogue
+          </Box>
+          <Typography component="h1" className={styles.brandTitle}>
+            Build your traveler profile and unlock premium experiences.
           </Typography>
-
-          <Typography variant="subtitle1" color="text.secondary" mb={2}>
-            Join Travelogue community today
+          <Typography className={styles.brandSub}>
+            Create your account to access curated stays, expert guides, and a private travel vault.
           </Typography>
+          <Box className={styles.brandStats}>
+            <Box className={styles.statCard}>
+              <Typography className={styles.statValue}>950K+</Typography>
+              <Typography className={styles.statLabel}>Trips planned</Typography>
+            </Box>
+            <Box className={styles.statCard}>
+              <Typography className={styles.statValue}>4.8</Typography>
+              <Typography className={styles.statLabel}>Average reviews</Typography>
+            </Box>
+            <Box className={styles.statCard}>
+              <Typography className={styles.statValue}>Top 1%</Typography>
+              <Typography className={styles.statLabel}>Guides curated</Typography>
+            </Box>
+          </Box>
+          <Box className={styles.brandTags}>
+            <Box className={styles.tag}>Local experts</Box>
+            <Box className={styles.tag}>Flexible itineraries</Box>
+            <Box className={styles.tag}>Verified stays</Box>
+          </Box>
         </Box>
 
-        <Typography variant="subtitle2" fontWeight={600} mb={1}>
-          Register As
-        </Typography>
+        <Box className={styles.formPanel}>
+          <Box className={styles.formHeader}>
+            <Box className={styles.iconHalo}>
+              <PersonIcon />
+            </Box>
+            <Typography component="h2" className={styles.formTitle}>
+              Create account
+            </Typography>
+            <Typography className={styles.formSubtitle}>
+              Join Travelogue in under a minute.
+            </Typography>
+          </Box>
 
-        <Box className={styles.roleGrid} mb={3}>
+          <Typography className={styles.sectionLabel}>Register as</Typography>
           <ToggleButtonGroup
             value={selectedRole}
             exclusive
@@ -138,74 +153,139 @@ export default function Register() {
                 value={role.label}
                 className={styles.roleBtnSquare}
               >
-                <Box display="flex" flexDirection="column" alignItems="center">
+                <Box className={styles.roleInner}>
                   {role.icon}
-                  <Typography variant="caption" fontWeight={600}>
-                    {role.label}
-                  </Typography>
+                  <Typography className={styles.roleLabel}>{role.label}</Typography>
                 </Box>
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
-        </Box>
 
-        <form onSubmit={handleSubmit} className={styles.form}>
-          <TextField fullWidth margin="normal" required label="Full Name" name="name" value={form.name} onChange={handleChange} />
-          <TextField fullWidth margin="normal" required label="Email" name="email" value={form.email} onChange={handleChange} />
-          <TextField fullWidth margin="normal" required label="Password" type="password" name="password" value={form.password} onChange={handleChange} />
-          <TextField fullWidth margin="normal" required label="Phone" name="phone" value={form.phone} onChange={handleChange} />
-          <TextField fullWidth margin="normal" required label="Country" name="country" value={form.country} onChange={handleChange} />
-          <TextField fullWidth margin="normal" label="Interests" name="interests" value={form.interests} onChange={handleChange} />
-
-          {/* Guide-specific fields */}
-          {selectedRole === 'Guide' && (
-            <>
-              <TextField fullWidth margin="normal" required label="Bio" name="bio" value={form.bio} onChange={handleChange} multiline rows={2} />
-              <TextField fullWidth margin="normal" required label="Experience (years)" name="experienceYears" value={form.experienceYears} onChange={handleChange} type="number" />
+          <form onSubmit={handleSubmit} className={styles.form}>
+            <Box className={styles.formGrid}>
               <TextField
-                select
                 fullWidth
-                margin="normal"
                 required
-                label="Languages"
-                name="languages"
-                value={form.languages}
-                onChange={handleLanguagesChange}
-                SelectProps={{ multiple: true }}
-              >
-                {languageOptions.map(lang => (
-                  <MenuItem key={lang} value={lang}>{lang}</MenuItem>
-                ))}
-              </TextField>
-            </>
-          )}
+                label="Full name"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Password"
+                type="password"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Phone"
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Country"
+                name="country"
+                value={form.country}
+                onChange={handleChange}
+                className={styles.formField}
+              />
+              <TextField
+                fullWidth
+                label="Interests"
+                name="interests"
+                value={form.interests}
+                onChange={handleChange}
+                className={`${styles.formField} ${styles.fullWidth}`}
+              />
+            </Box>
 
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            size="large"
-            sx={{
-              mt: 3,
-              mb: 2,
-              fontWeight: 700,
-              fontSize: 18,
-              background: "linear-gradient(90deg, #22c55e 0%, #06b6d4 100%)"
-            }}
-          >
-            Create Account
-          </Button>
-        </form>
+            {selectedRole === "Guide" && (
+              <>
+                <Typography className={styles.sectionTitle}>Guide profile</Typography>
+                <Box className={styles.formGrid}>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Bio"
+                    name="bio"
+                    value={form.bio}
+                    onChange={handleChange}
+                    multiline
+                    rows={2}
+                    className={`${styles.formField} ${styles.fullWidth}`}
+                  />
+                  <TextField
+                    fullWidth
+                    required
+                    label="Experience (years)"
+                    name="experienceYears"
+                    value={form.experienceYears}
+                    onChange={handleChange}
+                    type="number"
+                    className={styles.formField}
+                  />
+                  <TextField
+                    select
+                    fullWidth
+                    required
+                    label="Languages"
+                    name="languages"
+                    value={form.languages}
+                    onChange={handleLanguagesChange}
+                    SelectProps={{ multiple: true }}
+                    className={`${styles.formField} ${styles.fullWidth}`}
+                  >
+                    {languageOptions.map((lang) => (
+                      <MenuItem key={lang} value={lang}>
+                        {lang}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Box>
+              </>
+            )}
 
-        <Box textAlign="center" mt={2}>
-          <Typography variant="body2">
-            Already have an account?{" "}
-            <Link to="/login" className={styles.registerLink}>
-              Sign In
-            </Link>
-          </Typography>
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              size="large"
+              className={styles.submitBtn}
+            >
+              Create account
+            </Button>
+          </form>
+
+          <Box className={styles.footerText}>
+            <Typography variant="body2">
+              Already have an account?{" "}
+              <Link to="/login" className={styles.registerLink}>
+                Sign in
+              </Link>
+            </Typography>
+          </Box>
         </Box>
-      </Paper>
+      </Box>
     </Box>
   );
 }

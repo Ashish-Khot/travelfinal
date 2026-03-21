@@ -25,6 +25,7 @@ import 'leaflet/dist/leaflet.css';
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 
 const MapPlanner = ({ itinerary, onActivityAdd, onActivityRemove }) => {
+  const currency = itinerary?.budget?.currency || 'INR';
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [openActivityForm, setOpenActivityForm] = useState(false);
   const [activityForm, setActivityForm] = useState({
@@ -55,6 +56,20 @@ const MapPlanner = ({ itinerary, onActivityAdd, onActivityRemove }) => {
       '#BB8FCE', // Purple
     ];
     return colors[(dayNumber - 1) % colors.length];
+  };
+
+  const formatMoney = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '';
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(0)}`;
+    }
   };
 
   const handleMapClick = (e) => {
@@ -207,7 +222,7 @@ const MapPlanner = ({ itinerary, onActivityAdd, onActivityRemove }) => {
                       sx={{ mr: 0.5 }}
                     />
                     <Chip
-                      label={`$${activity.estimatedCost}`}
+                      label={formatMoney(activity.estimatedCost)}
                       size="small"
                       variant="outlined"
                     />
@@ -295,7 +310,7 @@ const MapPlanner = ({ itinerary, onActivityAdd, onActivityRemove }) => {
               InputLabelProps={{ shrink: true }}
             />
             <TextField
-              label="Estimated Cost ($)"
+              label="Estimated Cost (₹)"
               type="number"
               value={activityForm.estimatedCost}
               onChange={(e) => setActivityForm({ ...activityForm, estimatedCost: parseFloat(e.target.value) })}

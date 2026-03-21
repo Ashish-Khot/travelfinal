@@ -110,6 +110,7 @@ class ItineraryController {
         startDate,
         season,
         aiNotes,
+        currency,
         imageData,
         imageMimeType,
       } = req.body;
@@ -175,6 +176,7 @@ class ItineraryController {
         highlightsFromAI.length > 0 ? highlightsFromAI : defaultHighlights;
 
       const totalBudgetValue = Number(budget) || 0;
+      const currencyValue = String(currency || 'INR').toUpperCase();
       const budgetAllocation = buildBudgetAllocation(
         totalBudgetValue,
         aiPlan?.budgetSplit
@@ -228,7 +230,7 @@ class ItineraryController {
         season: seasonValue,
         budget: {
           totalBudget: totalBudgetValue,
-          currency: 'USD',
+          currency: currencyValue,
           ...budgetAllocation,
         },
         weatherData: {

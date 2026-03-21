@@ -26,7 +26,7 @@ module.exports = {
   OPENROUTER: {
     API_KEY: process.env.OPENROUTER_API_KEY || '',
     BASE_URL: 'https://openrouter.ai/api/v1',
-    MODEL: 'openrouter/free', // Free models router
+    MODEL: process.env.OPENROUTER_MODEL || 'openrouter/free', // Free models router
   },
 
   // Google Gemini API - Multimodal AI (text + images)
@@ -37,6 +37,19 @@ module.exports = {
     MODEL: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     VISION_MODEL: process.env.GEMINI_VISION_MODEL || '',
     MAX_IMAGE_MB: Number(process.env.GEMINI_MAX_IMAGE_MB || 4),
+  },
+
+  // OpenAI API - GPT-OSS models (Responses API)
+  OPENAI: {
+    API_KEY: process.env.OPENAI_API_KEY || '',
+    BASE_URL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    MODEL: process.env.OPENAI_MODEL || 'gpt-oss-120b',
+    MAX_OUTPUT_TOKENS: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS || 7000),
+  },
+
+  // Preferred AI provider (openai | gemini | openrouter)
+  AI: {
+    PROVIDER: process.env.AI_PROVIDER || '',
   },
 
   // Google Maps (optional for premium features)

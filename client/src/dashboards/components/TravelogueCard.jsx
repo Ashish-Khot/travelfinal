@@ -8,6 +8,7 @@ import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
 import ShareIcon from '@mui/icons-material/Share';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -416,6 +417,12 @@ export default function TravelogueCard({ travelogue, onViewDetails, onRefresh })
               </Typography>
             </Stack>
             <Stack alignItems="center">
+              <ChatBubbleOutlineIcon sx={{ fontSize: 18, color: '#4F8A8B' }} />
+              <Typography variant="caption" fontWeight={700} color="#6B7280" fontSize="0.75rem">
+                {travelogue.comments?.length || 0} comments
+              </Typography>
+            </Stack>
+            <Stack alignItems="center">
               <BookmarkIcon sx={{ fontSize: 18, color: '#F9ED69' }} />
               <Typography variant="caption" fontWeight={700} color="#6B7280" fontSize="0.75rem">
                 {saveCount} saved
@@ -437,6 +444,21 @@ export default function TravelogueCard({ travelogue, onViewDetails, onRefresh })
                 }}
               >
                 {liked ? <FavoriteIcon fontSize="small" /> : <FavoriteBorderIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Comment">
+              <IconButton
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewDetails?.(travelogue._id);
+                }}
+                sx={{
+                  color: '#4F8A8B',
+                  '&:hover': { bgcolor: 'rgba(79, 138, 139, 0.1)' }
+                }}
+              >
+                <ChatBubbleOutlineIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <Tooltip title={saved ? 'Unsave' : 'Save'}>

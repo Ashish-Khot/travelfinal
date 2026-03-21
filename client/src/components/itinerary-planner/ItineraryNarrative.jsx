@@ -62,13 +62,13 @@ const formatMoney = (value, currency) => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '';
   try {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: currency || 'USD',
+      currency: currency || 'INR',
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {
-    return `${currency || 'USD'} ${amount.toFixed(0)}`;
+    return `${currency || 'INR'} ${amount.toFixed(0)}`;
   }
 };
 
@@ -98,7 +98,7 @@ const ItineraryNarrative = ({ itinerary }) => {
     );
   }
 
-  const currency = itinerary?.budget?.currency || 'USD';
+  const currency = itinerary?.budget?.currency || 'INR';
 
   const overview = itinerary?.aiPlan?.summary || itinerary?.description || '';
   const themesByDay = Array.isArray(itinerary?.aiPlan?.dailyThemes)

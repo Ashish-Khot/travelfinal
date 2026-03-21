@@ -17,6 +17,7 @@ import { PieChart, Pie, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Leg
 
 const BudgetDashboard = ({ itinerary }) => {
   const budget = itinerary?.budget || {};
+  const currency = budget.currency || 'INR';
   const totalBudget = budget.totalBudget || 0;
   const totalSpent =
     (budget.accommodation || 0) +
@@ -38,6 +39,20 @@ const BudgetDashboard = ({ itinerary }) => {
 
   const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
 
+  const formatMoney = (value) => {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return '';
+    try {
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(0)}`;
+    }
+  };
+
   return (
     <Box>
       {/* Summary Cards */}
@@ -48,7 +63,7 @@ const BudgetDashboard = ({ itinerary }) => {
               <Typography color="textSecondary" gutterBottom>
                 Total Budget
               </Typography>
-              <Typography variant="h5">${totalBudget.toFixed(2)}</Typography>
+              <Typography variant="h5">{formatMoney(totalBudget)}</Typography>
             </CardContent>
           </Card>
         </Grid>
@@ -59,7 +74,7 @@ const BudgetDashboard = ({ itinerary }) => {
                 Total Spent
               </Typography>
               <Typography variant="h5" sx={{ color: '#ff6b6b' }}>
-                ${totalSpent.toFixed(2)}
+                {formatMoney(totalSpent)}
               </Typography>
             </CardContent>
           </Card>
@@ -71,7 +86,7 @@ const BudgetDashboard = ({ itinerary }) => {
                 Remaining
               </Typography>
               <Typography variant="h5" sx={{ color: remaining > 0 ? '#4caf50' : '#ff6b6b' }}>
-                ${remaining.toFixed(2)}
+                {formatMoney(remaining)}
               </Typography>
             </CardContent>
           </Card>
@@ -99,7 +114,7 @@ const BudgetDashboard = ({ itinerary }) => {
           sx={{ height: 10, borderRadius: 5 }}
         />
         <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
-          {totalSpent.toFixed(2)} / {totalBudget.toFixed(2)} spent
+          {formatMoney(totalSpent)} / {formatMoney(totalBudget)} spent
         </Typography>
       </Paper>
 
@@ -120,7 +135,7 @@ const BudgetDashboard = ({ itinerary }) => {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, value }) => `${name}: $${value}`}
+                      label={({ name, value }) => `${name}: ${formatMoney(value)}`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -129,7 +144,7 @@ const BudgetDashboard = ({ itinerary }) => {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(value) => `$${value}`} />
+                    <Tooltip formatter={(value) => formatMoney(value)} />
                   </PieChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -150,7 +165,7 @@ const BudgetDashboard = ({ itinerary }) => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
                     <YAxis />
-                    <Tooltip formatter={(value) => `$${value}`} />
+                    <Tooltip formatter={(value) => formatMoney(value)} />
                     <Bar dataKey="value" fill="#8884d8">
                       {budgetBreakdown.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -179,7 +194,7 @@ const BudgetDashboard = ({ itinerary }) => {
                       <strong>Day {day + 1}</strong>
                     </Typography>
                     <Typography variant="body1">
-                      ${(totalBudget / itinerary.numberOfDays).toFixed(2)}
+                      {formatMoney(totalBudget / itinerary.numberOfDays)}
                     </Typography>
                   </Paper>
                 </Grid>
