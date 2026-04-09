@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "./api";
 
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -9,6 +11,9 @@ import TextField from "@mui/material/TextField";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import MenuItem from "@mui/material/MenuItem";
+import InputAdornment from "@mui/material/InputAdornment";
+import IconButton from "@mui/material/IconButton";
+import CircularProgress from "@mui/material/CircularProgress";
 
 import PersonIcon from "@mui/icons-material/Person";
 import RoomIcon from "@mui/icons-material/Room";
@@ -16,6 +21,11 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HotelIcon from "@mui/icons-material/Hotel";
 import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
+import ExploreOutlinedIcon from "@mui/icons-material/ExploreOutlined";
+import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
+import CollectionsBookmarkOutlinedIcon from "@mui/icons-material/CollectionsBookmarkOutlined";
+import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
+import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 
 import styles from "./Register.module.css";
 
@@ -24,15 +34,65 @@ const languageOptions = [
 ];
 
 const roles = [
-  { label: "Tourist", icon: <PersonIcon color="success" /> },
-  { label: "Guide", icon: <RoomIcon color="primary" /> },
-  { label: "Admin", icon: <AdminPanelSettingsIcon color="info" /> },
-  { label: "Hotel", icon: <HotelIcon color="error" /> },
-  { label: "Hospital", icon: <LocalHospitalIcon color="secondary" /> }
+  {
+    value: "tourist",
+    label: "Tourist",
+    icon: <PersonIcon fontSize="small" />,
+    description: "Create trips, compare options, and publish travelogues from your account.",
+  },
+  {
+    value: "guide",
+    label: "Guide",
+    icon: <RoomIcon fontSize="small" />,
+    description: "Set up your guide profile, experience, and language coverage for approvals.",
+  },
+  {
+    value: "hotel",
+    label: "Hotel",
+    icon: <HotelIcon fontSize="small" />,
+    description: "Manage room inventory, bookings, and guest interactions in one workspace.",
+  },
+  {
+    value: "hospital",
+    label: "Hospital",
+    icon: <LocalHospitalIcon fontSize="small" />,
+    description: "Register as a medical partner for Travelogue emergency support visibility.",
+  },
+  {
+    value: "admin",
+    label: "Admin",
+    icon: <AdminPanelSettingsIcon fontSize="small" />,
+    description: "Create an admin account for moderation and platform operations.",
+  },
+];
+
+const onboardingHighlights = [
+  {
+    title: "Personal travel profile",
+    description: "Store your identity, interests, and travel preferences in one place.",
+    icon: <ExploreOutlinedIcon fontSize="small" />,
+  },
+  {
+    title: "Booking-ready access",
+    description: "Get immediate access to guide and hotel flows after creating your account.",
+    icon: <CalendarMonthOutlinedIcon fontSize="small" />,
+  },
+  {
+    title: "Story-first workspace",
+    description: "Capture memories, drafts, and published travelogues in your account.",
+    icon: <CollectionsBookmarkOutlinedIcon fontSize="small" />,
+  },
 ];
 
 export default function Register() {
-  const [selectedRole, setSelectedRole] = useState("Tourist");
+  const [selectedRole, setSelectedRole] = useState(roles[0].value);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    severity: "info",
+    message: "",
+  });
 
   const [form, setForm] = useState({
     name: "",
@@ -46,6 +106,11 @@ export default function Register() {
     languages: [],
   });
 
+  const activeRole = useMemo(
+    () => roles.find((role) => role.value === selectedRole) || roles[0],
+    [selectedRole]
+  );
+
   const handleRole = (event, newRole) => {
     if (newRole !== null) setSelectedRole(newRole);
   };
@@ -55,11 +120,22 @@ export default function Register() {
   };
 
   const handleLanguagesChange = (e) => {
-    setForm({ ...form, languages: e.target.value });
+    const value = e.target.value;
+    setForm({
+      ...form,
+      languages: typeof value === "string" ? value.split(",") : value,
+    });
+  };
+
+  const showToast = (severity, message) => {
+    setSnackbar({ open: true, severity, message });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
+    setLoading(true);
+
     try {
       let payload = {
         name: form.name,
@@ -68,9 +144,9 @@ export default function Register() {
         phone: form.phone,
         country: form.country,
         interests: form.interests,
-        role: selectedRole.toLowerCase(),
+        role: selectedRole,
       };
-      if (selectedRole === "Guide") {
+      if (selectedRole === "guide") {
         payload = {
           ...payload,
           bio: form.bio,
@@ -79,16 +155,17 @@ export default function Register() {
         };
       }
       await api.post("/register", payload);
-      alert("Account created successfully!");
-      window.location.href = "/login";
+      showToast("success", "Account created successfully. Redirecting to sign in...");
+      setTimeout(() => {
+        window.location.href = "/login";
+      }, 1200);
     } catch (err) {
-      let msg = "Registration failed";
-      if (err.response) {
-        msg = err.response.data?.message || err.response.data || "Server error";
-      } else {
-        msg = err.message;
-      }
-      alert(msg);
+      showToast(
+        "error",
+        err.response?.data?.message || err.message || "Registration failed."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -101,29 +178,23 @@ export default function Register() {
             Travelogue
           </Box>
           <Typography component="h1" className={styles.brandTitle}>
-            Build your traveler profile and unlock premium experiences.
+            Build a travel-ready account that fits how you explore, host, or guide.
           </Typography>
           <Typography className={styles.brandSub}>
-            Create your account to access curated stays, expert guides, and a private travel vault.
+            Register once and start working with bookings, itineraries, and
+            travel stories across the full Travelogue ecosystem.
           </Typography>
-          <Box className={styles.brandStats}>
-            <Box className={styles.statCard}>
-              <Typography className={styles.statValue}>950K+</Typography>
-              <Typography className={styles.statLabel}>Trips planned</Typography>
-            </Box>
-            <Box className={styles.statCard}>
-              <Typography className={styles.statValue}>4.8</Typography>
-              <Typography className={styles.statLabel}>Average reviews</Typography>
-            </Box>
-            <Box className={styles.statCard}>
-              <Typography className={styles.statValue}>Top 1%</Typography>
-              <Typography className={styles.statLabel}>Guides curated</Typography>
-            </Box>
-          </Box>
-          <Box className={styles.brandTags}>
-            <Box className={styles.tag}>Local experts</Box>
-            <Box className={styles.tag}>Flexible itineraries</Box>
-            <Box className={styles.tag}>Verified stays</Box>
+
+          <Box className={styles.featureList}>
+            {onboardingHighlights.map((item) => (
+              <Box key={item.title} className={styles.featureCard}>
+                <Box className={styles.featureIcon}>{item.icon}</Box>
+                <Box>
+                  <Typography className={styles.featureTitle}>{item.title}</Typography>
+                  <Typography className={styles.featureText}>{item.description}</Typography>
+                </Box>
+              </Box>
+            ))}
           </Box>
         </Box>
 
@@ -133,10 +204,10 @@ export default function Register() {
               <PersonIcon />
             </Box>
             <Typography component="h2" className={styles.formTitle}>
-              Create account
+              Create your account
             </Typography>
             <Typography className={styles.formSubtitle}>
-              Join Travelogue in under a minute.
+              Fill in your details and choose the role that matches your workspace.
             </Typography>
           </Box>
 
@@ -149,8 +220,8 @@ export default function Register() {
           >
             {roles.map((role) => (
               <ToggleButton
-                key={role.label}
-                value={role.label}
+                key={role.value}
+                value={role.value}
                 className={styles.roleBtnSquare}
               >
                 <Box className={styles.roleInner}>
@@ -160,6 +231,7 @@ export default function Register() {
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+          <Typography className={styles.roleHint}>{activeRole.description}</Typography>
 
           <form onSubmit={handleSubmit} className={styles.form}>
             <Box className={styles.formGrid}>
@@ -177,6 +249,8 @@ export default function Register() {
                 required
                 label="Email"
                 name="email"
+                type="email"
+                autoComplete="email"
                 value={form.email}
                 onChange={handleChange}
                 className={styles.formField}
@@ -185,17 +259,37 @@ export default function Register() {
                 fullWidth
                 required
                 label="Password"
-                type="password"
+                type={showPassword ? "text" : "password"}
                 name="password"
+                autoComplete="new-password"
                 value={form.password}
                 onChange={handleChange}
                 className={styles.formField}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        edge="end"
+                        onClick={() => setShowPassword((prev) => !prev)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                      >
+                        {showPassword ? (
+                          <VisibilityOffOutlinedIcon />
+                        ) : (
+                          <VisibilityOutlinedIcon />
+                        )}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
               <TextField
                 fullWidth
                 required
                 label="Phone"
                 name="phone"
+                type="tel"
+                autoComplete="tel"
                 value={form.phone}
                 onChange={handleChange}
                 className={styles.formField}
@@ -215,13 +309,17 @@ export default function Register() {
                 name="interests"
                 value={form.interests}
                 onChange={handleChange}
+                helperText="Optional: beaches, trekking, food tours, culture, photography..."
                 className={`${styles.formField} ${styles.fullWidth}`}
               />
             </Box>
 
-            {selectedRole === "Guide" && (
+            {selectedRole === "guide" && (
               <>
                 <Typography className={styles.sectionTitle}>Guide profile</Typography>
+                <Typography className={styles.sectionHint}>
+                  Guide accounts are reviewed by admin before dashboard access is enabled.
+                </Typography>
                 <Box className={styles.formGrid}>
                   <TextField
                     fullWidth
@@ -231,7 +329,7 @@ export default function Register() {
                     value={form.bio}
                     onChange={handleChange}
                     multiline
-                    rows={2}
+                    rows={3}
                     className={`${styles.formField} ${styles.fullWidth}`}
                   />
                   <TextField
@@ -242,6 +340,7 @@ export default function Register() {
                     value={form.experienceYears}
                     onChange={handleChange}
                     type="number"
+                    inputProps={{ min: 0 }}
                     className={styles.formField}
                   />
                   <TextField
@@ -252,7 +351,10 @@ export default function Register() {
                     name="languages"
                     value={form.languages}
                     onChange={handleLanguagesChange}
-                    SelectProps={{ multiple: true }}
+                    SelectProps={{
+                      multiple: true,
+                      renderValue: (selected) => selected.join(", "),
+                    }}
                     className={`${styles.formField} ${styles.fullWidth}`}
                   >
                     {languageOptions.map((lang) => (
@@ -271,8 +373,9 @@ export default function Register() {
               variant="contained"
               size="large"
               className={styles.submitBtn}
+              disabled={loading}
             >
-              Create account
+              {loading ? <CircularProgress size={22} color="inherit" /> : "Create account"}
             </Button>
           </form>
 
@@ -286,6 +389,22 @@ export default function Register() {
           </Box>
         </Box>
       </Box>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4500}
+        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

@@ -31,6 +31,7 @@ import WeatherForecastCard from './components/WeatherForecastCard';
 import WeatherSearch from './components/WeatherSearch';
 import VirtualGuide from './components/VirtualGuide';
 import ItineraryPlanner from '../components/itinerary-planner/ItineraryPlanner';
+import FloatingChatbot from './components/FloatingChatbot';
 import { Tabs, Tab } from '@mui/material';
 
 function TouristDashboard() {
@@ -151,6 +152,55 @@ function TouristDashboard() {
     setReviewsRefreshTrigger(prev => prev + 1);
   };
 
+  const dispatchAgentEvent = (eventName, detail) => {
+    window.dispatchEvent(
+      new CustomEvent(eventName, {
+        detail: detail || {},
+      })
+    );
+  };
+
+  const handleAgentAction = (action) => {
+    if (!action || typeof action !== 'object') return;
+    const actionType = action.type || '';
+    const targetTab = action.tab || '';
+    const payload = action.payload || {};
+
+    if (actionType === 'open_chat') {
+      if (payload.chatTarget) {
+        setChatTarget(payload.chatTarget);
+      }
+      setSelectedTab('Chat');
+      return;
+    }
+
+    if (actionType === 'open_guide_booking') {
+      setSelectedTab('Explore Guides');
+      dispatchAgentEvent('agentExploreGuidesPrefill', payload);
+      return;
+    }
+
+    if (actionType === 'prefill_itinerary') {
+      setSelectedTab('Itinerary Planner');
+      dispatchAgentEvent('agentItineraryPrefill', payload);
+      return;
+    }
+
+    if (actionType === 'prefill_review') {
+      setSelectedTab('Reviews');
+      dispatchAgentEvent('agentReviewPrefill', payload);
+      return;
+    }
+
+    if (targetTab) {
+      setSelectedTab(targetTab);
+      if (targetTab === 'Explore Guides' && payload) {
+        dispatchAgentEvent('agentExploreGuidesPrefill', payload);
+      }
+      return;
+    }
+  };
+
   // VOICE NAVIGATION: Listen for voice commands to navigate sections
   useEffect(() => {
     const handleVoiceNavigation = (event) => {
@@ -175,22 +225,24 @@ function TouristDashboard() {
 
       // Close sidebar on mobile after navigation
       if (isMobile) {
-        setSidebarOpen(false);
+        setSidebarHidden(true);
+      }
+    };
+
+    const handleNavigateTab = (event) => {
+      setSelectedTab(event.detail.tab);
+      if (isMobile) {
+        setSidebarHidden(true);
       }
     };
 
     // Listen for both voice navigation and profile menu navigation
     window.addEventListener('voiceNavigate', handleVoiceNavigation);
-    window.addEventListener('navigateTab', (event) => {
-      setSelectedTab(event.detail.tab);
-      if (isMobile) {
-        setSidebarOpen(false);
-      }
-    });
+    window.addEventListener('navigateTab', handleNavigateTab);
 
     return () => {
       window.removeEventListener('voiceNavigate', handleVoiceNavigation);
-      window.removeEventListener('navigateTab', handleVoiceNavigation);
+      window.removeEventListener('navigateTab', handleNavigateTab);
     };
   }, [isMobile]);
 
@@ -409,6 +461,7 @@ function TouristDashboard() {
 
       {/* Voice Assistant - Floating Button */}
       <VoiceAssistant userId={user._id} />
+      <FloatingChatbot onAgentAction={handleAgentAction} />
 
     </ThemeProvider>
   );

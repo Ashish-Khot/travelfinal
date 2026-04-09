@@ -197,38 +197,46 @@ const MapPlanner = ({ itinerary, onActivityAdd, onActivityRemove }) => {
                 Activities ({itinerary?.activities?.length || 0})
               </Typography>
 
-              {itinerary?.activities?.slice(0, 5).map((activity) => (
-                <Box
-                  key={activity._id}
-                  sx={{
-                    p: 1.5,
-                    mb: 1,
-                    backgroundColor: '#f5f5f5',
-                    borderLeft: `4px solid ${getDayColor(activity.dayNumber)}`,
-                    borderRadius: 1,
-                  }}
-                >
-                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                    {activity.name}
-                  </Typography>
-                  <Typography variant="caption">
-                    Day {activity.dayNumber} • {activity.startTime} - {activity.endTime}
-                  </Typography>
-                  <Box sx={{ mt: 1 }}>
-                    <Chip
-                      label={activity.category}
-                      size="small"
-                      variant="outlined"
-                      sx={{ mr: 0.5 }}
-                    />
-                    <Chip
-                      label={formatMoney(activity.estimatedCost)}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Box>
-                </Box>
-              ))}
+              <Box sx={{ maxHeight: 420, overflowY: 'auto', pr: 0.5 }}>
+                {[...(itinerary?.activities || [])]
+                  .sort((a, b) => {
+                    const dayCompare = Number(a.dayNumber || 0) - Number(b.dayNumber || 0);
+                    if (dayCompare !== 0) return dayCompare;
+                    return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+                  })
+                  .map((activity, idx) => (
+                    <Box
+                      key={activity._id || `${activity.dayNumber}-${activity.startTime}-${idx}`}
+                      sx={{
+                        p: 1.5,
+                        mb: 1,
+                        backgroundColor: '#f5f5f5',
+                        borderLeft: `4px solid ${getDayColor(activity.dayNumber)}`,
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                        {activity.name}
+                      </Typography>
+                      <Typography variant="caption">
+                        Day {activity.dayNumber} - {activity.startTime} - {activity.endTime}
+                      </Typography>
+                      <Box sx={{ mt: 1 }}>
+                        <Chip
+                          label={activity.category}
+                          size="small"
+                          variant="outlined"
+                          sx={{ mr: 0.5 }}
+                        />
+                        <Chip
+                          label={formatMoney(activity.estimatedCost)}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Box>
+                    </Box>
+                  ))}
+              </Box>
 
               <Button
                 variant="contained"

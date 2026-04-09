@@ -14,6 +14,8 @@ import MarkerClusterGroup from 'leaflet-markercluster';
 
 import {
   MAP_CONFIG,
+  GEOCODING_CONFIG,
+  FEATURES_CONFIG,
   MARKER_CONFIG,
   ROUTING_CONFIG,
   getTileServer,
@@ -107,7 +109,7 @@ export const AdvancedMap = ({
 
   // Get user's current location
   useEffect(() => {
-    if (!MAP_CONFIG.FEATURES_CONFIG.ENABLE_GEOLOCATION) return;
+    if (!FEATURES_CONFIG.ENABLE_GEOLOCATION) return;
 
     navigator.geolocation.getCurrentPosition(
       (position) => {

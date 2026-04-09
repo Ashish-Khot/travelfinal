@@ -38,7 +38,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
   const [formData, setFormData] = useState({
     destination: '',
     days: 5,
-    budget: 2000,
+    budget: 30000,
     numberOfTravelers: 1,
     travelStyle: 'solo',
     interests: [],
@@ -150,7 +150,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       return;
     }
     if (formData.budget < 100) {
-      setError('Budget should be at least ₹100');
+      setError('Budget should be at least INR 100');
       return;
     }
     if (formData.interests.length === 0) {
@@ -198,7 +198,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       setFormData({
         destination: '',
         days: 5,
-        budget: 2000,
+        budget: 30000,
         numberOfTravelers: 1,
         travelStyle: 'solo',
         interests: [],
@@ -209,7 +209,8 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       onClose();
     } catch (err) {
       console.error('❌ Error generating itinerary:', err);
-      setError(err.message || 'Failed to generate itinerary. Please try again.');
+      const errorMessage = [err?.message, err?.error].filter(Boolean).join(' ');
+      setError(errorMessage || 'Failed to generate itinerary. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -266,7 +267,7 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
             <Grid item xs={6}>
               <TextField
                 fullWidth
-                label="Total Budget (₹)"
+                label="Total Budget (INR)"
                 type="number"
                 name="budget"
                 value={formData.budget}
@@ -447,3 +448,4 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
 };
 
 export default NewItineraryDialog;
+

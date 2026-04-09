@@ -22,11 +22,20 @@ export default function ReviewsPanel({ refreshTrigger = 0 }) {
   const [loading, setLoading] = useState(false);
   const [availableToReview, setAvailableToReview] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [agentPrefill, setAgentPrefill] = useState(null);
 
   // Fetch guides where tour is completed and review request is accepted
   useEffect(() => {
     fetchBookedGuides();
   }, [refreshTrigger]);
+
+  useEffect(() => {
+    const handleAgentReviewPrefill = (event) => {
+      setAgentPrefill(event?.detail || null);
+    };
+    window.addEventListener('agentReviewPrefill', handleAgentReviewPrefill);
+    return () => window.removeEventListener('agentReviewPrefill', handleAgentReviewPrefill);
+  }, []);
 
   const fetchBookedGuides = async () => {
     setIsFetching(true);
@@ -145,6 +154,24 @@ export default function ReviewsPanel({ refreshTrigger = 0 }) {
     }
     fetchReviews();
   }, [selectedGuide]);
+
+  useEffect(() => {
+    if (!agentPrefill || !guides.length) return;
+
+    const requestedGuideName = (agentPrefill.guideName || '').toLowerCase();
+    const matchedGuide =
+      guides.find((guide) => guide.name?.toLowerCase().includes(requestedGuideName)) || guides[0];
+
+    if (matchedGuide) {
+      setSelectedGuide(matchedGuide);
+    }
+    if (agentPrefill.rating) {
+      setRating(agentPrefill.rating);
+    }
+    if (agentPrefill.comment) {
+      setReview(agentPrefill.comment);
+    }
+  }, [agentPrefill, guides]);
 
   const handleSubmit = async () => {
     if (!selectedGuide || !rating || !review.trim()) {

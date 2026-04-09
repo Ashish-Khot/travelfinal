@@ -10,6 +10,10 @@ class WikipediaService {
   constructor() {
     this.baseUrl = API_CONFIG.WIKIPEDIA.BASE_URL;
     this.summaryBaseUrl = 'https://en.wikipedia.org/api/rest_v1/page/summary';
+    this.requestHeaders = {
+      'User-Agent': 'travel2-itinerary/1.0 (support@example.com)',
+      'Accept': 'application/json',
+    };
   }
 
   async geoSearch(latitude, longitude, radius = 10000, limit = 20) {
@@ -25,6 +29,7 @@ class WikipediaService {
           origin: '*',
         },
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+        headers: this.requestHeaders,
       });
 
       const results = data?.query?.geosearch || [];
@@ -46,9 +51,7 @@ class WikipediaService {
       const url = `${this.summaryBaseUrl}/${encodeURIComponent(title)}`;
       const { data } = await axios.get(url, {
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers: this.requestHeaders,
       });
       return data || null;
     } catch (error) {
@@ -70,6 +73,7 @@ class WikipediaService {
           origin: '*',
         },
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+        headers: this.requestHeaders,
       });
 
       const results = data?.query?.search || [];
@@ -174,7 +178,7 @@ class WikipediaService {
       geoResults.map((item) => this.getSummary(item.title))
     );
 
-    return geoResults.map((item, idx) => this.toPlace(item, summaries[idx]));
+    return geoResults.map((item, idx) => this.toPlace(item, summaries[idx])).filter(Boolean);
   }
 
   async getPlacesByTitle(query, limit = 12) {

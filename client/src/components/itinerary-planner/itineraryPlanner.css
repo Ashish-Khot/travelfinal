@@ -161,6 +161,11 @@
   box-shadow: 0 16px 26px rgba(15, 23, 42, 0.08);
 }
 
+.story-hero-card {
+  border: none;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+}
+
 .story-card-title {
   font-family: "Sora", "Plus Jakarta Sans", sans-serif;
 }
@@ -206,6 +211,13 @@
 .story-chip {
   font-size: 0.72rem;
   height: 22px;
+}
+
+.story-weather-card {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  padding: 10px 12px;
 }
 
 .schedule-root {

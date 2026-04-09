@@ -1,17 +1,20 @@
 /**
  * Narrative Itinerary View
- * Presents a day-by-day, time-blocked itinerary similar to a travel guide
+ * Presents a destination-aware, day-by-day itinerary with practical budget and weather insights.
  */
 
 import React from 'react';
 import {
+  Alert,
   Box,
   Card,
   CardContent,
-  Divider,
-  Typography,
   Chip,
+  Divider,
   Grid,
+  Paper,
+  Stack,
+  Typography,
 } from '@mui/material';
 
 const BLOCK_ORDER = ['morning', 'lunch', 'afternoon', 'evening', 'night'];
@@ -23,13 +26,23 @@ const BLOCK_LABELS = {
   night: 'Night',
 };
 
-const blockColors = {
-  morning: '#F59E0B',
-  lunch: '#10B981',
-  afternoon: '#3B82F6',
-  evening: '#8B5CF6',
-  night: '#111827',
+const BLOCK_COLORS = {
+  morning: '#f97316',
+  lunch: '#16a34a',
+  afternoon: '#2563eb',
+  evening: '#7c3aed',
+  night: '#0f172a',
 };
+
+const DESTINATION_PALETTES = [
+  ['#0f766e', '#1d4ed8'],
+  ['#b45309', '#be123c'],
+  ['#0369a1', '#4338ca'],
+  ['#166534', '#0f766e'],
+  ['#c2410c', '#7c2d12'],
+  ['#4c1d95', '#0f172a'],
+  ['#1d4ed8', '#0f766e'],
+];
 
 const parseTimeToMinutes = (timeStr) => {
   const [h, m] = String(timeStr || '00:00').split(':').map(Number);
@@ -58,6 +71,17 @@ const formatDate = (startDate, dayNumber) => {
   });
 };
 
+const formatWeatherDate = (isoDate) => {
+  if (!isoDate) return '';
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
 const formatMoney = (value, currency) => {
   const amount = Number(value);
   if (!Number.isFinite(amount)) return '';
@@ -70,6 +94,44 @@ const formatMoney = (value, currency) => {
   } catch {
     return `${currency || 'INR'} ${amount.toFixed(0)}`;
   }
+};
+
+const getDestinationPalette = (name) => {
+  const hash = String(name || '')
+    .split('')
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return DESTINATION_PALETTES[hash % DESTINATION_PALETTES.length];
+};
+
+const getBudgetStatusMeta = (status) => {
+  const map = {
+    'below-minimum': {
+      label: 'Adjusted to minimum practical budget',
+      color: 'warning',
+      description: 'Input budget was below realistic minimum for this destination.',
+    },
+    'within-range': {
+      label: 'Budget in realistic range',
+      color: 'success',
+      description: 'Budget aligns with common costs for this destination.',
+    },
+    'above-premium': {
+      label: 'Budget above premium range',
+      color: 'info',
+      description: 'Plan can include high-end experiences while still showing realistic ranges.',
+    },
+  };
+  return map[status] || map['within-range'];
+};
+
+const formatMinutes = (minutes) => {
+  const value = Number(minutes);
+  if (!Number.isFinite(value) || value <= 0) return '0 min';
+  if (value < 60) return `${Math.round(value)} min`;
+  const hours = Math.floor(value / 60);
+  const remainder = Math.round(value % 60);
+  if (remainder === 0) return `${hours}h`;
+  return `${hours}h ${remainder}m`;
 };
 
 const ItineraryNarrative = ({ itinerary }) => {
@@ -98,9 +160,13 @@ const ItineraryNarrative = ({ itinerary }) => {
     );
   }
 
+  const destinationName = itinerary?.destination?.name || itinerary?.destination || 'Destination';
   const currency = itinerary?.budget?.currency || 'INR';
-
   const overview = itinerary?.aiPlan?.summary || itinerary?.description || '';
+  const weatherForecast = (itinerary?.weatherData?.forecast || []).slice(0, itinerary?.numberOfDays || 7);
+  const [primaryColor, secondaryColor] = getDestinationPalette(destinationName);
+  const budgetMeta = getBudgetStatusMeta(itinerary?.budget?.status);
+
   const themesByDay = Array.isArray(itinerary?.aiPlan?.dailyThemes)
     ? itinerary.aiPlan.dailyThemes.reduce((acc, item) => {
         if (item?.day) acc[item.day] = item;
@@ -110,6 +176,59 @@ const ItineraryNarrative = ({ itinerary }) => {
 
   return (
     <Box className="story-root">
+      <Card
+        className="story-card story-hero-card"
+        sx={{
+          mb: 3,
+          background: `linear-gradient(130deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+          color: '#ffffff',
+        }}
+      >
+        <CardContent>
+          <Typography variant="overline" sx={{ letterSpacing: '0.14em', opacity: 0.8 }}>
+            Destination Intelligence
+          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>
+            {destinationName}
+          </Typography>
+          <Typography variant="body1" sx={{ opacity: 0.95, mb: 2 }}>
+            {itinerary?.numberOfDays || 0} days for {itinerary?.numberOfTravelers || 1} traveler(s)
+          </Typography>
+
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            <Chip
+              label={`Planned budget: ${formatMoney(itinerary?.budget?.totalBudget || 0, currency)}`}
+              size="small"
+              sx={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
+            />
+            {Number(itinerary?.budget?.minimumRecommended) > 0 && (
+              <Chip
+                label={`Minimum practical: ${formatMoney(itinerary.budget.minimumRecommended, currency)}`}
+                size="small"
+                sx={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
+              />
+            )}
+            <Chip
+              label={`Avg activity: ${formatMinutes(itinerary?.planningInsights?.averageActivityDurationMinutes || 0)}`}
+              size="small"
+              sx={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
+            />
+            <Chip
+              label={`Daily travel: ${formatMinutes(itinerary?.planningInsights?.totalEstimatedTravelMinutes || 0)}`}
+              size="small"
+              sx={{ backgroundColor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
+            />
+          </Stack>
+        </CardContent>
+      </Card>
+
+      <Alert severity={budgetMeta.color} sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          {budgetMeta.label}
+        </Typography>
+        <Typography variant="body2">{itinerary?.budget?.adjustmentMessage || budgetMeta.description}</Typography>
+      </Alert>
+
       {overview && (
         <Card sx={{ mb: 3 }} className="story-card">
           <CardContent>
@@ -121,6 +240,36 @@ const ItineraryNarrative = ({ itinerary }) => {
         </Card>
       )}
 
+      {weatherForecast.length > 0 && (
+        <Card sx={{ mb: 3 }} className="story-card">
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 1 }} className="story-card-title">
+              Weather Outlook
+            </Typography>
+            <Grid container spacing={1.5}>
+              {weatherForecast.map((day) => (
+                <Grid item xs={12} sm={6} md={4} key={day.date}>
+                  <Paper className="story-weather-card">
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      {formatWeatherDate(day.date)}
+                    </Typography>
+                    <Typography variant="body2">
+                      {day.condition || 'Condition unavailable'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {Math.round(day.minTemp || 0)} - {Math.round(day.maxTemp || 0)} deg C
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      Rain probability: {Math.round(day.rainProbability || 0)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
       {Array.isArray(itinerary?.highlightedPlaces) && itinerary.highlightedPlaces.length > 0 && (
         <Card sx={{ mb: 3 }} className="story-card">
           <CardContent>
@@ -128,7 +277,7 @@ const ItineraryNarrative = ({ itinerary }) => {
               Highlights
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {itinerary.highlightedPlaces.slice(0, 10).map((place) => (
+              {itinerary.highlightedPlaces.slice(0, 12).map((place) => (
                 <Chip key={place} label={place} size="small" className="story-chip" />
               ))}
             </Box>
@@ -168,7 +317,7 @@ const ItineraryNarrative = ({ itinerary }) => {
                         width: 10,
                         height: 10,
                         borderRadius: '50%',
-                        backgroundColor: blockColors[block] || '#94A3B8',
+                        backgroundColor: BLOCK_COLORS[block] || '#94A3B8',
                         mr: 1,
                       }}
                     />
@@ -183,10 +332,10 @@ const ItineraryNarrative = ({ itinerary }) => {
                       <Box key={`${activity._id || idx}`} sx={{ mb: 1.25, pl: 2 }}>
                         <Box className="story-activity">
                           <Typography variant="subtitle2" className="story-activity-name">
-                          {activity.name}
+                            {activity.name}
                           </Typography>
                           <Typography variant="body2" className="story-activity-time">
-                            {activity.startTime} - {activity.endTime}
+                            {activity.startTime} - {activity.endTime} ({formatMinutes(activity.duration)})
                           </Typography>
                           {activity.description && (
                             <Typography variant="body2" sx={{ mt: 0.5 }}>
@@ -227,12 +376,65 @@ const ItineraryNarrative = ({ itinerary }) => {
       <Card className="story-card">
         <CardContent>
           <Typography variant="h6" sx={{ mb: 1 }} className="story-card-title">
-            Estimated Budget
+            Budget Intelligence
           </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Requested
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.requestedBudget || itinerary?.budget?.totalBudget || 0, currency)}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Planned total
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.totalBudget || 0, currency)}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Suggested daily
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.suggestedDailyBudget || 0, currency)}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Minimum practical
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.minimumRecommended || 0, currency)}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Comfortable range
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.comfortableEstimate || 0, currency)}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={4}>
+              <Typography variant="body2" color="text.secondary">
+                Premium range
+              </Typography>
+              <Typography variant="subtitle2">
+                {formatMoney(itinerary?.budget?.premiumEstimate || 0, currency)}
+              </Typography>
+            </Grid>
+          </Grid>
+
+          <Divider sx={{ my: 2 }} />
+
           <Grid container spacing={2}>
             <Grid item xs={6} md={3}>
               <Typography variant="body2" color="text.secondary">
-                Transport
+                Transport allocation
               </Typography>
               <Typography variant="subtitle2">
                 {formatMoney(itinerary?.budget?.transportation || 0, currency)}
@@ -240,7 +442,7 @@ const ItineraryNarrative = ({ itinerary }) => {
             </Grid>
             <Grid item xs={6} md={3}>
               <Typography variant="body2" color="text.secondary">
-                Food
+                Food allocation
               </Typography>
               <Typography variant="subtitle2">
                 {formatMoney(itinerary?.budget?.food || 0, currency)}
@@ -248,7 +450,7 @@ const ItineraryNarrative = ({ itinerary }) => {
             </Grid>
             <Grid item xs={6} md={3}>
               <Typography variant="body2" color="text.secondary">
-                Activities
+                Activities allocation
               </Typography>
               <Typography variant="subtitle2">
                 {formatMoney(itinerary?.budget?.activities || 0, currency)}
@@ -256,10 +458,10 @@ const ItineraryNarrative = ({ itinerary }) => {
             </Grid>
             <Grid item xs={6} md={3}>
               <Typography variant="body2" color="text.secondary">
-                Total
+                Accommodation allocation
               </Typography>
               <Typography variant="subtitle2">
-                {formatMoney(itinerary?.budget?.totalBudget || 0, currency)}
+                {formatMoney(itinerary?.budget?.accommodation || 0, currency)}
               </Typography>
             </Grid>
           </Grid>

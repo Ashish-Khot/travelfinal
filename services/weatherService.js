@@ -105,22 +105,25 @@ class WeatherService {
       // Calculate daily averages and recommendations
       return Object.values(dailyWeather)
         .slice(0, numberOfDays)
-        .map((day) => ({
-          date: day.date,
-          maxTemp: Math.max(...day.temperatures),
-          minTemp: Math.min(...day.temperatures),
-          avgTemp:
-            day.temperatures.reduce((a, b) => a + b, 0) / day.temperatures.length,
-          condition: this.getMajorityCondition(day.conditions),
-          avgHumidity: day.humidity.reduce((a, b) => a + b, 0) / day.humidity.length,
-          avgWindSpeed:
-            day.windSpeed.reduce((a, b) => a + b, 0) / day.windSpeed.length,
-          rainProbability: day.rainProbability,
-          recommendations: this.getActivityRecommendations(
-            day.condition,
-            day.rainProbability
-          ),
-        }));
+        .map((day) => {
+          const condition = this.getMajorityCondition(day.conditions);
+          return {
+            date: day.date,
+            maxTemp: Math.max(...day.temperatures),
+            minTemp: Math.min(...day.temperatures),
+            avgTemp:
+              day.temperatures.reduce((a, b) => a + b, 0) / day.temperatures.length,
+            condition,
+            avgHumidity: day.humidity.reduce((a, b) => a + b, 0) / day.humidity.length,
+            avgWindSpeed:
+              day.windSpeed.reduce((a, b) => a + b, 0) / day.windSpeed.length,
+            rainProbability: day.rainProbability,
+            recommendations: this.getActivityRecommendations(
+              condition,
+              day.rainProbability
+            ),
+          };
+        });
     } catch (error) {
       console.error('Daily forecast error:', error.message);
       return [];

@@ -107,7 +107,7 @@ function ItineraryPlanner() {
   const [formData, setFormData] = useState({
     destination: '',
     days: 5,
-    budget: 2000,
+    budget: 30000,
     numberOfTravelers: 1,
     travelStyle: 'solo',
     interests: [],
@@ -166,6 +166,18 @@ function ItineraryPlanner() {
       const currency = itinerary?.budget?.currency || 'INR';
       chips.push(`Budget: ${formatMoney(itinerary.budget.totalBudget, currency)}`);
     }
+    if (itinerary?.budget?.minimumRecommended && itinerary?.budget?.premiumEstimate) {
+      const currency = itinerary?.budget?.currency || 'INR';
+      chips.push(
+        `Realistic range: ${formatMoney(
+          itinerary.budget.minimumRecommended,
+          currency
+        )} - ${formatMoney(itinerary.budget.premiumEstimate, currency)}`
+      );
+    }
+    if (itinerary?.budget?.status) {
+      chips.push(`Budget status: ${itinerary.budget.status}`);
+    }
     return chips;
   }, [itinerary]);
 
@@ -182,19 +194,20 @@ function ItineraryPlanner() {
     }));
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (overrideData = null) => {
+    const sourceData = overrideData ? { ...formData, ...overrideData } : formData;
     const missing = [];
-    if (!formData.destination.trim()) missing.push('destination');
-    if (!formData.days || formData.days < 1) missing.push('trip length');
-    if (!formData.budget || formData.budget < 100) missing.push('budget');
-    if (!formData.interests.length) missing.push('interests');
+    if (!sourceData.destination.trim()) missing.push('destination');
+    if (!sourceData.days || sourceData.days < 1) missing.push('trip length');
+    if (!sourceData.budget || sourceData.budget < 100) missing.push('budget');
+    if (!sourceData.interests.length) missing.push('interests');
 
     if (missing.length) {
       addMessage('assistant', `I need ${missing.join(', ')} to build the itinerary.`);
       return;
     }
 
-    const userSummary = `${formData.days}-day ${formData.travelStyle} trip to ${formData.destination} for ${formData.numberOfTravelers} traveler(s). Budget ₹${formData.budget}. Start ${formData.startDate}. Interests: ${formData.interests.join(', ')}. ${formData.aiNotes ? `Notes: ${formData.aiNotes}` : ''}`;
+    const userSummary = `${sourceData.days}-day ${sourceData.travelStyle} trip to ${sourceData.destination} for ${sourceData.numberOfTravelers} traveler(s). Budget INR ${sourceData.budget}. Start ${sourceData.startDate}. Interests: ${sourceData.interests.join(", ")}. ${sourceData.aiNotes ? `Notes: ${sourceData.aiNotes}` : ""}`;
     addMessage('user', userSummary);
     addMessage('assistant', 'Generating your itinerary now. I will post updates as soon as it is ready.');
 
@@ -203,15 +216,15 @@ function ItineraryPlanner() {
 
     try {
       const generatedItinerary = await itineraryService.generateItinerary({
-        destination: formData.destination,
-        days: parseInt(formData.days, 10),
-        budget: parseFloat(formData.budget),
+        destination: sourceData.destination,
+        days: parseInt(sourceData.days, 10),
+        budget: parseFloat(sourceData.budget),
         currency: 'INR',
-        numberOfTravelers: parseInt(formData.numberOfTravelers, 10),
-        travelStyle: formData.travelStyle,
-        interests: formData.interests,
-        startDate: formData.startDate,
-        aiNotes: formData.aiNotes,
+        numberOfTravelers: parseInt(sourceData.numberOfTravelers, 10),
+        travelStyle: sourceData.travelStyle,
+        interests: sourceData.interests,
+        startDate: sourceData.startDate,
+        aiNotes: sourceData.aiNotes,
       });
 
       setItinerary(generatedItinerary);
@@ -220,8 +233,33 @@ function ItineraryPlanner() {
         'assistant',
         `Your itinerary is ready. Review the overview and switch modules for timeline, map, and budget.`
       );
+
+      if (generatedItinerary?.budget?.adjustmentApplied) {
+        addMessage(
+          'assistant',
+          generatedItinerary?.budget?.adjustmentMessage ||
+            'Budget was adjusted to a realistic destination minimum.'
+        );
+      } else if (generatedItinerary?.budget?.status === 'above-premium') {
+        addMessage(
+          'assistant',
+          generatedItinerary?.budget?.adjustmentMessage ||
+            'Your budget is above premium range, so the plan includes luxury options.'
+        );
+      }
+
+      if (!generatedItinerary?.weatherData?.forecast?.length) {
+        addMessage(
+          'assistant',
+          'Live weather data was unavailable right now. Please retry in a moment for a fresh forecast.'
+        );
+      }
     } catch (err) {
-      addMessage('assistant', err?.message || 'Unable to generate the itinerary. Please try again.');
+      const errorMessage = [err?.message, err?.error].filter(Boolean).join(' ');
+      addMessage(
+        'assistant',
+        errorMessage || 'Unable to generate the itinerary. Please try again.'
+      );
     } finally {
       setIsGenerating(false);
       setProgressIndex(progressSteps.length);
@@ -233,6 +271,36 @@ function ItineraryPlanner() {
     setActiveModule('overview');
     addMessage('assistant', 'Your itinerary was updated with the advanced details.');
   };
+
+  useEffect(() => {
+    const handleAgentPrefill = (event) => {
+      const payload = event?.detail || {};
+      const updates = {
+        destination: payload.destination || '',
+        days: payload.days || 4,
+        budget: payload.budget || 20000,
+        numberOfTravelers: payload.numberOfTravelers || 1,
+        interests: Array.isArray(payload.interests) && payload.interests.length
+          ? payload.interests
+          : ['culture', 'food'],
+        startDate: payload.startDate || new Date().toISOString().split('T')[0],
+        aiNotes: payload.aiNotes || '',
+      };
+
+      setFormData((prev) => ({ ...prev, ...updates }));
+      setActiveModule('overview');
+      addMessage('assistant', 'Agent prefilled your itinerary details.');
+
+      if (payload.autoGenerate) {
+        setTimeout(() => {
+          handleGenerate(updates);
+        }, 120);
+      }
+    };
+
+    window.addEventListener('agentItineraryPrefill', handleAgentPrefill);
+    return () => window.removeEventListener('agentItineraryPrefill', handleAgentPrefill);
+  }, []);
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }} className="itinerary-root">
@@ -284,7 +352,7 @@ function ItineraryPlanner() {
                   fullWidth
                 />
                 <TextField
-                  label="Budget (₹)"
+                  label="Budget (INR)"
                   type="number"
                   value={formData.budget}
                   onChange={(e) => handleInputChange('budget', e.target.value)}
@@ -488,3 +556,5 @@ function ItineraryPlanner() {
 }
 
 export default ItineraryPlanner;
+
+

@@ -110,6 +110,20 @@ const getProfileForOSRM = (profile = ROUTING_CONFIG.DEFAULT_PROFILE) => {
   return 'driving';
 };
 
+const getAverageSpeedKmh = (profile = ROUTING_CONFIG.DEFAULT_PROFILE) => {
+  const normalized = String(profile || '').toLowerCase();
+  if (normalized.includes('foot') || normalized.includes('walk')) return 5;
+  if (normalized.includes('cycling') || normalized.includes('bike')) return 16;
+  return 42;
+};
+
+const estimateDurationByProfile = (distanceMeters, profile) => {
+  const speedKmh = getAverageSpeedKmh(profile);
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return 0;
+  const speedMetersPerSecond = (speedKmh * 1000) / 3600;
+  return distanceMeters / speedMetersPerSecond;
+};
+
 const buildInstructionTextFromOSRM = (step) => {
   const maneuver = step?.maneuver || {};
   const type = maneuver?.type || '';
@@ -129,7 +143,8 @@ const buildInstructionTextFromOSRM = (step) => {
   return 'Continue straight';
 };
 
-const parseOSRMInstructions = (route) => {
+const parseOSRMInstructions = (route, profile = ROUTING_CONFIG.DEFAULT_PROFILE) => {
+  const shouldEstimateByProfile = getProfileForOSRM(profile) !== 'driving';
   const instructions = [];
   const legs = route?.legs || [];
   let stepNumber = 1;
@@ -141,6 +156,11 @@ const parseOSRMInstructions = (route) => {
       const lastCoord = geometry[geometry.length - 1] || firstCoord;
       const maneuver = step?.maneuver || {};
 
+      const distance = step?.distance || 0;
+      const duration = shouldEstimateByProfile
+        ? estimateDurationByProfile(distance, profile)
+        : (step?.duration || 0);
+
       instructions.push({
         id: `${legIndex}-${stepIndex}`,
         stepNumber,
@@ -148,10 +168,10 @@ const parseOSRMInstructions = (route) => {
         name: step?.name || '',
         type: maneuver?.type || null,
         modifier: maneuver?.modifier || null,
-        distance: step?.distance || 0,
-        distanceText: formatDistance(step?.distance || 0),
-        duration: step?.duration || 0,
-        durationText: formatDuration(step?.duration || 0),
+        distance,
+        distanceText: formatDistance(distance),
+        duration,
+        durationText: formatDuration(duration),
         fromIndex: null,
         toIndex: null,
         fromCoord: firstCoord ? [firstCoord[1], firstCoord[0]] : null,
@@ -193,23 +213,30 @@ const normalizeOpenRouteServiceData = (response, options, profile, waypoints) =>
 
 const normalizeOSRMData = (response, options, profile, waypoints) => {
   const routes = response?.data?.routes || [];
+  const shouldEstimateByProfile = getProfileForOSRM(profile) !== 'driving';
   return {
     success: true,
     provider: 'osrm',
     routes: routes.map((route, index) => ({
+      distance: route.distance || 0,
+      duration: shouldEstimateByProfile
+        ? estimateDurationByProfile(route.distance || 0, profile)
+        : (route.duration || 0),
       id: index,
       type: 'route',
       geometry: route.geometry,
-      distance: route.distance || 0,
-      duration: route.duration || 0,
       ascent: 0,
       descent: 0,
-      distanceKM: ((route.distance || 0) / 1000).toFixed(2),
-      durationHM: formatDuration(route.duration || 0),
+      distanceKM: (((route.distance || 0)) / 1000).toFixed(2),
+      durationHM: formatDuration(
+        shouldEstimateByProfile
+          ? estimateDurationByProfile(route.distance || 0, profile)
+          : (route.duration || 0)
+      ),
       color: options.color || getRouteColor(profile),
       isAlternative: index > 0,
       segments: route.legs || [],
-      instructions: parseOSRMInstructions(route),
+      instructions: parseOSRMInstructions(route, profile),
       waypoints: (route.geometry?.coordinates || []).map((coord) => [coord[1], coord[0]]),
     })),
     waypoints,
@@ -452,9 +479,11 @@ export const calculateRouteStats = (route) => {
  * Format seconds to human readable format (e.g., "1h 30m")
  */
 export const formatDuration = (seconds) => {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0m';
+  if (seconds < 60) return '<1m';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours === 0) return `${minutes}m`;
+  if (hours === 0) return `${Math.max(1, minutes)}m`;
   return `${hours}h ${minutes}m`;
 };
 

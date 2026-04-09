@@ -15,6 +15,7 @@
 
 import api from '../api';
 import { apiCache, debounce } from './mapOptimizations';
+import { OLA_CONFIG } from '../config/mapConfig';
 
 // Category colors and icons for different POI types
 const POI_CATEGORIES = {
@@ -398,6 +399,13 @@ export const TILE_LAYERS = {
     name: 'CartoDB Light',
     maxZoom: 19,
     subdomains: 'abcd',
+    crossOrigin: 'anonymous'
+  },
+  ola_light: {
+    url: OLA_CONFIG.TILE_URL || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: OLA_CONFIG.IS_CONFIGURED ? '© Ola Maps' : '© OpenStreetMap contributors',
+    name: OLA_CONFIG.IS_CONFIGURED ? 'Ola Light' : 'Ola Light (fallback)',
+    maxZoom: 20,
     crossOrigin: 'anonymous'
   }
 };

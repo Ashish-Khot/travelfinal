@@ -626,28 +626,84 @@ class AIService {
    * @returns {Promise<Object|null>} Enhancement data or null
    */
   async generateItineraryEnhancement(params) {
-    if (!this.hasGeminiAccess) return null;
-
     const prompt = this.buildEnhancementPrompt(params);
     const useVision = Boolean(params?.imageData);
+    const providers = this.getProviderSequence();
+    const providerOrder = useVision
+      ? ['gemini', ...providers.filter((provider) => provider !== 'gemini')]
+      : providers;
 
-    try {
-      const content = await this.callGemini({
-        prompt,
-        imageData: params?.imageData,
-        imageMimeType: params?.imageMimeType,
-        model: useVision ? this.geminiVisionModel : this.geminiModel,
-        maxOutputTokens: 1200,
-        responseMimeType: 'application/json',
-      });
+    for (const provider of providerOrder) {
+      if (provider === 'gemini' && this.hasGeminiAccess) {
+        try {
+          const content = await this.callGemini({
+            prompt,
+            imageData: params?.imageData,
+            imageMimeType: params?.imageMimeType,
+            model: useVision ? this.geminiVisionModel : this.geminiModel,
+            maxOutputTokens: 1200,
+            responseMimeType: 'application/json',
+          });
 
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) return null;
-      return JSON.parse(jsonBlock);
-    } catch (error) {
-      console.error('AI enhancement error:', error.message);
-      return null;
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          return JSON.parse(jsonBlock);
+        } catch (error) {
+          console.error('Gemini enhancement error:', error.message);
+        }
+      }
+
+      if (provider === 'openai' && this.hasOpenAIAccess) {
+        try {
+          const content = await this.callOpenAIResponse({
+            prompt,
+            maxOutputTokens: 1400,
+            responseFormat: 'json_object',
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          return JSON.parse(jsonBlock);
+        } catch (error) {
+          console.error('OpenAI enhancement error:', error.message);
+        }
+      }
+
+      if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+        try {
+          const response = await axios.post(
+            `${this.openRouterBaseUrl}/chat/completions`,
+            {
+              model: this.openRouterModel,
+              messages: [
+                {
+                  role: 'user',
+                  content: prompt,
+                },
+              ],
+              temperature: 0.4,
+              max_tokens: 1400,
+              response_format: { type: 'json_object' },
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${this.openRouterKey}`,
+                'Content-Type': 'application/json',
+              },
+              timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 30000),
+            }
+          );
+
+          const content = response.data?.choices?.[0]?.message?.content || '';
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          return JSON.parse(jsonBlock);
+        } catch (error) {
+          console.error('OpenRouter enhancement error:', error.message);
+        }
+      }
     }
+
+    return null;
   }
 
   /**
@@ -662,7 +718,7 @@ class AIService {
       Trip details:
       - Destination: ${params.destination}
       - Days: ${params.days}
-      - Budget: $${params.budget}
+      - Budget: ${params.currency || 'INR'} ${params.budget}
       - Travelers: ${params.travelers || params.numberOfTravelers || 1}
       - Interests: ${(params.interests || []).join(', ')}
       - Travel style: ${params.travelStyle}
@@ -702,7 +758,7 @@ class AIService {
       Create a detailed ${params.days}-day travel itinerary for ${params.destination}.
       
       Trip Details:
-      - Budget: $${params.budget} total (${Math.round(params.budget / params.days)}/day)
+      - Budget: ${params.currency || 'INR'} ${params.budget} total (${Math.round(params.budget / params.days)}/day)
       - Travelers: ${params.travelers}
       - Interests: ${params.interests.join(', ')}
       - Travel style: ${params.travelStyle}

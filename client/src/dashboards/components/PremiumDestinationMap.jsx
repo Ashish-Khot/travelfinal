@@ -11,11 +11,36 @@ import { getRoute } from '../../services/routingService';
 const DEFAULT_CENTER = { lat: 36.3932, lng: 25.4615 };
 const DEFAULT_ZOOM = 2;
 
-const TILE_PRESETS = {
-  light: { label: 'Light', source: MAP_CONFIG?.TILE_SERVERS?.CartoDB_Light || MAP_CONFIG?.TILE_SERVERS?.OSM },
-  streets: { label: 'Streets', source: MAP_CONFIG?.TILE_SERVERS?.OSM || MAP_CONFIG?.TILE_SERVERS?.CartoDB_Light },
-  satellite: { label: 'Satellite', source: MAP_CONFIG?.TILE_SERVERS?.Satellite || MAP_CONFIG?.TILE_SERVERS?.OSM },
-  topo: { label: 'Topo', source: MAP_CONFIG?.TILE_SERVERS?.TopoMap || MAP_CONFIG?.TILE_SERVERS?.OSM },
+const getTilePresets = (provider = 'osm') => {
+  const usingOla = provider === 'ola';
+
+  if (usingOla) {
+    return {
+      light: {
+        label: 'Ola Light',
+        source: MAP_CONFIG?.TILE_SERVERS?.OLA_Light || MAP_CONFIG?.TILE_SERVERS?.OSM,
+      },
+      streets: {
+        label: 'Ola Streets',
+        source: MAP_CONFIG?.TILE_SERVERS?.OLA_Light || MAP_CONFIG?.TILE_SERVERS?.OSM,
+      },
+      satellite: {
+        label: 'Satellite',
+        source: MAP_CONFIG?.TILE_SERVERS?.Satellite || MAP_CONFIG?.TILE_SERVERS?.OSM,
+      },
+      topo: {
+        label: 'Topo',
+        source: MAP_CONFIG?.TILE_SERVERS?.TopoMap || MAP_CONFIG?.TILE_SERVERS?.OSM,
+      },
+    };
+  }
+
+  return {
+    light: { label: 'Light', source: MAP_CONFIG?.TILE_SERVERS?.CartoDB_Light || MAP_CONFIG?.TILE_SERVERS?.OSM },
+    streets: { label: 'Streets', source: MAP_CONFIG?.TILE_SERVERS?.OSM || MAP_CONFIG?.TILE_SERVERS?.CartoDB_Light },
+    satellite: { label: 'Satellite', source: MAP_CONFIG?.TILE_SERVERS?.Satellite || MAP_CONFIG?.TILE_SERVERS?.OSM },
+    topo: { label: 'Topo', source: MAP_CONFIG?.TILE_SERVERS?.TopoMap || MAP_CONFIG?.TILE_SERVERS?.OSM },
+  };
 };
 
 const PLACE_TYPES = {
@@ -79,6 +104,11 @@ const escapeHtml = (value = '') =>
 const toNumber = (value, fallback = null) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : fallback;
+};
+
+const normalizeBearing = (value = 0) => {
+  const normalized = value % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
 };
 
 const normalizeRating = (rating) => {
@@ -167,13 +197,13 @@ const getDistanceMeters = (from, to) => {
 
 const getInstructionMeta = (step) => {
   const normalized = `${step?.text || ''} ${step?.type || ''} ${step?.modifier || ''}`.toLowerCase();
-  if (normalized.includes('arrive')) return { symbol: 'ARR', tone: 'bg-emerald-100 text-emerald-700' };
-  if (normalized.includes('depart') || normalized.includes('head')) return { symbol: 'GO', tone: 'bg-sky-100 text-sky-700' };
-  if (normalized.includes('roundabout')) return { symbol: 'RDB', tone: 'bg-amber-100 text-amber-700' };
-  if (normalized.includes('u-turn') || normalized.includes('uturn')) return { symbol: 'U', tone: 'bg-rose-100 text-rose-700' };
-  if (normalized.includes('left')) return { symbol: 'L', tone: 'bg-indigo-100 text-indigo-700' };
-  if (normalized.includes('right')) return { symbol: 'R', tone: 'bg-violet-100 text-violet-700' };
-  return { symbol: 'FWD', tone: 'bg-slate-100 text-slate-700' };
+  if (normalized.includes('arrive')) return { symbol: 'ARR', bg: '#dcfce7', fg: '#15803d' };
+  if (normalized.includes('depart') || normalized.includes('head')) return { symbol: 'GO', bg: '#e0f2fe', fg: '#0369a1' };
+  if (normalized.includes('roundabout')) return { symbol: 'RDB', bg: '#fef3c7', fg: '#b45309' };
+  if (normalized.includes('u-turn') || normalized.includes('uturn')) return { symbol: 'U', bg: '#ffe4e6', fg: '#be123c' };
+  if (normalized.includes('left')) return { symbol: 'L', bg: '#e0e7ff', fg: '#4338ca' };
+  if (normalized.includes('right')) return { symbol: 'R', bg: '#ede9fe', fg: '#6d28d9' };
+  return { symbol: 'FWD', bg: '#e2e8f0', fg: '#334155' };
 };
 
 const getNearestInstructionIndex = (instructions, currentLocation) => {
@@ -195,8 +225,24 @@ const getNearestInstructionIndex = (instructions, currentLocation) => {
   return bestIndex;
 };
 
-const getTileCandidates = (activeTileKey) => {
-  const primary = TILE_PRESETS[activeTileKey];
+const simplifyPolylineWaypoints = (waypoints, maxPoints = 900) => {
+  if (!Array.isArray(waypoints) || waypoints.length === 0) return [];
+  if (waypoints.length <= maxPoints) return waypoints;
+  const step = Math.ceil(waypoints.length / maxPoints);
+  const reduced = [];
+  for (let index = 0; index < waypoints.length; index += step) {
+    reduced.push(waypoints[index]);
+  }
+  const last = waypoints[waypoints.length - 1];
+  const tail = reduced[reduced.length - 1];
+  if (!tail || tail[0] !== last[0] || tail[1] !== last[1]) {
+    reduced.push(last);
+  }
+  return reduced;
+};
+
+const getTileCandidates = (activeTileKey, tilePresets) => {
+  const primary = tilePresets[activeTileKey];
   const candidates = [
     primary?.source
       ? {
@@ -214,6 +260,12 @@ const getTileCandidates = (activeTileKey) => {
       ? {
           ...MAP_CONFIG.TILE_SERVERS.CartoDB_Light,
           _label: 'Carto Light',
+        }
+      : null,
+    MAP_CONFIG?.TILE_SERVERS?.OLA_Light
+      ? {
+          ...MAP_CONFIG.TILE_SERVERS.OLA_Light,
+          _label: 'Ola Light',
         }
       : null,
     MAP_CONFIG?.TILE_SERVERS?.TopoMap
@@ -253,12 +305,20 @@ const createPoiClusterLayer = () => {
     return L.markerClusterGroup(clusterOptions);
   }
 
-  // Avoid constructor-only cluster plugins (older builds) because they can freeze modern Leaflet maps.
-  console.warn('[PremiumDestinationMap] Cluster factory unavailable. Falling back to layer group.');
+  // Fallback for cluster plugin mismatch.
   return L.layerGroup();
 };
 
-const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoom = DEFAULT_ZOOM, onMarkerClick = null }) => {
+const PremiumDestinationMap = ({
+  destinations = [],
+  center = DEFAULT_CENTER,
+  zoom = DEFAULT_ZOOM,
+  onMarkerClick = null,
+  mapProvider = 'osm',
+}) => {
+  const normalizedProvider = String(mapProvider || 'osm').toLowerCase();
+  const tilePresets = useMemo(() => getTilePresets(normalizedProvider), [normalizedProvider]);
+
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
@@ -267,7 +327,15 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
   const overlayLayerRef = useRef(null);
   const markerRefs = useRef(new Map());
   const fitBoundsDoneRef = useRef(false);
-  const searchTimerRef = useRef(null);
+  const fromSearchTimerRef = useRef(null);
+  const toSearchTimerRef = useRef(null);
+  const rotateGestureRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    startBearing: 0,
+  });
+  const mapBearingRef = useRef(0);
   const onMarkerClickRef = useRef(onMarkerClick);
   const liveWatchRef = useRef(null);
   const lastLiveRouteRef = useRef({ at: 0, location: null });
@@ -280,15 +348,19 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [activeMarkerId, setActiveMarkerId] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [isLoadingMarkers, setIsLoadingMarkers] = useState(true);
+  const [isLoadingMarkers, setIsLoadingMarkers] = useState(false);
+  const [mapBearing, setMapBearing] = useState(0);
+  const [isBearingDragging, setIsBearingDragging] = useState(false);
   const [activeTile, setActiveTile] = useState('streets');
-  const [activeTileSource, setActiveTileSource] = useState('Streets');
+  const [activeTileSource, setActiveTileSource] = useState(tilePresets?.streets?.label || 'Streets');
   const [mapViewMode, setMapViewMode] = useState('2d');
   const [tileLoadError, setTileLoadError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchTarget, setSearchTarget] = useState('destination');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [fromQuery, setFromQuery] = useState('');
+  const [toQuery, setToQuery] = useState('');
+  const [fromSearchResults, setFromSearchResults] = useState([]);
+  const [toSearchResults, setToSearchResults] = useState([]);
+  const [isSearchingFrom, setIsSearchingFrom] = useState(false);
+  const [isSearchingTo, setIsSearchingTo] = useState(false);
   const [searchedLocation, setSearchedLocation] = useState(null);
   const [manualOrigin, setManualOrigin] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
@@ -304,6 +376,9 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
   const [isLiveNavigation, setIsLiveNavigation] = useState(false);
   const [navigationStatus, setNavigationStatus] = useState('');
   const [activeInstructionIndex, setActiveInstructionIndex] = useState(0);
+  const [routePanelExpanded, setRoutePanelExpanded] = useState(true);
+  const [mapOptionsOpen, setMapOptionsOpen] = useState(false);
+  const [placesPanelOpen, setPlacesPanelOpen] = useState(false);
 
   const normalizedDestinations = useMemo(() => (destinations || [])
     .map((destination, index) => {
@@ -330,7 +405,31 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
     })
     .filter(Boolean), [destinations]);
 
-  const routeDestination = selectedPlace ? { name: selectedPlace.name, lat: selectedPlace.lat, lon: selectedPlace.lon } : searchedLocation;
+  const visibleDestinations = normalizedDestinations;
+
+  const placeTypeSummary = useMemo(() => {
+    const summary = Object.entries(PLACE_TYPES).map(([key, value]) => ({
+      key,
+      label: value.label,
+      color: value.color,
+      count: 0,
+    }));
+    const summaryByType = summary.reduce((acc, item) => {
+      acc[item.key] = item;
+      return acc;
+    }, {});
+
+    visibleDestinations.forEach((place) => {
+      const typeKey = PLACE_TYPES[place.type] ? place.type : 'attraction';
+      if (summaryByType[typeKey]) summaryByType[typeKey].count += 1;
+    });
+
+    return summary.filter((item) => item.count > 0);
+  }, [visibleDestinations]);
+
+  const routeDestination = hasCoords(searchedLocation)
+    ? searchedLocation
+    : (selectedPlace ? { name: selectedPlace.name, lat: selectedPlace.lat, lon: selectedPlace.lon } : null);
   const routeOrigin = hasCoords(manualOrigin)
     ? manualOrigin
     : (hasCoords(userLocation)
@@ -358,13 +457,19 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
   }, [routeCandidates]);
 
   useEffect(() => {
+    mapBearingRef.current = mapBearing;
+  }, [mapBearing]);
+
+  useEffect(() => {
+    if (tilePresets[activeTile]) return;
+    setActiveTile('streets');
+  }, [tilePresets, activeTile]);
+
+  useEffect(() => {
     if (!mapContainerRef.current) return;
     mapContainerRef.current.classList.toggle('travel-map-3d', mapViewMode === '3d');
-    if (mapViewMode === '3d' && activeTile !== 'satellite') {
-      setActiveTile('satellite');
-    }
     mapRef.current?.invalidateSize();
-  }, [mapViewMode, activeTile]);
+  }, [mapViewMode, activeTile, tilePresets]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
@@ -374,6 +479,8 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       preferCanvas: true,
       attributionControl: false,
       worldCopyJump: true,
+      scrollWheelZoom: true,
+      dragging: true,
     }).setView([toNumber(center?.lat, DEFAULT_CENTER.lat), toNumber(center?.lng, DEFAULT_CENTER.lng)], toNumber(zoom, DEFAULT_ZOOM));
 
     mapRef.current = map;
@@ -384,10 +491,16 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
 
     const onResize = () => map.invalidateSize();
     window.addEventListener('resize', onResize);
-    setTimeout(() => map.invalidateSize(), 80);
+    const resizeTimer = window.setTimeout(() => {
+      if (mapRef.current && mapRef.current._container) {
+        mapRef.current.invalidateSize();
+      }
+    }, 80);
     return () => {
+      window.clearTimeout(resizeTimer);
       window.removeEventListener('resize', onResize);
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      if (fromSearchTimerRef.current) clearTimeout(fromSearchTimerRef.current);
+      if (toSearchTimerRef.current) clearTimeout(toSearchTimerRef.current);
       if (liveWatchRef.current !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(liveWatchRef.current);
         liveWatchRef.current = null;
@@ -399,16 +512,69 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
   }, []);
 
   useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+
+    const stopBearingDrag = () => {
+      if (!rotateGestureRef.current.active) return;
+      rotateGestureRef.current.active = false;
+      setIsBearingDragging(false);
+    };
+
+    const handlePointerDown = (event) => {
+      // Right mouse drag rotates map bearing similar to Google Maps desktop interaction.
+      if (event.button !== 2) return;
+      rotateGestureRef.current = {
+        active: true,
+        startX: event.clientX,
+        startY: event.clientY,
+        startBearing: mapBearingRef.current,
+      };
+      setIsBearingDragging(true);
+      event.preventDefault();
+    };
+
+    const handlePointerMove = (event) => {
+      if (!rotateGestureRef.current.active) return;
+      const deltaX = event.clientX - rotateGestureRef.current.startX;
+      const deltaY = event.clientY - rotateGestureRef.current.startY;
+      const nextBearing = normalizeBearing(
+        rotateGestureRef.current.startBearing + (deltaX * 0.3) + (deltaY * 0.07)
+      );
+      setMapBearing(nextBearing);
+      event.preventDefault();
+    };
+
+    const handleContextMenu = (event) => {
+      event.preventDefault();
+    };
+
+    container.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', stopBearingDrag);
+    window.addEventListener('pointercancel', stopBearingDrag);
+    container.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopBearingDrag);
+      window.removeEventListener('pointercancel', stopBearingDrag);
+      container.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, []);
+
+  useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const candidates = getTileCandidates(activeTile);
+    const candidates = getTileCandidates(activeTile, tilePresets);
     if (!candidates.length) return;
 
     let cancelled = false;
     let currentLayer = null;
 
     setTileLoadError('');
-    setActiveTileSource(TILE_PRESETS[activeTile]?.label || 'Streets');
+    setActiveTileSource(tilePresets[activeTile]?.label || 'Streets');
 
     const mountTileLayer = (candidateIndex) => {
       if (cancelled) return;
@@ -462,7 +628,7 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         map.removeLayer(currentLayer);
       }
     };
-  }, [activeTile]);
+  }, [activeTile, tilePresets]);
 
   useEffect(() => {
     if (!mapRef.current) return;
@@ -476,18 +642,30 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
     let cancelled = false;
 
     const render = async () => {
+      if (visibleDestinations.length === 0) {
+        layer.clearLayers();
+        markerRefs.current.clear();
+        fitBoundsDoneRef.current = false;
+        setActiveMarkerId(null);
+        setIsLoadingMarkers(false);
+        return;
+      }
+
       setIsLoadingMarkers(true);
       layer.clearLayers();
       markerRefs.current.clear();
       fitBoundsDoneRef.current = false;
       const chunkSize = 50;
-      for (let i = 0; i < normalizedDestinations.length; i += chunkSize) {
+      for (let i = 0; i < visibleDestinations.length; i += chunkSize) {
         if (cancelled) return;
-        normalizedDestinations.slice(i, i + chunkSize).forEach((place) => {
+        visibleDestinations.slice(i, i + chunkSize).forEach((place) => {
           const marker = L.marker([place.lat, place.lon], { icon: createMarkerIcon(place.type), riseOnHover: true, keyboard: false });
           marker.bindPopup(createPopupMarkup(place), { className: 'travel-popup-shell', closeButton: false, maxWidth: 320, offset: [0, -22] });
           marker.on('click', () => {
             setSelectedPlace(place);
+            setToQuery(place.name || '');
+            setToSearchResults([]);
+            setSearchedLocation({ name: place.name, lat: place.lat, lon: place.lon });
             setPanelOpen(true);
             setActiveMarkerId(place.id);
           });
@@ -497,6 +675,9 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
               detailsBtn.onclick = (buttonEvent) => {
                 buttonEvent.preventDefault();
                 setSelectedPlace(place);
+                setToQuery(place.name || '');
+                setToSearchResults([]);
+                setSearchedLocation({ name: place.name, lat: place.lat, lon: place.lon });
                 setPanelOpen(true);
                 setActiveMarkerId(place.id);
                 if (typeof onMarkerClickRef.current === 'function') onMarkerClickRef.current(place);
@@ -506,11 +687,11 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
           marker.addTo(layer);
           markerRefs.current.set(place.id, marker);
         });
-        if (i + chunkSize < normalizedDestinations.length) await new Promise((resolve) => setTimeout(resolve, 0));
+        if (i + chunkSize < visibleDestinations.length) await new Promise((resolve) => setTimeout(resolve, 0));
       }
 
-      if (!cancelled && normalizedDestinations.length > 0 && !fitBoundsDoneRef.current) {
-        const bounds = L.latLngBounds(normalizedDestinations.map((place) => [place.lat, place.lon]));
+      if (!cancelled && visibleDestinations.length > 0 && !fitBoundsDoneRef.current) {
+        const bounds = L.latLngBounds(visibleDestinations.map((place) => [place.lat, place.lon]));
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 13, animate: true, duration: 0.7 });
         fitBoundsDoneRef.current = true;
       }
@@ -524,38 +705,78 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       cancelled = true;
       setIsLoadingMarkers(false);
     };
-  }, [normalizedDestinations]);
+  }, [visibleDestinations]);
 
   useEffect(() => {
     markerRefs.current.forEach((marker, id) => {
       const element = marker.getElement();
       if (element) element.classList.toggle('is-active', id === activeMarkerId);
     });
-  }, [activeMarkerId, normalizedDestinations.length]);
+  }, [activeMarkerId, visibleDestinations.length]);
 
   useEffect(() => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    const query = searchQuery.trim();
+    if (fromSearchTimerRef.current) clearTimeout(fromSearchTimerRef.current);
+    const query = fromQuery.trim();
     if (query.length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
+      setFromSearchResults([]);
+      setIsSearchingFrom(false);
       return;
     }
-    setIsSearching(true);
-    searchTimerRef.current = setTimeout(async () => {
+    const normalizedQuery = query.toLowerCase();
+    const originName = String(manualOrigin?.name || '').toLowerCase();
+    const originLabel = String(manualOrigin?.label || '').toLowerCase();
+    if (hasCoords(manualOrigin) && (originName === normalizedQuery || originLabel === normalizedQuery)) {
+      setFromSearchResults([]);
+      setIsSearchingFrom(false);
+      return;
+    }
+    setIsSearchingFrom(true);
+    fromSearchTimerRef.current = setTimeout(async () => {
       try {
         const response = await autocompleteLocation(query, { limit: 6 });
-        setSearchResults(response?.success ? response.suggestions || [] : []);
+        setFromSearchResults(response?.success ? response.suggestions || [] : []);
       } catch {
-        setSearchResults([]);
+        setFromSearchResults([]);
       } finally {
-        setIsSearching(false);
+        setIsSearchingFrom(false);
       }
-    }, 360);
+    }, 260);
     return () => {
-      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      if (fromSearchTimerRef.current) clearTimeout(fromSearchTimerRef.current);
     };
-  }, [searchQuery]);
+  }, [fromQuery]);
+
+  useEffect(() => {
+    if (toSearchTimerRef.current) clearTimeout(toSearchTimerRef.current);
+    const query = toQuery.trim();
+    if (query.length < 2) {
+      setToSearchResults([]);
+      setIsSearchingTo(false);
+      return;
+    }
+    const normalizedQuery = query.toLowerCase();
+    const destinationName = String(searchedLocation?.name || '').toLowerCase();
+    const destinationLabel = String(searchedLocation?.label || '').toLowerCase();
+    if (hasCoords(searchedLocation) && (destinationName === normalizedQuery || destinationLabel === normalizedQuery)) {
+      setToSearchResults([]);
+      setIsSearchingTo(false);
+      return;
+    }
+    setIsSearchingTo(true);
+    toSearchTimerRef.current = setTimeout(async () => {
+      try {
+        const response = await autocompleteLocation(query, { limit: 6 });
+        setToSearchResults(response?.success ? response.suggestions || [] : []);
+      } catch {
+        setToSearchResults([]);
+      } finally {
+        setIsSearchingTo(false);
+      }
+    }, 260);
+    return () => {
+      if (toSearchTimerRef.current) clearTimeout(toSearchTimerRef.current);
+    };
+  }, [toQuery]);
 
   useEffect(() => {
     const layer = overlayLayerRef.current;
@@ -610,22 +831,70 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
     setShowInstructions(true);
   };
 
-  const handleSearchSelect = (suggestion) => {
+  const handleFromSelect = (suggestion) => {
     const lat = toNumber(suggestion?.lat, null);
     const lon = toNumber(suggestion?.lng, null);
     if (lat === null || lon === null) return;
-    const selected = { name: suggestion?.name || suggestion?.label || 'Search result', lat, lon };
-    setSearchQuery(suggestion?.label || suggestion?.name || '');
-    setSearchResults([]);
-    if (searchTarget === 'origin') {
-      setManualOrigin(selected);
-      setNavigationStatus('Start point set from search');
-    } else {
-      setSearchedLocation(selected);
-      setNavigationStatus('Destination set from search');
-    }
+    const selected = { name: suggestion?.name || suggestion?.label || 'Starting point', label: suggestion?.label || '', lat, lon };
+    setFromQuery(selected.name || '');
+    setFromSearchResults([]);
+    setManualOrigin(selected);
+    setNavigationStatus('Starting point updated');
     setRouteError('');
     mapRef.current?.flyTo([lat, lon], Math.max(12, mapRef.current.getZoom()), { animate: true, duration: 0.6 });
+  };
+
+  const handleToSelect = (suggestion) => {
+    const lat = toNumber(suggestion?.lat, null);
+    const lon = toNumber(suggestion?.lng, null);
+    if (lat === null || lon === null) return;
+    const selected = { name: suggestion?.name || suggestion?.label || 'Destination', label: suggestion?.label || '', lat, lon };
+    setToQuery(selected.name || '');
+    setToSearchResults([]);
+    setSearchedLocation(selected);
+    setSelectedPlace(null);
+    setNavigationStatus('Destination updated');
+    setRouteError('');
+    mapRef.current?.flyTo([lat, lon], Math.max(12, mapRef.current.getZoom()), { animate: true, duration: 0.6 });
+  };
+
+  const handleSwapRoutePoints = () => {
+    if (!hasCoords(manualOrigin) && !hasCoords(routeDestination)) return;
+    const currentOrigin = hasCoords(manualOrigin) ? { ...manualOrigin } : null;
+    const currentDestination = hasCoords(routeDestination) ? { ...routeDestination } : null;
+    if (currentDestination) {
+      setManualOrigin(currentDestination);
+      setFromQuery(currentDestination.name || '');
+    }
+    if (currentOrigin) {
+      setSearchedLocation(currentOrigin);
+      setToQuery(currentOrigin.name || '');
+      setSelectedPlace(null);
+    } else if (!currentDestination) {
+      setSearchedLocation(null);
+      setToQuery('');
+    }
+    setNavigationStatus('Swapped From and To');
+  };
+
+  const resolveLocationFromText = async (query, fallbackName) => {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) return null;
+    try {
+      const response = await autocompleteLocation(normalizedQuery, { limit: 1 });
+      const firstMatch = response?.success ? (response.suggestions || [])[0] : null;
+      const lat = toNumber(firstMatch?.lat, null);
+      const lon = toNumber(firstMatch?.lng, null);
+      if (lat === null || lon === null) return null;
+      return {
+        name: firstMatch?.name || firstMatch?.label || fallbackName || normalizedQuery,
+        label: firstMatch?.label || '',
+        lat,
+        lon,
+      };
+    } catch {
+      return null;
+    }
   };
 
   const handleLocateUser = () => {
@@ -637,7 +906,8 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       (position) => {
         const loc = { name: 'Your location', lat: Number(position.coords.latitude), lon: Number(position.coords.longitude) };
         setUserLocation(loc);
-        setManualOrigin(null);
+        setManualOrigin(loc);
+        setFromQuery('Your location');
         setRouteError('');
         setNavigationStatus('Using current location as start');
         mapRef.current?.flyTo([loc.lat, loc.lon], Math.max(12, mapRef.current.getZoom()), { animate: true, duration: 0.6 });
@@ -659,7 +929,8 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       .filter((route) => route.id !== selectedRoute.id)
       .forEach((route) => {
         if (!route?.waypoints?.length) return;
-        L.polyline(route.waypoints, {
+        const alternativeCoordinates = simplifyPolylineWaypoints(route.waypoints);
+        L.polyline(alternativeCoordinates, {
           color: '#64748b',
           weight: 4,
           opacity: 0.35,
@@ -669,7 +940,7 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         }).addTo(routeLayer);
       });
 
-    const activeCoordinates = selectedRoute.waypoints;
+    const activeCoordinates = simplifyPolylineWaypoints(selectedRoute.waypoints);
     const outerLine = L.polyline(activeCoordinates, { color: '#0f172a', weight: 8, opacity: 0.22, lineCap: 'round', lineJoin: 'round' }).addTo(routeLayer);
     L.polyline(activeCoordinates, { color: '#14b8a6', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(routeLayer);
     L.polyline(activeCoordinates, { color: '#ffffff', weight: 2, opacity: 0.48, dashArray: '10 10' }).addTo(routeLayer);
@@ -704,13 +975,28 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
 
   const calculateRoute = async (destinationOverride = null, originOverride = null, options = {}) => {
     const { fitToRoute = true } = options;
-    const target = destinationOverride || routeDestination;
+    let target = destinationOverride || routeDestination;
+    if (!hasCoords(target) && toQuery.trim().length >= 2) {
+      const resolvedDestination = await resolveLocationFromText(toQuery, 'Destination');
+      if (resolvedDestination) {
+        target = resolvedDestination;
+        setSearchedLocation(resolvedDestination);
+        setSelectedPlace(null);
+      }
+    }
     if (!hasCoords(target)) {
-      setRouteError('Select a destination from map marker or search first.');
+      setRouteError('Enter or select a destination first.');
       return false;
     }
 
-    const origin = originOverride || routeOrigin;
+    let origin = originOverride || routeOrigin;
+    if (!originOverride && !hasCoords(manualOrigin) && fromQuery.trim().length >= 2) {
+      const resolvedOrigin = await resolveLocationFromText(fromQuery, 'Starting point');
+      if (resolvedOrigin) {
+        origin = resolvedOrigin;
+        setManualOrigin(resolvedOrigin);
+      }
+    }
 
     setIsRouting(true);
     isRoutingRef.current = true;
@@ -835,6 +1121,17 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
     );
   };
 
+  useEffect(() => {
+    if (!routeSummary || isRouting || isLiveNavigation) return;
+    if (!hasCoords(routeDestination)) return;
+
+    const rerouteTimer = setTimeout(() => {
+      calculateRoute(routeDestination, routeOrigin, { fitToRoute: false });
+    }, 120);
+
+    return () => clearTimeout(rerouteTimer);
+  }, [routeMode, routePreference, trafficMode]);
+
   const activeInstruction = routeSummary?.instructions?.[activeInstructionIndex] || null;
 
   return (
@@ -862,9 +1159,10 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         .travel-map-3d .leaflet-marker-pane,.travel-map-3d .leaflet-popup-pane{transform:none !important}
         .travel-map-3d .leaflet-control-container{opacity:.96}
         @keyframes travel-ping{0%{transform:scale(1);opacity:.25}80%,100%{transform:scale(1.65);opacity:0}}
-        .travel-map-left-panel{width:min(470px,calc(100% - 290px));display:flex;flex-direction:column;gap:12px}
+        .travel-map-left-panel{width:min(450px,calc(100% - 420px));display:flex;flex-direction:column;gap:12px}
         .travel-ui-card{border-radius:22px;border:1px solid rgba(255,255,255,.72);background:linear-gradient(145deg,rgba(255,255,255,.96) 0%,rgba(247,250,252,.93) 55%,rgba(241,245,249,.9) 100%);padding:14px;box-shadow:0 26px 50px rgba(15,23,42,.3);backdrop-filter:blur(14px)}
         .travel-ui-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+        .travel-ui-header-actions{display:flex;align-items:center;gap:8px}
         .travel-ui-stat{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:rgba(15,23,42,.08);padding:6px 11px;font-size:11px;font-weight:700;color:#334155;letter-spacing:.02em}
         .travel-ui-locate{border:1px solid rgba(148,163,184,.5);background:#fff;color:#0f172a;border-radius:999px;padding:6px 11px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s ease}
         .travel-ui-locate:hover{background:#f8fafc;transform:translateY(-1px)}
@@ -884,6 +1182,7 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         .travel-ui-result-item:hover{background:#f8fafc}
         .travel-ui-result-name{font-size:13px;font-weight:700;color:#0f172a;line-height:1.25}
         .travel-ui-result-label{font-size:11px;color:#64748b;line-height:1.35}
+        .travel-ui-results.compact{margin-top:0;max-height:126px}
         .travel-ui-route-card{margin-top:12px;border-radius:18px;border:1px solid rgba(226,232,240,.9);background:linear-gradient(180deg,rgba(255,255,255,.98) 0%,rgba(248,250,252,.95) 100%);padding:11px}
         .travel-ui-route-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px}
         .travel-ui-route-label{margin:0;font-size:10px;font-weight:700;color:#64748b;letter-spacing:.12em;text-transform:uppercase}
@@ -895,16 +1194,20 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         .travel-ui-mode-btn.is-active{background:linear-gradient(130deg,#0f172a,#115e59);border-color:transparent;color:#fff;box-shadow:0 10px 20px rgba(15,23,42,.34)}
         .travel-ui-mode-icon{width:15px;height:15px;display:inline-flex}
         .travel-ui-mode-icon svg{width:100%;height:100%;display:block}
-        .travel-ui-waypoint-grid{display:grid;grid-template-columns:1fr;gap:7px;margin-top:10px}
-        .travel-ui-waypoint{border-radius:12px;border:1px solid rgba(226,232,240,.95);background:#fff;padding:7px 10px}
-        .travel-ui-waypoint strong{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-bottom:3px}
-        .travel-ui-waypoint span{display:block;font-size:12px;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .travel-ui-field-stack{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+        .travel-ui-field{position:relative}
+        .travel-ui-field label{display:block;margin:0 0 4px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#64748b;font-weight:700}
+        .travel-ui-field input{width:100%;border-radius:11px;border:1px solid rgba(148,163,184,.45);background:#fff;padding:9px 80px 9px 10px;font-size:13px;font-weight:600;color:#1e293b;outline:none;transition:border-color .2s ease,box-shadow .2s ease}
+        .travel-ui-field input:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgba(20,184,166,.14)}
+        .travel-ui-field .travel-ui-search-state{top:27px;transform:none}
         .travel-ui-grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px}
         .travel-ui-grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px}
         .travel-ui-soft-btn{border-radius:11px;border:1px solid rgba(148,163,184,.42);padding:8px 9px;font-size:11px;font-weight:700;color:#334155;background:#fff;cursor:pointer;transition:all .18s ease}
         .travel-ui-soft-btn:hover{background:#f8fafc}
         .travel-ui-soft-btn:disabled{opacity:.45;cursor:not-allowed}
         .travel-ui-soft-btn.is-active{background:linear-gradient(135deg,#0f766e,#0f172a);border-color:transparent;color:#fff}
+        .travel-ui-select{width:100%;border-radius:11px;border:1px solid rgba(148,163,184,.42);padding:8px 10px;font-size:12px;font-weight:700;color:#334155;background:#fff;cursor:pointer;outline:none}
+        .travel-ui-select:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgba(20,184,166,.14)}
         .travel-ui-traffic-btn{border-radius:11px;border:1px solid rgba(148,163,184,.42);padding:8px 10px;font-size:11px;font-weight:700;background:#fff;color:#334155;cursor:pointer;transition:all .2s ease}
         .travel-ui-traffic-btn:hover{background:#f8fafc}
         .travel-ui-traffic-btn.is-active{background:linear-gradient(135deg,#f59e0b,#ea580c);border-color:transparent;color:#fff}
@@ -920,19 +1223,82 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
         .travel-ui-alert.info{background:rgba(14,165,233,.13);color:#0369a1}
         .travel-ui-alert.error{background:rgba(244,63,94,.12);color:#be123c}
         .travel-map-tools{display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+        .travel-tool-fabs{display:flex;gap:8px}
+        .travel-tool-fab{border:1px solid rgba(255,255,255,.72);border-radius:999px;padding:7px 12px;background:rgba(255,255,255,.95);color:#0f172a;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 16px 32px rgba(15,23,42,.18);backdrop-filter:blur(10px);transition:all .2s ease}
+        .travel-tool-fab:hover{transform:translateY(-1px);background:#fff}
+        .travel-tool-fab.is-active{background:linear-gradient(135deg,#0f172a,#115e59);color:#fff;border-color:transparent}
         .travel-tool-card{border-radius:18px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.94);padding:9px;box-shadow:0 20px 40px rgba(15,23,42,.23);backdrop-filter:blur(12px)}
         .travel-tool-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+        .travel-tool-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .travel-tool-label{font-size:10px;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase}
+        .travel-tool-select{width:100%;margin-top:6px}
         .travel-tool-btn{border:1px solid transparent;border-radius:10px;padding:7px 10px;background:rgba(148,163,184,.14);color:#334155;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s ease}
         .travel-tool-btn:hover{background:rgba(148,163,184,.22)}
         .travel-tool-btn.is-active{background:linear-gradient(140deg,#0f172a,#1e293b);color:#fff;box-shadow:0 8px 18px rgba(15,23,42,.28)}
+        .travel-tool-btn.wide{grid-column:1 / -1}
+        .travel-tool-hint{margin-top:6px;font-size:10px;color:#64748b;text-align:center;line-height:1.35}
+        .travel-map-bearing-dragging{cursor:ew-resize}
         .travel-tool-status{border-radius:999px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.94);padding:6px 12px;font-size:11px;font-weight:700;color:#334155;box-shadow:0 14px 28px rgba(15,23,42,.18)}
         .travel-type-pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 10px;background:rgba(255,255,255,.94);font-size:11px;font-weight:700;color:#334155;box-shadow:0 10px 20px rgba(15,23,42,.16)}
-        @media (max-width: 1180px){.travel-map-left-panel{width:min(440px,calc(100% - 260px))}}
+        .travel-places-panel{width:min(280px,calc(100vw - 2rem));border-radius:18px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.95);padding:10px;box-shadow:0 20px 40px rgba(15,23,42,.23);backdrop-filter:blur(12px)}
+        .travel-places-panel h5{margin:0 0 8px;font-size:12px;font-weight:800;color:#0f172a}
+        .travel-places-list{display:flex;flex-direction:column;gap:6px}
+        .travel-places-item{display:flex;align-items:center;justify-content:space-between;border-radius:12px;background:#f8fafc;padding:8px 10px}
+        .travel-places-left{display:inline-flex;align-items:center;gap:8px}
+        .travel-places-dot{width:10px;height:10px;border-radius:999px}
+        .travel-places-name{font-size:12px;font-weight:700;color:#334155}
+        .travel-places-count{font-size:12px;font-weight:800;color:#0f172a}
+        .travel-route-panel{display:flex;flex-direction:column;gap:8px;max-height:calc(100% - 2rem);overflow-y:auto;padding-right:2px}
+        .travel-route-panel::-webkit-scrollbar{width:6px}
+        .travel-route-panel::-webkit-scrollbar-thumb{background:rgba(148,163,184,.55);border-radius:999px}
+        .travel-route-card{border-radius:18px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.95);padding:11px;box-shadow:0 20px 40px rgba(15,23,42,.23);backdrop-filter:blur(12px)}
+        .travel-route-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+        .travel-route-title{margin:0;font-size:14px;font-weight:800;color:#0f172a}
+        .travel-route-toggle{border-radius:10px;border:1px solid rgba(148,163,184,.42);padding:6px 10px;background:#fff;color:#334155;font-size:11px;font-weight:700;cursor:pointer}
+        .travel-route-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:9px}
+        .travel-route-metric{border-radius:11px;background:#f8fafc;padding:7px 9px}
+        .travel-route-metric strong{display:block;font-size:13px;color:#0f172a}
+        .travel-route-metric span{display:block;margin-top:2px;font-size:11px;color:#64748b}
+        .travel-route-meta{margin-top:8px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;color:#475569;font-size:11px;font-weight:600}
+        .travel-route-pill{border-radius:999px;background:rgba(15,23,42,.08);padding:4px 8px;font-size:10px;font-weight:700;color:#334155}
+        .travel-route-updated{margin-top:5px;font-size:10px;color:#64748b}
+        .travel-route-alt{margin-top:8px;border-radius:12px;border:1px solid rgba(226,232,240,.95);background:#f8fafc;padding:8px}
+        .travel-route-alt h5{margin:0 0 5px;font-size:11px;font-weight:700;color:#475569}
+        .travel-route-alt-list{display:flex;flex-direction:column;gap:5px}
+        .travel-route-alt-btn{display:flex;align-items:center;justify-content:space-between;border-radius:9px;border:1px solid rgba(148,163,184,.35);background:#fff;padding:6px 8px;font-size:11px;font-weight:700;color:#334155;cursor:pointer}
+        .travel-route-alt-btn.is-active{background:linear-gradient(135deg,#0f766e,#0f172a);border-color:transparent;color:#fff}
+        .travel-next-turn{border-radius:14px;border:1px solid rgba(15,118,110,.24);background:rgba(20,184,166,.12);padding:10px 11px}
+        .travel-next-turn small{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#0f766e;font-weight:700}
+        .travel-next-turn strong{display:block;margin-top:4px;font-size:13px;color:#134e4a}
+        .travel-next-turn span{display:block;margin-top:2px;font-size:11px;color:#0f766e}
+        .travel-route-steps-shell{border-radius:14px;border:1px solid rgba(255,255,255,.72);background:rgba(255,255,255,.95);padding:8px;box-shadow:0 16px 34px rgba(15,23,42,.18)}
+        .travel-route-steps-shell h5{margin:0 0 5px;font-size:11px;font-weight:800;color:#334155}
+        .travel-route-steps{max-height:240px;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
+        .travel-route-step{display:flex;align-items:flex-start;gap:8px;width:100%;border:0;background:#fff;border-radius:10px;padding:7px 8px;text-align:left;cursor:pointer}
+        .travel-route-step + .travel-route-step{margin-top:4px}
+        .travel-route-step:hover{background:#f8fafc}
+        .travel-route-step.is-active{background:#ecfeff;box-shadow:inset 0 0 0 1px rgba(20,184,166,.36)}
+        .travel-step-symbol{min-width:30px;height:22px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800}
+        .travel-route-step-copy{min-width:0;flex:1}
+        .travel-route-step-copy strong{display:block;font-size:12px;color:#1e293b;line-height:1.34}
+        .travel-route-step-copy small{display:block;margin-top:2px;font-size:11px;color:#64748b}
+        .travel-route-steps::-webkit-scrollbar{width:6px}
+        .travel-route-steps::-webkit-scrollbar-thumb{background:rgba(148,163,184,.55);border-radius:999px}
+        @media (max-width: 1280px){.travel-map-left-panel{width:min(430px,calc(100% - 380px))}}
+        @media (max-width: 1180px){.travel-map-left-panel{width:min(420px,calc(100% - 340px))}}
         @media (max-width: 980px){.travel-map-left-panel{width:min(460px,calc(100% - 2rem))}.travel-map-tools{transform:scale(.96);transform-origin:top right}}
         @media (max-width: 720px){.travel-map-left-panel{width:calc(100% - 2rem)}.travel-map-tools{display:none}}
       `}</style>
 
-      <div ref={mapContainerRef} className="h-full w-full" />
+      <div
+        ref={mapContainerRef}
+        className={`h-full w-full ${isBearingDragging ? 'travel-map-bearing-dragging' : ''}`}
+        style={{
+          transform: `rotate(${mapBearing}deg)`,
+          transformOrigin: '50% 50%',
+          transition: isBearingDragging ? 'none' : 'transform 180ms ease-out',
+        }}
+      />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-slate-900/35 via-slate-900/10 to-transparent" />
 
       <div
@@ -947,63 +1313,23 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       >
         <div className="travel-ui-card">
           <div className="travel-ui-header">
-            <div className="travel-ui-stat">{normalizedDestinations.length} places</div>
-            <button type="button" onClick={handleLocateUser} className="travel-ui-locate">Locate Me</button>
-          </div>
-
-          <div className="travel-ui-toggle">
-            <button
-              type="button"
-              onClick={() => setSearchTarget('destination')}
-              className={`travel-ui-toggle-btn ${searchTarget === 'destination' ? 'is-active' : ''}`}
-            >
-              Search Destination
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchTarget('origin')}
-              className={`travel-ui-toggle-btn ${searchTarget === 'origin' ? 'is-active' : ''}`}
-            >
-              Search Start
-            </button>
-          </div>
-
-          <div className="travel-ui-search-wrap">
-            <span className="travel-ui-search-icon">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M16 16l4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder={searchTarget === 'origin' ? 'Search starting point' : 'Search destination'}
-              className="travel-ui-search-input"
-            />
-            <span className={`travel-ui-search-state ${isSearching ? 'is-searching' : ''}`}>
-              {isSearching ? 'Searching' : 'Ready'}
-            </span>
-          </div>
-
-          {searchResults.length > 0 && (
-            <div className="travel-ui-results">
-              {searchResults.map((item) => (
-                <button
-                  key={`${item.id}-${item.lat}-${item.lng}`}
-                  type="button"
-                  onClick={() => handleSearchSelect(item)}
-                  className="travel-ui-result-item"
-                >
-                  <span className="travel-ui-result-name">{item.name || 'Location'}</span>
-                  <span className="travel-ui-result-label">{item.label}</span>
-                </button>
-              ))}
+            <div className="travel-ui-stat">
+              {`${visibleDestinations.length} places on map`}
             </div>
-          )}
+            <div className="travel-ui-header-actions">
+              <button
+                type="button"
+                onClick={() => setRoutePanelExpanded((prev) => !prev)}
+                className="travel-ui-locate"
+              >
+                {routePanelExpanded ? 'Hide Nav' : 'Show Nav'}
+              </button>
+              <button type="button" onClick={handleLocateUser} className="travel-ui-locate">Locate Me</button>
+            </div>
+          </div>
 
-          <div className="travel-ui-route-card">
+          {routePanelExpanded && (
+            <div className="travel-ui-route-card">
             <div className="travel-ui-route-head">
               <div>
                 <p className="travel-ui-route-label">Route Planner</p>
@@ -1026,82 +1352,94 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
               ))}
             </div>
 
-            <div className="travel-ui-waypoint-grid">
-              <div className="travel-ui-waypoint">
-                <strong>From</strong>
-                <span>{routeOrigin?.name || 'Map center'}</span>
+            <div className="travel-ui-field-stack">
+              <div className="travel-ui-field">
+                <label htmlFor="route-from-input">From</label>
+                <input
+                  id="route-from-input"
+                  type="text"
+                  value={fromQuery}
+                  onChange={(event) => {
+                    setFromQuery(event.target.value);
+                    setManualOrigin(null);
+                  }}
+                  placeholder="Enter starting point"
+                />
+                <span className={`travel-ui-search-state ${isSearchingFrom ? 'is-searching' : ''}`}>
+                  {isSearchingFrom ? 'Searching' : 'Ready'}
+                </span>
               </div>
-              <div className="travel-ui-waypoint">
-                <strong>To</strong>
-                <span>{routeDestination?.name || 'Select marker or search result'}</span>
+              {fromSearchResults.length > 0 && (
+                <div className="travel-ui-results compact" onWheel={(event) => event.stopPropagation()}>
+                  {fromSearchResults.map((item) => (
+                    <button
+                      key={`from-${item.id}-${item.lat}-${item.lng}`}
+                      type="button"
+                      onClick={() => handleFromSelect(item)}
+                      className="travel-ui-result-item"
+                    >
+                      <span className="travel-ui-result-name">{item.name || 'Location'}</span>
+                      <span className="travel-ui-result-label">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="travel-ui-field">
+                <label htmlFor="route-to-input">To</label>
+                <input
+                  id="route-to-input"
+                  type="text"
+                  value={toQuery}
+                  onChange={(event) => {
+                    setToQuery(event.target.value);
+                    setSearchedLocation(null);
+                    setSelectedPlace(null);
+                  }}
+                  placeholder="Enter destination"
+                />
+                <span className={`travel-ui-search-state ${isSearchingTo ? 'is-searching' : ''}`}>
+                  {isSearchingTo ? 'Searching' : 'Ready'}
+                </span>
               </div>
-            </div>
-
-            <div className="travel-ui-grid-3">
-              <button type="button" onClick={handleLocateUser} className="travel-ui-soft-btn">Use Current</button>
-              <button
-                type="button"
-                onClick={() => {
-                  setManualOrigin({
-                    name: 'Map center',
-                    lat: mapRef.current?.getCenter()?.lat ?? toNumber(center?.lat, DEFAULT_CENTER.lat),
-                    lon: mapRef.current?.getCenter()?.lng ?? toNumber(center?.lng, DEFAULT_CENTER.lng),
-                  });
-                  setNavigationStatus('Start point set to map center');
-                }}
-                className="travel-ui-soft-btn"
-              >
-                Use Center
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!hasCoords(searchedLocation)) return;
-                  setManualOrigin({ ...searchedLocation });
-                  setNavigationStatus('Start point set from searched location');
-                }}
-                disabled={!hasCoords(searchedLocation)}
-                className="travel-ui-soft-btn"
-              >
-                Use Search
-              </button>
-            </div>
-
-            <div className="travel-ui-grid-3">
-              {[
-                { key: 'recommended', label: 'Balanced' },
-                { key: 'fastest', label: 'Fastest' },
-                { key: 'shortest', label: 'Shortest' },
-              ].map((pref) => (
-                <button
-                  key={pref.key}
-                  type="button"
-                  onClick={() => setRoutePreference(pref.key)}
-                  className={`travel-ui-soft-btn ${routePreference === pref.key ? 'is-active' : ''}`}
-                >
-                  {pref.label}
-                </button>
-              ))}
+              {toSearchResults.length > 0 && (
+                <div className="travel-ui-results compact" onWheel={(event) => event.stopPropagation()}>
+                  {toSearchResults.map((item) => (
+                    <button
+                      key={`to-${item.id}-${item.lat}-${item.lng}`}
+                      type="button"
+                      onClick={() => handleToSelect(item)}
+                      className="travel-ui-result-item"
+                    >
+                      <span className="travel-ui-result-name">{item.name || 'Location'}</span>
+                      <span className="travel-ui-result-label">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="travel-ui-grid-2">
+              <button type="button" onClick={handleLocateUser} className="travel-ui-soft-btn">Use Current</button>
+              <button type="button" onClick={handleSwapRoutePoints} className="travel-ui-soft-btn">Swap</button>
+            </div>
+
+            <div className="travel-ui-grid-2">
+              <select
+                value={routePreference}
+                onChange={(event) => setRoutePreference(event.target.value)}
+                className="travel-ui-select"
+              >
+                <option value="recommended">Balanced Route</option>
+                <option value="fastest">Fastest Route</option>
+                <option value="shortest">Shortest Route</option>
+              </select>
               <button
                 type="button"
                 onClick={() => setTrafficMode((prev) => !prev)}
                 className={`travel-ui-traffic-btn ${trafficMode ? 'is-active' : ''}`}
               >
                 {trafficMode ? 'Traffic ON' : 'Traffic OFF'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!hasCoords(routeDestination)) return;
-                  calculateRoute(routeDestination, routeOrigin, { fitToRoute: false });
-                }}
-                disabled={isRouting || !hasCoords(routeDestination)}
-                className="travel-ui-soft-btn"
-              >
-                Refresh Route
               </button>
             </div>
 
@@ -1121,7 +1459,8 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
 
             {navigationStatus && <div className="travel-ui-alert info">{navigationStatus}</div>}
             {routeError && <div className="travel-ui-alert error">{routeError}</div>}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1135,84 +1474,136 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
           pointerEvents: 'auto',
         }}
       >
-        <div className="travel-tool-card">
-          <div className="travel-tool-grid">
-            <button type="button" onClick={() => setMapViewMode('2d')} className={`travel-tool-btn ${mapViewMode === '2d' ? 'is-active' : ''}`}>2D</button>
-            <button type="button" onClick={() => setMapViewMode('3d')} className={`travel-tool-btn ${mapViewMode === '3d' ? 'is-active' : ''}`}>3D</button>
-          </div>
-          <div className="travel-tool-grid" style={{ marginTop: '6px' }}>
-            {Object.entries(TILE_PRESETS).map(([key, tile]) => (
-              <button key={key} type="button" onClick={() => setActiveTile(key)} className={`travel-tool-btn ${activeTile === key ? 'is-active' : ''}`}>{tile.label}</button>
-            ))}
-          </div>
+        <div className="travel-tool-fabs">
+          <button
+            type="button"
+            onClick={() => setMapOptionsOpen((prev) => !prev)}
+            className={`travel-tool-fab ${mapOptionsOpen ? 'is-active' : ''}`}
+          >
+            Map Options
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlacesPanelOpen((prev) => !prev)}
+            className={`travel-tool-fab ${placesPanelOpen ? 'is-active' : ''}`}
+          >
+            Places
+          </button>
         </div>
+
+        {mapOptionsOpen && (
+          <div className="travel-tool-card">
+            <div className="travel-tool-row">
+              <span className="travel-tool-label">View</span>
+              <div className="travel-tool-grid" style={{ width: '160px' }}>
+                <button type="button" onClick={() => setMapViewMode('2d')} className={`travel-tool-btn ${mapViewMode === '2d' ? 'is-active' : ''}`}>2D</button>
+                <button type="button" onClick={() => setMapViewMode('3d')} className={`travel-tool-btn ${mapViewMode === '3d' ? 'is-active' : ''}`}>3D</button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '8px' }}>
+              <span className="travel-tool-label">Map Type</span>
+              <select
+                value={activeTile}
+                onChange={(event) => setActiveTile(event.target.value)}
+                className="travel-ui-select travel-tool-select"
+              >
+                {Object.entries(tilePresets).map(([key, tile]) => (
+                  <option key={key} value={key}>{tile.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="travel-tool-grid" style={{ marginTop: '8px' }}>
+              <button type="button" onClick={() => setMapBearing(0)} className="travel-tool-btn wide">Reset Bearing ({Math.round(mapBearing)}&deg;)</button>
+              <button type="button" onClick={handleLocateUser} className="travel-tool-btn wide">Locate My Position</button>
+            </div>
+            <div className="travel-tool-hint">Right-click + drag on map to rotate</div>
+          </div>
+        )}
+
         <div className="travel-tool-status">Tiles: {activeTileSource}</div>
         {tileLoadError && (
           <div style={{ maxWidth: '260px', borderRadius: '12px', border: '1px solid #facc15', background: '#fef9c3', color: '#854d0e', padding: '8px 10px', fontSize: '11px', fontWeight: 700, boxShadow: '0 12px 24px rgba(15,23,42,.14)' }}>
             {tileLoadError}
           </div>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '6px', maxWidth: '290px' }}>
-          {Object.entries(PLACE_TYPES).map(([key, item]) => (
-            <span key={key} className="travel-type-pill">{item.label}</span>
-          ))}
-        </div>
+        {placesPanelOpen && (
+          <div className="travel-places-panel">
+            <h5>Visible place types</h5>
+            <div className="travel-places-list">
+              {placeTypeSummary.length > 0 ? placeTypeSummary.map((item) => (
+                <div key={item.key} className="travel-places-item">
+                  <div className="travel-places-left">
+                    <span className="travel-places-dot" style={{ backgroundColor: item.color }} />
+                    <span className="travel-places-name">{item.label}</span>
+                  </div>
+                  <span className="travel-places-count">{item.count}</span>
+                </div>
+              )) : (
+                <div className="travel-places-item">
+                  <span className="travel-places-name">No places available</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {routeSummary && (
         <div
-          className="space-y-2"
+          className="travel-route-panel"
           style={{
             position: 'absolute',
-            bottom: '112px',
+            bottom: '16px',
             right: '16px',
             width: 'min(340px, calc(100% - 2rem))',
             zIndex: 5000,
             pointerEvents: 'auto',
           }}
         >
-          <div className="rounded-2xl border border-white/55 bg-white/95 p-3 shadow-xl backdrop-blur">
-            <div className="mb-2 flex items-center justify-between">
-              <div className="text-sm font-bold text-slate-900">Route Summary</div>
+          <div className="travel-route-card">
+            <div className="travel-route-head">
+              <h4 className="travel-route-title">Route Summary</h4>
               <button
                 type="button"
                 onClick={() => setShowInstructions((prev) => !prev)}
-                className="rounded-lg border border-slate-200 px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="travel-route-toggle"
               >
                 {showInstructions ? 'Hide Steps' : 'Show Steps'}
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg bg-slate-50 p-2">
-                <div className="font-semibold text-slate-900">{routeSummary.distanceKM} km</div>
-                <div className="text-slate-500">Distance</div>
+            <div className="travel-route-metrics">
+              <div className="travel-route-metric">
+                <strong>{routeSummary.distanceKM} km</strong>
+                <span>Distance</span>
               </div>
-              <div className="rounded-lg bg-slate-50 p-2">
-                <div className="font-semibold text-slate-900">{routeSummary.durationHM}</div>
-                <div className="text-slate-500">Duration</div>
+              <div className="travel-route-metric">
+                <strong>{routeSummary.durationHM}</strong>
+                <span>Duration</span>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600">
+            <div className="travel-route-meta">
               <span>{routeSummary.origin?.name || 'Start'} to {routeSummary.destination?.name || 'Destination'}</span>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+              <span className="travel-route-pill">
                 Engine: {routeSummary.provider === 'osrm' ? 'OSRM' : 'OpenRouteService'}
               </span>
             </div>
             {routeSummary.lastUpdatedAt && (
-              <div className="mt-1 text-[10px] text-slate-500">
+              <div className="travel-route-updated">
                 Updated {new Date(routeSummary.lastUpdatedAt).toLocaleTimeString()}
               </div>
             )}
             {routeCandidates.length > 1 && (
-              <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                <div className="mb-1 text-[11px] font-semibold text-slate-700">Select road option</div>
-                <div className="space-y-1">
+              <div className="travel-route-alt">
+                <h5>Select road option</h5>
+                <div className="travel-route-alt-list">
                   {routeCandidates.map((route, index) => (
                     <button
                       key={route.id}
                       type="button"
                       onClick={() => selectAlternativeRoute(route.id, { fitToRoute: false })}
-                      className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-[11px] font-semibold transition ${selectedRouteId === route.id ? 'bg-teal-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-100'}`}
+                      className={`travel-route-alt-btn ${selectedRouteId === route.id ? 'is-active' : ''}`}
                     >
                       <span>Road {index + 1}</span>
                       <span>{route.distanceKM} km / {route.durationHM}</span>
@@ -1224,19 +1615,17 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
           </div>
 
           {activeInstruction && (
-            <div className="rounded-2xl border border-teal-100 bg-teal-50 p-2.5 shadow-lg">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-teal-700">Next turn</div>
-              <div className="text-sm font-semibold text-teal-900">{activeInstruction.text}</div>
-              <div className="mt-0.5 text-xs text-teal-700">
-                {activeInstruction.distanceText} | {activeInstruction.durationText}
-              </div>
+            <div className="travel-next-turn">
+              <small>Next turn</small>
+              <strong>{activeInstruction.text}</strong>
+              <span>{activeInstruction.distanceText} | {activeInstruction.durationText}</span>
             </div>
           )}
 
           {showInstructions && (routeSummary.instructions || []).length > 0 && (
-            <div className="max-h-56 overflow-auto rounded-2xl border border-white/55 bg-white/95 p-2 shadow-xl backdrop-blur">
-              <div className="mb-1 px-1 text-xs font-semibold text-slate-700">Turn-by-turn</div>
-              <div className="space-y-1">
+            <div className="travel-route-steps-shell">
+              <h5>Turn-by-turn</h5>
+              <div className="travel-route-steps" onWheel={(event) => event.stopPropagation()}>
                 {(routeSummary.instructions || []).map((step, index) => {
                   const instructionMeta = getInstructionMeta(step);
                   const isActive = index === activeInstructionIndex;
@@ -1245,18 +1634,14 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
                       key={step.id}
                       type="button"
                       onClick={() => focusInstructionStep(step)}
-                      className={`flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition ${isActive ? 'bg-teal-50 ring-1 ring-teal-200' : 'hover:bg-slate-50'}`}
+                      className={`travel-route-step ${isActive ? 'is-active' : ''}`}
                     >
-                      <span className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[10px] font-bold ${instructionMeta.tone}`}>
+                      <span className="travel-step-symbol" style={{ background: instructionMeta.bg, color: instructionMeta.fg }}>
                         {instructionMeta.symbol}
                       </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="line-clamp-2 block text-[12px] font-semibold text-slate-800">
-                          {step.text}
-                        </span>
-                        <span className="mt-0.5 block text-[11px] text-slate-500">
-                          {step.distanceText} | {step.durationText}
-                        </span>
+                      <span className="travel-route-step-copy">
+                        <strong>{step.text}</strong>
+                        <small>{step.distanceText} | {step.durationText}</small>
                       </span>
                     </button>
                   );
@@ -1268,7 +1653,7 @@ const PremiumDestinationMap = ({ destinations = [], center = DEFAULT_CENTER, zoo
       )}
 
       {isLoadingMarkers && (
-        <div className="absolute inset-0 z-[950] bg-white/70 backdrop-blur-[2px] transition-opacity duration-300">
+        <div className="pointer-events-none absolute inset-0 z-[950] bg-white/70 backdrop-blur-[2px] transition-opacity duration-300">
           <div className="flex h-full w-full items-center justify-center px-4">
             <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-xl">
               <div className="mb-3 h-4 w-32 animate-pulse rounded bg-slate-200" />

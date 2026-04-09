@@ -1,853 +1,1302 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
-  Paper,
-  Typography,
-  Button,
   Chip,
-  Divider,
-  TextField,
   IconButton,
-  Tooltip,
-  Switch,
-  FormControlLabel,
-  LinearProgress,
+  Paper,
   Stack,
-  Autocomplete
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Tooltip,
+  Typography,
 } from '@mui/material';
-import PlaceIcon from '@mui/icons-material/Place';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import DownloadIcon from '@mui/icons-material/Download';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import SendIcon from '@mui/icons-material/Send';
-import MicIcon from '@mui/icons-material/Mic';
-import MicOffIcon from '@mui/icons-material/MicOff';
-import VolumeUpIcon from '@mui/icons-material/VolumeUp';
-import StopCircleIcon from '@mui/icons-material/StopCircle';
-import { requestVirtualGuideAnswer } from '../../services/virtualGuideService';
+import MicRoundedIcon from '@mui/icons-material/MicRounded';
+import MicOffRoundedIcon from '@mui/icons-material/MicOffRounded';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import VolumeUpRoundedIcon from '@mui/icons-material/VolumeUpRounded';
+import VolumeOffRoundedIcon from '@mui/icons-material/VolumeOffRounded';
+import PauseCircleRoundedIcon from '@mui/icons-material/PauseCircleRounded';
+import PlayCircleRoundedIcon from '@mui/icons-material/PlayCircleRounded';
+import LightModeRoundedIcon from '@mui/icons-material/LightModeRounded';
+import DarkModeRoundedIcon from '@mui/icons-material/DarkModeRounded';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
+import CircleIcon from '@mui/icons-material/Circle';
+import { AnimatePresence, motion } from 'framer-motion';
+import { jsPDF } from 'jspdf';
+import { streamGuideAnswer } from '../../services/guideChatService';
 
-const destinationPresets = [
-  'Goa',
-  'Jaipur',
-  'Kerala',
-  'Leh',
-  'Varanasi',
-  'Rishikesh',
-  'Udaipur',
-  'Delhi',
-  'Mumbai',
-  'Hampi',
-  'Andaman',
-  'Darjeeling'
-];
+const GREETING_MESSAGE =
+  'Hi, I am your virtual local guide. Ask me about any destination and I will help with weather, places, food, culture, and smart travel tips.';
+const GUIDE_UNAVAILABLE = 'Guide is temporarily unavailable';
+const MAX_CONTEXT_MESSAGES = 10;
+const MotionSpan = motion.span;
+const MotionDiv = motion.div;
 
-const destinationProfiles = {
-  Goa: {
-    summary: 'Beach towns, Portuguese heritage, and easygoing nightlife.',
-    bestTime: 'November to February for cooler evenings and clear skies.',
-    highlights: ['Candolim beach sunset', 'Old Goa churches', 'Assagao cafes'],
-    stayAreas: 'North Goa for energy, South Goa for quieter stays.',
-    tips: ['Pre-book scooters in peak season.', 'Carry cash for beach shacks.']
-  },
-  Jaipur: {
-    summary: 'Royal forts, pink city markets, and heritage hotels.',
-    bestTime: 'October to March for comfortable sightseeing.',
-    highlights: ['Amber Fort', 'Hawa Mahal sunrise', 'City Palace'],
-    stayAreas: 'C Scheme for hotels, old city for close access.',
-    tips: ['Start early to avoid crowds.', 'Plan one market evening.']
-  },
-  Kerala: {
-    summary: 'Backwaters, spice plantations, and wellness retreats.',
-    bestTime: 'October to March for drier weather.',
-    highlights: ['Alleppey houseboat', 'Munnar tea estates', 'Kochi heritage walk'],
-    stayAreas: 'Kochi for culture, Alleppey for backwaters, Munnar for hills.',
-    tips: ['Book houseboats one day ahead.', 'Pack light rain layers.']
-  },
-  Leh: {
-    summary: 'High-altitude passes, monasteries, and dramatic landscapes.',
-    bestTime: 'June to September for open roads.',
-    highlights: ['Khardung La', 'Pangong Lake', 'Thiksey Monastery'],
-    stayAreas: 'Leh town for convenience, Nubra for desert views.',
-    tips: ['Take a rest day to acclimatize.', 'Carry layers for night chill.']
-  },
-  Varanasi: {
-    summary: 'Sacred ghats, morning rituals, and timeless lanes.',
-    bestTime: 'October to March for mild mornings.',
-    highlights: ['Sunrise boat ride', 'Dashashwamedh aarti', 'Sarnath day trip'],
-    stayAreas: 'Near the ghats for walking access.',
-    tips: ['Morning boats need early booking.', 'Keep valuables secure in crowds.']
-  },
-  Rishikesh: {
-    summary: 'Yoga retreats, river rafting, and mountain air.',
-    bestTime: 'September to November or February to April.',
-    highlights: ['Laxman Jhula area', 'Ganga aarti', 'Rafting stretches'],
-    stayAreas: 'Tapovan for cafes, near Ram Jhula for calm stays.',
-    tips: ['Check rafting seasons in advance.', 'Avoid late-night riverside walks.']
-  }
-};
+const TypingDots = ({ color }) => (
+  <Stack direction="row" spacing={0.6} alignItems="center">
+    {[0, 1, 2].map((index) => (
+      <MotionSpan
+        key={`dot-${index}`}
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          display: 'inline-block',
+          backgroundColor: color,
+        }}
+        animate={{ opacity: [0.35, 1, 0.35], y: [0, -2, 0] }}
+        transition={{ duration: 0.9, repeat: Infinity, delay: index * 0.12 }}
+      />
+    ))}
+  </Stack>
+);
 
-const sanitizePdfText = (text) =>
-  text
-    .replace(/[^\x20-\x7E]/g, ' ')
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)');
+const formatMessageTime = (timestamp) =>
+  new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-const wrapText = (text, maxLen = 84) => {
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines = [];
-  let line = '';
-  words.forEach((word) => {
-    const candidate = line ? `${line} ${word}` : word;
-    if (candidate.length > maxLen) {
-      if (line) lines.push(line);
-      line = word;
-    } else {
-      line = candidate;
-    }
-  });
-  if (line) lines.push(line);
-  return lines;
-};
+const HEADING_REGEX = /^(#{1,6})\s+(.+)$/;
+const BULLET_REGEX = /^[-*]\s+(.+)$/;
+const NUMBERED_REGEX = /^\d+\.\s+(.+)$/;
 
-const buildPdfBlob = (title, body) => {
-  const safeTitle = sanitizePdfText(title);
-  const bodyLines = wrapText(body).map(sanitizePdfText);
-  const contentLines = [
-    'BT',
-    '/F1 18 Tf',
-    '1 0 0 1 72 740 Tm',
-    '24 TL',
-    `(${safeTitle}) Tj`,
-    'T*',
-    '/F1 12 Tf',
-  ];
-  bodyLines.forEach((line) => {
-    contentLines.push(`(${line}) Tj`);
-    contentLines.push('T*');
-  });
-  contentLines.push('ET');
-  const content = contentLines.join('\n');
+const cleanInlineMarkdown = (value = '') =>
+  String(value || '')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/^\s*>\s*/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  const objects = [];
-  objects.push('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n');
-  objects.push('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n');
-  objects.push('3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n');
-  objects.push(`4 0 obj << /Length ${content.length} >> stream\n${content}\nendstream endobj\n`);
-  objects.push('5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n');
-
-  const header = '%PDF-1.4\n';
-  let offset = header.length;
-  const offsets = [0];
-  objects.forEach((obj) => {
-    offsets.push(offset);
-    offset += obj.length;
-  });
-  const xrefOffset = offset;
-  const xrefEntries = offsets
-    .slice(1)
-    .map((off) => `${off.toString().padStart(10, '0')} 00000 n `)
-    .join('\n');
-  const xref = `xref\n0 6\n0000000000 65535 f \n${xrefEntries}\n`;
-  const trailer = `trailer << /Size 6 /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  const pdf = header + objects.join('') + xref + trailer;
-  return new Blob([pdf], { type: 'application/pdf' });
-};
-
-const buildDestinationBriefText = (destination) => {
-  const profile = destinationProfiles[destination] || {
-    summary: `${destination} is a strong choice for a balanced mix of culture, scenery, and local experiences.`,
-    bestTime: 'Look for shoulder seasons to avoid crowds and get better rates.',
-    highlights: ['Signature viewpoint', 'Local market visit', 'Day trip to nearby town'],
-    stayAreas: 'Stay near the center for convenience and easy transit.',
-    tips: ['Book key tickets ahead.', 'Plan one slow morning to reset.']
+const replaceSpecialChars = (value = '') => {
+  let text = String(value || '');
+  const replacements = {
+    '\u2018': "'",
+    '\u2019': "'",
+    '\u201c': '"',
+    '\u201d': '"',
+    '\u2013': '-',
+    '\u2014': '-',
+    '\u2026': '...',
+    '\u2022': '-',
+    '\u00b0': ' deg ',
+    '\u20b9': 'Rs ',
+    '\u00a0': ' ',
+    '\u200b': '',
+    '\u200c': '',
+    '\u200d': '',
+    '\ufeff': '',
   };
 
-  const sections = [
-    `Overview: ${profile.summary}`,
-    `Best time to visit: ${profile.bestTime}`,
-    `Top experiences: ${profile.highlights.join(', ')}.`,
-    `Where to stay: ${profile.stayAreas}`,
-    `Local tips: ${profile.tips.join(' ')}`
-  ];
-
-  return sections.join('\n\n');
+  Object.entries(replacements).forEach(([key, replacement]) => {
+    text = text.split(key).join(replacement);
+  });
+  return text;
 };
 
-const downloadBlob = (blob, filename) => {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+const collapseSpacedLetters = (value = '') =>
+  String(value || '').replace(/\b(?:[A-Za-z]\s+){3,}[A-Za-z]\b/g, (match) => match.replace(/\s+/g, ''));
+
+const toPdfSafeText = (value = '') =>
+  collapseSpacedLetters(replaceSpecialChars(value))
+    .replace(/[^\n\x20-\x7E]/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .trim();
+
+const isTableLine = (line = '') => {
+  const trimmed = line.trim();
+  return Boolean(trimmed) && trimmed.includes('|') && trimmed.split('|').length >= 3;
+};
+
+const isMarkdownTableDivider = (line = '') => {
+  const trimmed = line.trim();
+  return Boolean(trimmed) && /^[:|\s-]+$/.test(trimmed) && trimmed.includes('-');
+};
+
+const isDividerLine = (line = '') => {
+  const compact = line.replace(/\s/g, '');
+  return /^[-*_]{3,}$/.test(compact);
+};
+
+const parseTableRow = (line = '') =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cleanInlineMarkdown(cell));
+
+const parseGuideBlocks = (content = '') => {
+  const lines = String(content || '').replace(/\r/g, '').split('\n');
+  const blocks = [];
+  const isStructureLine = (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return true;
+    return (
+      HEADING_REGEX.test(trimmed) ||
+      BULLET_REGEX.test(trimmed) ||
+      NUMBERED_REGEX.test(trimmed) ||
+      isTableLine(trimmed) ||
+      isDividerLine(trimmed)
+    );
+  };
+
+  let index = 0;
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (isTableLine(trimmed)) {
+      const tableLines = [];
+      while (index < lines.length && isTableLine(lines[index].trim())) {
+        tableLines.push(lines[index].trim());
+        index += 1;
+      }
+
+      const normalizedRows = tableLines
+        .filter((line) => !isMarkdownTableDivider(line))
+        .map(parseTableRow)
+        .filter((row) => row.some(Boolean));
+
+      if (normalizedRows.length > 1) {
+        blocks.push({
+          type: 'table',
+          header: normalizedRows[0],
+          rows: normalizedRows.slice(1),
+        });
+      } else if (normalizedRows.length === 1) {
+        blocks.push({ type: 'paragraph', text: normalizedRows[0].join(' | ') });
+      }
+      continue;
+    }
+
+    const headingMatch = trimmed.match(HEADING_REGEX);
+    if (headingMatch) {
+      blocks.push({
+        type: 'heading',
+        level: headingMatch[1].length,
+        text: cleanInlineMarkdown(headingMatch[2]),
+      });
+      index += 1;
+      continue;
+    }
+
+    if (isDividerLine(trimmed)) {
+      blocks.push({ type: 'divider' });
+      index += 1;
+      continue;
+    }
+
+    const bulletMatch = trimmed.match(BULLET_REGEX);
+    const numberedMatch = trimmed.match(NUMBERED_REGEX);
+    if (bulletMatch || numberedMatch) {
+      const ordered = Boolean(numberedMatch);
+      const items = [];
+
+      while (index < lines.length) {
+        const listLine = lines[index].trim();
+        if (!listLine) {
+          index += 1;
+          continue;
+        }
+
+        const currentMatch = ordered ? listLine.match(NUMBERED_REGEX) : listLine.match(BULLET_REGEX);
+        if (currentMatch) {
+          items.push(cleanInlineMarkdown(currentMatch[1]));
+          index += 1;
+          continue;
+        }
+
+        if (items.length && !isStructureLine(listLine)) {
+          items[items.length - 1] = `${items[items.length - 1]} ${cleanInlineMarkdown(listLine)}`.trim();
+          index += 1;
+          continue;
+        }
+        break;
+      }
+
+      if (items.length) {
+        blocks.push({ type: 'list', ordered, items });
+      }
+      continue;
+    }
+
+    let paragraph = cleanInlineMarkdown(trimmed);
+    index += 1;
+
+    while (index < lines.length) {
+      const nextLine = lines[index].trim();
+      if (!nextLine || isStructureLine(nextLine)) break;
+      paragraph = `${paragraph} ${cleanInlineMarkdown(nextLine)}`.trim();
+      index += 1;
+    }
+
+    if (paragraph) {
+      blocks.push({ type: 'paragraph', text: paragraph });
+    }
+  }
+
+  return blocks;
+};
+
+const buildGuideTextForPdf = (content = '') => {
+  const blocks = parseGuideBlocks(content);
+  if (!blocks.length) return toPdfSafeText(cleanInlineMarkdown(content));
+
+  const normalizedText = blocks
+    .map((block) => {
+      if (block.type === 'heading') return block.text;
+      if (block.type === 'paragraph') return block.text;
+      if (block.type === 'divider') return '--------------------------------------------------';
+      if (block.type === 'list') {
+        return block.items
+          .map((item, idx) => `${block.ordered ? `${idx + 1}.` : '-'} ${item}`)
+          .join('\n');
+      }
+      if (block.type === 'table') {
+        const headerLine = block.header.join(' | ');
+        const rowLines = block.rows.map((row) =>
+          block.header.map((_, index) => row[index] || '-').join(' | ')
+        );
+        return [headerLine, ...rowLines].join('\n');
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n\n');
+
+  return toPdfSafeText(normalizedText);
+};
+
+const buildGuideTextForSpeech = (content = '') => {
+  const blocks = parseGuideBlocks(content);
+  const rawText = blocks.length
+    ? blocks
+        .map((block) => {
+          if (block.type === 'heading') return `${block.text}.`;
+          if (block.type === 'paragraph') return block.text;
+          if (block.type === 'divider') return '';
+          if (block.type === 'list') return block.items.map((item) => `- ${item}`).join('. ');
+          if (block.type === 'table') {
+            return block.rows
+              .map((row) =>
+                block.header
+                  .map((headerCell, index) => `${headerCell}: ${row[index] || '-'}`)
+                  .join('. ')
+              )
+              .join('. ');
+          }
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n')
+    : cleanInlineMarkdown(content);
+
+  return replaceSpecialChars(rawText)
+    .replace(/\s+/g, ' ')
+    .replace(/[-]{2,}/g, '. ')
+    .trim();
+};
+
+const splitSpeechIntoChunks = (text = '', maxLength = 210) => {
+  const normalized = String(text || '').trim();
+  if (!normalized) return [];
+
+  const sentences = normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const chunks = [];
+  let current = '';
+
+  const pushCurrent = () => {
+    if (current.trim()) {
+      chunks.push(current.trim());
+      current = '';
+    }
+  };
+
+  sentences.forEach((sentence) => {
+    if (sentence.length > maxLength) {
+      pushCurrent();
+      const words = sentence.split(/\s+/);
+      let longChunk = '';
+      words.forEach((word) => {
+        const candidate = longChunk ? `${longChunk} ${word}` : word;
+        if (candidate.length > maxLength) {
+          if (longChunk) chunks.push(longChunk.trim());
+          longChunk = word;
+        } else {
+          longChunk = candidate;
+        }
+      });
+      if (longChunk.trim()) chunks.push(longChunk.trim());
+      return;
+    }
+
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (candidate.length > maxLength) {
+      pushCurrent();
+      current = sentence;
+    } else {
+      current = candidate;
+    }
+  });
+
+  pushCurrent();
+  return chunks;
+};
+
+const pickBestVoice = (voices = []) => {
+  if (!Array.isArray(voices) || !voices.length) return null;
+  const englishVoices = voices.filter((voice) =>
+    String(voice?.lang || '').toLowerCase().startsWith('en')
+  );
+  const pool = englishVoices.length ? englishVoices : voices;
+
+  const scoreVoice = (voice) => {
+    const name = String(voice?.name || '').toLowerCase();
+    let score = 0;
+    if (name.includes('neural')) score += 4;
+    if (name.includes('natural')) score += 4;
+    if (name.includes('google')) score += 3;
+    if (name.includes('microsoft')) score += 3;
+    if (name.includes('female')) score += 2;
+    if (voice?.default) score += 1;
+    return score;
+  };
+
+  return pool.reduce((best, current) => (scoreVoice(current) > scoreVoice(best) ? current : best), pool[0]);
+};
+
+const FormattedGuideMessage = ({ content, palette, isError }) => {
+  const blocks = useMemo(() => parseGuideBlocks(content), [content]);
+  if (isError) {
+    return (
+      <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.5, fontWeight: 600, color: '#ef4444' }}>
+        {content}
+      </Typography>
+    );
+  }
+
+  if (!blocks.length) {
+    return (
+      <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.5, fontWeight: 500, whiteSpace: 'pre-wrap' }}>
+        {cleanInlineMarkdown(content)}
+      </Typography>
+    );
+  }
+
+  return (
+    <Stack spacing={1}>
+      {blocks.map((block, blockIndex) => {
+        const key = `${block.type}-${blockIndex}`;
+
+        if (block.type === 'heading') {
+          const fontSize =
+            block.level <= 1 ? '1.05rem' : block.level === 2 ? '1rem' : '0.95rem';
+          return (
+            <Typography key={key} sx={{ fontWeight: 800, fontSize }}>
+              {block.text}
+            </Typography>
+          );
+        }
+
+        if (block.type === 'paragraph') {
+          return (
+            <Typography key={key} sx={{ fontSize: '0.95rem', lineHeight: 1.55, fontWeight: 500 }}>
+              {block.text}
+            </Typography>
+          );
+        }
+
+        if (block.type === 'divider') {
+          return (
+            <Box
+              key={key}
+              sx={{
+                height: 1,
+                backgroundColor: palette.assistantBorder,
+                my: 0.4,
+              }}
+            />
+          );
+        }
+
+        if (block.type === 'list') {
+          return (
+            <Box
+              key={key}
+              component={block.ordered ? 'ol' : 'ul'}
+              sx={{ m: 0, pl: 2.5, '& li': { mb: 0.45, lineHeight: 1.5 } }}
+            >
+              {block.items.map((item, itemIndex) => (
+                <li key={`${key}-item-${itemIndex}`}>
+                  <Typography component="span" sx={{ fontSize: '0.94rem', fontWeight: 500 }}>
+                    {item}
+                  </Typography>
+                </li>
+              ))}
+            </Box>
+          );
+        }
+
+        if (block.type === 'table') {
+          return (
+            <TableContainer
+              key={key}
+              sx={{
+                borderRadius: '12px',
+                border: `1px solid ${palette.assistantBorder}`,
+                overflow: 'hidden',
+                backgroundColor: 'rgba(148, 163, 184, 0.08)',
+              }}
+            >
+              <Table size="small" aria-label="Guide response table">
+                <TableHead>
+                  <TableRow>
+                    {block.header.map((cell, cellIndex) => (
+                      <TableCell
+                        key={`${key}-head-${cellIndex}`}
+                        sx={{
+                          fontWeight: 800,
+                          color: palette.textPrimary,
+                          backgroundColor: 'rgba(148, 163, 184, 0.12)',
+                          borderBottom: `1px solid ${palette.assistantBorder}`,
+                        }}
+                      >
+                        {cell || '-'}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {block.rows.map((row, rowIndex) => (
+                    <TableRow key={`${key}-row-${rowIndex}`}>
+                      {block.header.map((_, columnIndex) => (
+                        <TableCell
+                          key={`${key}-row-${rowIndex}-col-${columnIndex}`}
+                          sx={{ color: palette.textPrimary, verticalAlign: 'top', fontWeight: 500 }}
+                        >
+                          {row[columnIndex] || '-'}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          );
+        }
+
+        return null;
+      })}
+    </Stack>
+  );
 };
 
 export default function VirtualGuide() {
-  const [destination, setDestination] = useState(destinationPresets[0]);
-  const [question, setQuestion] = useState('');
-  const [messages, setMessages] = useState(() => [
+  const [isDark, setIsDark] = useState(false);
+  const [messages, setMessages] = useState([
     {
-      id: 'welcome',
+      id: 'guide-greeting',
       role: 'assistant',
-      text: 'Welcome. Pick a destination and ask your question.'
-    }
+      content: GREETING_MESSAGE,
+      createdAt: Date.now(),
+    },
   ]);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [modeBadge, setModeBadge] = useState('preview');
+  const [draft, setDraft] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [audioEnabled, setAudioEnabled] = useState(true);
-  const [uploadedDocs, setUploadedDocs] = useState([]);
-  const [listening, setListening] = useState(false);
+  const [showTyping, setShowTyping] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [modelInfo, setModelInfo] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [selectedVoiceName, setSelectedVoiceName] = useState('Auto');
+
+  const messagesEndRef = useRef(null);
   const recognitionRef = useRef(null);
   const speechRef = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
-  const streamTimerRef = useRef(null);
-  const messagesEndRef = useRef(null);
+  const speechVoiceRef = useRef(null);
+  const speechGenerationRef = useRef(0);
+  const sendDebounceRef = useRef(null);
+  const streamAbortRef = useRef(null);
 
-  const modelOptions = useMemo(() => {
-    const raw = import.meta.env.VITE_VIRTUAL_GUIDE_MODELS || '';
-    const list = raw.split(',').map((item) => item.trim()).filter(Boolean);
-    return list.length ? list : ['demo'];
-  }, []);
+  const palette = useMemo(
+    () =>
+      isDark
+        ? {
+            pageBg: 'linear-gradient(145deg, #0f172a 0%, #111827 100%)',
+            shell: 'rgba(15, 23, 42, 0.86)',
+            shellBorder: 'rgba(148, 163, 184, 0.22)',
+            textPrimary: '#e2e8f0',
+            textSecondary: '#94a3b8',
+            assistantBubble: 'rgba(30, 41, 59, 0.82)',
+            assistantBorder: 'rgba(148, 163, 184, 0.22)',
+            userBubble: 'linear-gradient(135deg, #0ea5a4, #14b8a6)',
+            inputBg: 'rgba(15, 23, 42, 0.72)',
+            inputBorder: 'rgba(148, 163, 184, 0.28)',
+            typingDot: '#cbd5e1',
+          }
+        : {
+            pageBg: 'linear-gradient(145deg, #e0f2fe 0%, #f8fafc 35%, #dbeafe 100%)',
+            shell: 'rgba(255, 255, 255, 0.86)',
+            shellBorder: 'rgba(15, 23, 42, 0.1)',
+            textPrimary: '#0f172a',
+            textSecondary: '#475569',
+            assistantBubble: 'rgba(255, 255, 255, 0.92)',
+            assistantBorder: 'rgba(148, 163, 184, 0.28)',
+            userBubble: 'linear-gradient(135deg, #0f766e, #0ea5a4)',
+            inputBg: 'rgba(255, 255, 255, 0.82)',
+            inputBorder: 'rgba(100, 116, 139, 0.28)',
+            typingDot: '#334155',
+          },
+    [isDark]
+  );
 
-  const initialModel = useMemo(() => {
-    const envDefault = import.meta.env.VITE_VIRTUAL_GUIDE_DEFAULT_MODEL;
-    if (envDefault && modelOptions.includes(envDefault)) return envDefault;
-    return modelOptions[0] || 'demo';
-  }, [modelOptions]);
-
-  const [selectedModel] = useState(initialModel);
-  const isDemoModel = selectedModel === 'demo';
-
-  useEffect(() => {
-    const SpeechRecognition =
-      typeof window !== 'undefined' &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setQuestion((prev) => (prev ? `${prev} ${transcript}` : transcript));
-    };
-    recognition.onerror = () => {
-      setStatusMessage('Microphone error. Check browser permissions.');
-      setListening(false);
-    };
-    recognition.onend = () => setListening(false);
-    recognitionRef.current = recognition;
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
-      if (speechRef.current) speechRef.current.cancel();
-    };
-  }, []);
+  const latestAssistantMessage = useMemo(
+    () => [...messages].reverse().find((msg) => msg.role === 'assistant' && msg.content && !msg.isError),
+    [messages]
+  );
+  const latestDownloadableMessage = useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find(
+          (msg) =>
+            msg.role === 'assistant' &&
+            msg.content &&
+            !msg.isError &&
+            msg.id !== 'guide-greeting'
+        ),
+    [messages]
+  );
+  const modelStatusLabel = useMemo(() => {
+    if (isStreaming) return 'Model: Auto routing...';
+    if (modelInfo?.provider && modelInfo?.model) {
+      return `Auto: ${String(modelInfo.provider).toUpperCase()} | ${modelInfo.model}`;
+    }
+    return 'Model: Auto (OpenAI -> OpenRouter -> Groq)';
+  }, [isStreaming, modelInfo]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, [messages, isStreaming]);
+  }, [messages, showTyping]);
 
   useEffect(() => {
-    if (!audioEnabled) {
-      if (speechRef.current) speechRef.current.cancel();
-    }
-  }, [audioEnabled]);
+    const SpeechRecognition =
+      typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SpeechRecognition) return undefined;
 
-  const handleDocUpload = (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    setUploadedDocs((prev) => [...prev, ...files]);
-    event.target.value = '';
-  };
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
 
-  const removeDoc = (index) => {
-    setUploadedDocs((prev) => prev.filter((_, idx) => idx !== index));
-  };
+    recognition.onresult = (event) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript || '';
+      if (!transcript) return;
+      setDraft((prev) => (prev ? `${prev} ${transcript}` : transcript));
+    };
 
-  const speakText = (text) => {
-    if (!audioEnabled || !speechRef.current) return;
-    if (!text) return;
-    speechRef.current.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.volume = 0.8;
-    speechRef.current.speak(utterance);
-  };
+    recognition.onerror = () => {
+      setErrorMessage(GUIDE_UNAVAILABLE);
+      setIsListening(false);
+    };
 
-  const stopAudio = () => {
-    if (speechRef.current) speechRef.current.cancel();
-  };
+    recognition.onend = () => {
+      setIsListening(false);
+    };
 
-  const startStreaming = (messageId, fullText, meta = {}) => {
-    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
-    const words = fullText.split(' ');
-    let idx = 0;
-    setIsStreaming(true);
-    streamTimerRef.current = setInterval(() => {
-      idx += 1;
-      const chunk = words.slice(0, idx).join(' ');
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId
-            ? { ...msg, text: chunk, meta: { ...msg.meta, ...meta } }
-            : msg
-        )
-      );
-      if (idx >= words.length) {
-        clearInterval(streamTimerRef.current);
-        streamTimerRef.current = null;
-        setIsStreaming(false);
-        speakText(fullText);
+    recognitionRef.current = recognition;
+    return () => {
+      recognition.stop();
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const synth = speechRef.current;
+    if (!synth) return undefined;
+
+    const applyBestVoice = () => {
+      const voices = synth.getVoices?.() || [];
+      const bestVoice = pickBestVoice(voices);
+      if (bestVoice) {
+        speechVoiceRef.current = bestVoice;
+        setSelectedVoiceName(bestVoice.name || 'Auto');
       }
-    }, 28);
+    };
+
+    applyBestVoice();
+    synth.onvoiceschanged = applyBestVoice;
+
+    return () => {
+      if (synth.onvoiceschanged === applyBestVoice) {
+        synth.onvoiceschanged = null;
+      }
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (sendDebounceRef.current) clearTimeout(sendDebounceRef.current);
+      if (streamAbortRef.current) streamAbortRef.current.abort();
+      if (speechRef.current) {
+        speechGenerationRef.current += 1;
+        speechRef.current.cancel();
+      }
+    },
+    []
+  );
+
+  const speakMessage = (text) => {
+    if (!text || isMuted || !speechRef.current) return;
+    const synth = speechRef.current;
+    const speechText = buildGuideTextForSpeech(text);
+    const chunks = splitSpeechIntoChunks(speechText, 220);
+    if (!chunks.length) return;
+
+    speechGenerationRef.current += 1;
+    const generationId = speechGenerationRef.current;
+    synth.cancel();
+    setIsPaused(false);
+
+    const speakChunk = (index) => {
+      if (generationId !== speechGenerationRef.current) return;
+      if (index >= chunks.length) {
+        setIsSpeaking(false);
+        setIsPaused(false);
+        return;
+      }
+
+      const utterance = new SpeechSynthesisUtterance(chunks[index]);
+      if (speechVoiceRef.current) {
+        utterance.voice = speechVoiceRef.current;
+      }
+      utterance.rate = 0.98;
+      utterance.pitch = 1.02;
+      utterance.volume = 1;
+
+      utterance.onstart = () => {
+        if (generationId !== speechGenerationRef.current) return;
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        if (generationId !== speechGenerationRef.current) return;
+        if (synth.paused) return;
+        speakChunk(index + 1);
+      };
+
+      utterance.onerror = () => {
+        if (generationId !== speechGenerationRef.current) return;
+        setIsSpeaking(false);
+        setIsPaused(false);
+      };
+
+      synth.speak(utterance);
+    };
+
+    speakChunk(0);
   };
 
-  const handleAsk = async () => {
-    const trimmed = question.trim();
-    if (!trimmed) return;
-    const userMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      text: trimmed
+  const togglePauseSpeech = () => {
+    if (!speechRef.current) return;
+    if (speechRef.current.speaking && !speechRef.current.paused) {
+      speechRef.current.pause();
+      setIsPaused(true);
+      return;
+    }
+    if (speechRef.current.paused) {
+      speechRef.current.resume();
+      setIsPaused(false);
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (next && speechRef.current) {
+        speechGenerationRef.current += 1;
+        speechRef.current.cancel();
+        setIsSpeaking(false);
+        setIsPaused(false);
+      }
+      return next;
+    });
+  };
+
+  const downloadLatestGuidePdf = () => {
+    const sourceText = latestDownloadableMessage?.content || '';
+    if (!sourceText.trim()) return;
+
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const marginX = 42;
+    const bottomMargin = 46;
+    const lineHeight = 15;
+    let cursorY = 56;
+    const blocks = parseGuideBlocks(sourceText);
+
+    const writeWrappedText = (text, options = {}) => {
+      const safeText = toPdfSafeText(text);
+      if (!safeText) return;
+      const {
+        font = 'helvetica',
+        style = 'normal',
+        size = 11,
+        color = [15, 23, 42],
+        spacingAfter = 8,
+        indent = 0,
+      } = options;
+
+      pdf.setFont(font, style);
+      pdf.setFontSize(size);
+      pdf.setTextColor(color[0], color[1], color[2]);
+      const wrapped = pdf.splitTextToSize(safeText, pageWidth - marginX * 2 - indent);
+      wrapped.forEach((line) => {
+        if (cursorY > pageHeight - bottomMargin) {
+          pdf.addPage();
+          cursorY = 56;
+          pdf.setDrawColor(226, 232, 240);
+          pdf.line(marginX, 42, pageWidth - marginX, 42);
+        }
+        pdf.text(line, marginX + indent, cursorY);
+        cursorY += lineHeight;
+      });
+      cursorY += spacingAfter;
     };
 
-    const assistantId = `assistant-${Date.now()}`;
-    const assistantMessage = {
-      id: assistantId,
-      role: 'assistant',
-      text: 'Preparing response...'
-    };
+    pdf.setFillColor(15, 118, 110);
+    pdf.roundedRect(marginX, 24, 12, 12, 2, 2, 'F');
+    writeWrappedText('Virtual Guide Brief', { style: 'bold', size: 20, spacingAfter: 4 });
+    writeWrappedText(`Generated on ${new Date().toLocaleString()}`, {
+      size: 10,
+      color: [71, 85, 105],
+      spacingAfter: 12,
+    });
+    pdf.setDrawColor(226, 232, 240);
+    pdf.line(marginX, cursorY - 4, pageWidth - marginX, cursorY - 4);
+    cursorY += 6;
+
+    if (!blocks.length) {
+      writeWrappedText(buildGuideTextForPdf(sourceText), { size: 11, spacingAfter: 0 });
+    } else {
+      blocks.forEach((block) => {
+        if (block.type === 'heading') {
+          writeWrappedText(block.text, {
+            style: 'bold',
+            size: block.level <= 2 ? 14 : 12,
+            spacingAfter: 6,
+          });
+          return;
+        }
+
+        if (block.type === 'paragraph') {
+          writeWrappedText(block.text, { size: 11, spacingAfter: 8 });
+          return;
+        }
+
+        if (block.type === 'divider') {
+          pdf.setDrawColor(226, 232, 240);
+          pdf.line(marginX, cursorY - 2, pageWidth - marginX, cursorY - 2);
+          cursorY += 8;
+          return;
+        }
+
+        if (block.type === 'list') {
+          block.items.forEach((item, itemIndex) => {
+            const prefix = block.ordered ? `${itemIndex + 1}. ` : '- ';
+            writeWrappedText(`${prefix}${item}`, { size: 11, spacingAfter: 3, indent: 8 });
+          });
+          cursorY += 4;
+          return;
+        }
+
+        if (block.type === 'table') {
+          block.rows.forEach((row) => {
+            const rowText = block.header
+              .map((headerCell, index) => `${headerCell}: ${row[index] || '-'}`)
+              .join(' | ');
+            writeWrappedText(rowText, { size: 10.5, spacingAfter: 4, indent: 8 });
+          });
+          cursorY += 4;
+        }
+      });
+    }
+
+    const fileStamp = new Date().toISOString().replace(/[:.]/g, '-');
+    pdf.save(`virtual-guide-${fileStamp}.pdf`);
+  };
+
+  const toggleMic = () => {
+    if (!recognitionRef.current) {
+      setErrorMessage(GUIDE_UNAVAILABLE);
+      return;
+    }
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+      return;
+    }
+    recognitionRef.current.start();
+    setIsListening(true);
+    setErrorMessage('');
+  };
+
+  const sendMessage = async () => {
+    const query = draft.trim();
+    if (!query || isStreaming) return;
+
+    setErrorMessage('');
+    setDraft('');
+    setShowTyping(true);
+    setIsStreaming(true);
+    setModelInfo(null);
+
+    const now = Date.now();
+    const userMessage = { id: `user-${now}`, role: 'user', content: query, createdAt: now };
+    const assistantId = `assistant-${now + 1}`;
+    const assistantMessage = { id: assistantId, role: 'assistant', content: '', createdAt: now + 1 };
+
+    const contextHistory = [...messages, userMessage]
+      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+      .slice(-MAX_CONTEXT_MESSAGES)
+      .map((msg) => ({ role: msg.role, content: msg.content }));
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
-    setQuestion('');
-    setStatusMessage('');
 
-    if (isDemoModel) {
-      setStatusMessage('Preview mode is active. Add API keys later for live answers.');
-      setModeBadge('preview');
-    }
+    if (streamAbortRef.current) streamAbortRef.current.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
 
-    const startTime = Date.now();
-    const response = await requestVirtualGuideAnswer({
-      question: trimmed,
-      destination,
-      model: isDemoModel ? '' : selectedModel,
-      attachments: uploadedDocs.map((file) => ({ name: file.name, size: file.size }))
-    });
+    let streamError = '';
+    let assistantText = '';
+    let receivedToken = false;
 
-    if (!response || !response.answer) {
+    try {
+      await streamGuideAnswer({
+        query,
+        history: contextHistory,
+        signal: controller.signal,
+        onEvent: ({ event, data }) => {
+          if (event === 'token') {
+            const token = typeof data === 'string' ? data : data?.token || '';
+            if (!token) return;
+            receivedToken = true;
+            assistantText += token;
+            setShowTyping(false);
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId ? { ...msg, content: `${msg.content}${token}` } : msg
+              )
+            );
+            return;
+          }
+
+          if (event === 'error') {
+            streamError = typeof data === 'string' ? data : data?.message || GUIDE_UNAVAILABLE;
+            return;
+          }
+
+          if (event === 'done') {
+            const doneMeta = typeof data === 'string' ? null : data;
+            if (doneMeta) {
+              setModelInfo(doneMeta);
+            }
+          }
+        },
+      });
+
+      if (streamError || !receivedToken || !assistantText.trim()) {
+        throw new Error(streamError || GUIDE_UNAVAILABLE);
+      }
+
+      speakMessage(assistantText);
+    } catch {
+      if (controller.signal.aborted) return;
+      setErrorMessage(GUIDE_UNAVAILABLE);
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantId
-            ? { ...msg, text: 'Response unavailable right now. Please try again.' }
-            : msg
+          msg.id === assistantId ? { ...msg, content: GUIDE_UNAVAILABLE, isError: true } : msg
         )
       );
-      setStatusMessage('No response yet. Check backend status and API keys.');
-      setModeBadge('issue');
-      return;
-    }
-
-    const latency = Date.now() - startTime;
-    const resolvedMode = response.mode === 'preview' ? 'preview' : 'live';
-    setModeBadge(resolvedMode);
-    if (resolvedMode === 'preview') {
-      setStatusMessage('Preview answer shown because a live model is not connected yet.');
-    } else {
-      setStatusMessage('');
-    }
-    const sourceLabel = response.mode === 'preview' ? 'Preview' : (response.mode || 'Live');
-    startStreaming(assistantId, response.answer, { latency, sourceLabel });
-  };
-
-  const handleQuickPrompt = (prompt) => {
-    setQuestion(prompt);
-  };
-
-  const handleCopyLatest = () => {
-    const latest = [...messages].reverse().find((msg) => msg.role === 'assistant');
-    if (!latest?.text) return;
-    navigator.clipboard.writeText(latest.text);
-    setStatusMessage('Answer copied to clipboard.');
-  };
-
-  const handleDownloadLatest = () => {
-    const latest = [...messages].reverse().find((msg) => msg.role === 'assistant');
-    if (!latest?.text) return;
-    const safeDestination = destination || 'destination';
-    const blob = buildPdfBlob(`${safeDestination} answer brief`, latest.text);
-    downloadBlob(blob, `${safeDestination.toLowerCase().replace(/\s+/g, '-')}-answer-brief.pdf`);
-  };
-
-  const handleDownloadDestinationBrief = () => {
-    const safeDestination = destination || 'destination';
-    const body = buildDestinationBriefText(safeDestination);
-    const blob = buildPdfBlob(`${safeDestination} destination brief`, body);
-    downloadBlob(blob, `${safeDestination.toLowerCase().replace(/\s+/g, '-')}-destination-brief.pdf`);
-  };
-
-  const handleMicToggle = () => {
-    if (!recognitionRef.current) {
-      setStatusMessage('Voice input is not supported in this browser.');
-      return;
-    }
-    if (listening) {
-      recognitionRef.current.stop();
-      setListening(false);
-      if (statusMessage === 'Listening...') {
-        setStatusMessage('');
+    } finally {
+      setShowTyping(false);
+      setIsStreaming(false);
+      if (streamAbortRef.current === controller) {
+        streamAbortRef.current = null;
       }
-    } else {
-      recognitionRef.current.start();
-      setListening(true);
-      setStatusMessage('Listening...');
     }
   };
 
-  const promptDestination = destination || 'your destination';
-  const quickPrompts = [
-    `Build a 3 day itinerary for ${promptDestination}.`,
-    `Where should I stay in ${promptDestination} for first timers?`,
-    `Top local experiences and dining in ${promptDestination}.`
-  ];
-
-  const modeBadgeLabel =
-    modeBadge === 'live' ? 'Live' : modeBadge === 'issue' ? 'Check setup' : 'Preview';
-  const modeBadgeColor =
-    modeBadge === 'live' ? 'success' : modeBadge === 'issue' ? 'warning' : 'default';
-
-  const destinationProfile = destinationProfiles[destination];
-  const destinationSummary = destinationProfile?.summary
-    || `${promptDestination} blends culture, food, and local experiences in one easy trip.`;
-  const destinationBestTime = destinationProfile?.bestTime
-    || 'Plan around shoulder seasons for comfortable weather and value.';
-  const destinationHighlights = destinationProfile?.highlights || [
-    'Signature landmark',
-    'Local market walk',
-    'Sunset viewpoint'
-  ];
+  const queueSend = () => {
+    if (sendDebounceRef.current) clearTimeout(sendDebounceRef.current);
+    sendDebounceRef.current = setTimeout(() => {
+      sendMessage();
+    }, 140);
+  };
 
   return (
     <Box
       sx={{
+        minHeight: { xs: 'calc(100vh - 120px)', md: 'calc(100vh - 170px)' },
+        background: palette.pageBg,
+        borderRadius: '28px',
+        p: { xs: 1.5, sm: 2.5 },
         display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-        height: { xs: 'auto', md: 'calc(100vh - 220px)' },
-        minHeight: 0,
-        position: 'relative',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: -40,
-          right: -60,
-          width: 220,
-          height: 220,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(14,116,144,0.16), transparent 65%)',
-          pointerEvents: 'none'
-        },
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          bottom: -60,
-          left: -40,
-          width: 260,
-          height: 260,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(15,118,110,0.14), transparent 65%)',
-          pointerEvents: 'none'
-        }
       }}
     >
       <Paper
         elevation={0}
         sx={{
-          borderRadius: '26px',
-          p: { xs: 2.5, md: 3.5 },
-          bgcolor: 'rgba(255,255,255,0.9)',
-          border: '1px solid rgba(148,163,184,0.2)',
-          boxShadow: '0 20px 45px rgba(15, 23, 42, 0.12)',
-          backdropFilter: 'blur(14px)'
+          width: '100%',
+          borderRadius: '24px',
+          p: { xs: 1.2, sm: 1.8 },
+          background: palette.shell,
+          border: `1px solid ${palette.shellBorder}`,
+          boxShadow: isDark
+            ? '0 20px 45px rgba(2, 6, 23, 0.45)'
+            : '0 20px 45px rgba(15, 23, 42, 0.13)',
+          backdropFilter: 'blur(14px)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.2,
         }}
       >
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={3}
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          justifyContent="space-between"
-        >
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between">
           <Box>
-            <Typography variant="overline" sx={{ letterSpacing: '0.18em', color: '#0f766e' }}>
+            <Typography sx={{ color: palette.textPrimary, fontWeight: 800, fontSize: '1.3rem' }}>
               Virtual Guide
             </Typography>
-            <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.4px', mb: 1 }}>
-              Plan India like a local.
-            </Typography>
-            <Typography color="text.secondary" sx={{ maxWidth: 560 }}>
-              Instant answers, destination briefs, and voice responses for every trip style.
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap' }}>
-              <Chip label={`Destination: ${destination || 'Choose one'}`} size="small" />
-              <Chip label={modeBadgeLabel} size="small" color={modeBadgeColor} />
-            </Stack>
-          </Box>
-          <Box
-            sx={{
-              minWidth: 220,
-              borderRadius: '18px',
-              p: 2,
-              bgcolor: 'rgba(15,118,110,0.08)',
-              border: '1px solid rgba(15,118,110,0.2)'
-            }}
-          >
-            <Typography variant="caption" sx={{ display: 'block', color: '#0f766e', fontWeight: 700 }}>
-              Travel Snapshot
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5, color: '#0f172a' }}>
-              {destinationSummary}
-            </Typography>
-          </Box>
-        </Stack>
-      </Paper>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: '360px minmax(0, 1fr)' },
-          gap: 2,
-          flex: 1,
-          minHeight: 0
-        }}
-      >
-        <Paper
-          elevation={0}
-          sx={{
-            borderRadius: '24px',
-            p: 2.5,
-            bgcolor: '#ffffff',
-            border: '1px solid rgba(148,163,184,0.2)',
-            boxShadow: '0 16px 35px rgba(15, 23, 42, 0.08)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            minHeight: 0
-          }}
-        >
-          <Box>
-            <Typography variant="subtitle1" fontWeight={700}>
-              Trip setup
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Set the destination and what you need from the guide.
-            </Typography>
-          </Box>
-
-          <Autocomplete
-            freeSolo
-            options={destinationPresets}
-            value={destination}
-            onInputChange={(_, newValue) => setDestination(newValue || '')}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Destination"
-                placeholder="Type a destination"
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+              <CircleIcon sx={{ color: '#22c55e', fontSize: 11 }} />
+              <Typography sx={{ color: palette.textSecondary, fontSize: '0.86rem', fontWeight: 600 }}>
+                AI Live
+              </Typography>
+              <Chip
                 size="small"
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: (
-                    <>
-                      <PlaceIcon sx={{ mr: 1, color: '#0f766e' }} />
-                      {params.InputProps.startAdornment}
-                    </>
-                  )
+                label={modelStatusLabel}
+                sx={{
+                  height: 24,
+                  fontWeight: 700,
+                  borderRadius: '10px',
+                  color: palette.textSecondary,
+                  border: `1px solid ${palette.inputBorder}`,
+                  backgroundColor: isDark ? 'rgba(30,41,59,0.55)' : 'rgba(255,255,255,0.72)',
                 }}
-                sx={{ minWidth: 220 }}
               />
-            )}
-          />
-
-          <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-            <FormControlLabel
-              control={<Switch checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />}
-              label="Audio answers"
-            />
-            <Chip label={audioEnabled ? 'Audio on' : 'Audio off'} size="small" variant="outlined" />
-          </Stack>
-
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={handleDownloadDestinationBrief}
-              sx={{ textTransform: 'none' }}
-            >
-              Destination brief
-            </Button>
-            <Button
-              variant="outlined"
-              component="label"
-              startIcon={<CloudUploadIcon />}
-              sx={{ textTransform: 'none' }}
-            >
-              Attach PDFs
-              <input type="file" hidden accept="application/pdf" multiple onChange={handleDocUpload} />
-            </Button>
-          </Stack>
-
-          {uploadedDocs.length > 0 && (
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {uploadedDocs.map((doc, idx) => (
-                <Chip
-                  key={`${doc.name}-${idx}`}
-                  label={doc.name}
-                  onDelete={() => removeDoc(idx)}
-                  size="small"
-                  variant="outlined"
-                />
-              ))}
+              <Chip
+                size="small"
+                label={`Voice: ${selectedVoiceName}`}
+                sx={{
+                  height: 24,
+                  fontWeight: 700,
+                  borderRadius: '10px',
+                  color: palette.textSecondary,
+                  border: `1px solid ${palette.inputBorder}`,
+                  backgroundColor: isDark ? 'rgba(30,41,59,0.55)' : 'rgba(255,255,255,0.72)',
+                  maxWidth: { xs: 170, sm: 220 },
+                  '& .MuiChip-label': {
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  },
+                }}
+              />
             </Stack>
-          )}
+          </Box>
 
-          <Divider />
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Tooltip title="Download latest guide response (PDF)">
+              <span>
+                <IconButton
+                  onClick={downloadLatestGuidePdf}
+                  disabled={!latestDownloadableMessage?.content}
+                  sx={{ borderRadius: '12px', border: `1px solid ${palette.inputBorder}`, color: palette.textPrimary }}
+                >
+                  <DownloadRoundedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
 
+            <Tooltip title={isMuted ? 'Unmute voice' : 'Mute voice'}>
+              <IconButton
+                onClick={toggleMute}
+                sx={{ borderRadius: '12px', border: `1px solid ${palette.inputBorder}`, color: palette.textPrimary }}
+              >
+                {isMuted ? <VolumeOffRoundedIcon /> : <VolumeUpRoundedIcon />}
+              </IconButton>
+            </Tooltip>
+
+            <Tooltip title="Play latest guide response">
+              <span>
+                <IconButton
+                  onClick={() => speakMessage(latestAssistantMessage?.content || '')}
+                  disabled={!latestAssistantMessage?.content}
+                  sx={{ borderRadius: '12px', border: `1px solid ${palette.inputBorder}`, color: palette.textPrimary }}
+                >
+                  <PlayCircleRoundedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={isPaused ? 'Resume voice' : 'Pause voice'}>
+              <span>
+                <IconButton
+                  onClick={togglePauseSpeech}
+                  disabled={!isSpeaking && !isPaused}
+                  sx={{ borderRadius: '12px', border: `1px solid ${palette.inputBorder}`, color: palette.textPrimary }}
+                >
+                  <PauseCircleRoundedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+
+            <Tooltip title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
+              <IconButton
+                onClick={() => setIsDark((prev) => !prev)}
+                sx={{ borderRadius: '12px', border: `1px solid ${palette.inputBorder}`, color: palette.textPrimary }}
+              >
+                {isDark ? <LightModeRoundedIcon /> : <DarkModeRoundedIcon />}
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        </Stack>
+
+        {errorMessage && (
           <Box
             sx={{
-              p: 2,
-              borderRadius: '16px',
-              bgcolor: 'rgba(15,118,110,0.08)',
-              border: '1px solid rgba(15,118,110,0.16)'
+              px: 1.5,
+              py: 1,
+              borderRadius: '12px',
+              backgroundColor: 'rgba(239,68,68,0.12)',
+              border: '1px solid rgba(239,68,68,0.32)',
+              color: '#ef4444',
+              fontWeight: 600,
+              fontSize: '0.9rem',
             }}
           >
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
-              Destination snapshot
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {destinationSummary}
-            </Typography>
-            <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 600 }}>
-              Best time
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {destinationBestTime}
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
-              {destinationHighlights.map((item) => (
-                <Chip key={item} label={item} size="small" variant="outlined" />
-              ))}
-            </Box>
+            {GUIDE_UNAVAILABLE}
           </Box>
-        </Paper>
+        )}
 
-        <Paper
-          elevation={0}
+        <Box
           sx={{
-            borderRadius: '24px',
-            p: 2.5,
-            bgcolor: '#ffffff',
-            border: '1px solid rgba(148,163,184,0.2)',
-            boxShadow: '0 16px 35px rgba(15, 23, 42, 0.08)',
+            flex: 1,
+            minHeight: { xs: 360, md: 420 },
+            maxHeight: { xs: 'calc(100vh - 340px)', md: 'calc(100vh - 300px)' },
+            overflowY: 'auto',
+            p: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: 2,
-            minHeight: 0
+            gap: 1.1,
           }}
         >
-          <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-            <Box>
-              <Typography variant="subtitle1" fontWeight={700}>
-                Guide chat
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Ask anything and get a tailored answer with optional audio.
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip label={modeBadgeLabel} size="small" color={modeBadgeColor} />
-              <Chip label={audioEnabled ? 'Audio on' : 'Audio off'} size="small" variant="outlined" />
-            </Stack>
-          </Stack>
-
-          {statusMessage && (
-            <Box
-              sx={{
-                px: 2,
-                py: 1,
-                borderRadius: '12px',
-                bgcolor: 'rgba(14, 116, 144, 0.08)',
-                color: '#0f172a',
-                fontSize: '0.85rem',
-                fontWeight: 500
-              }}
-            >
-              {statusMessage}
-            </Box>
-          )}
-
-          <Box
-            sx={{
-              flex: 1,
-              minHeight: { xs: 220, md: 260 },
-              overflowY: 'auto',
-              pr: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2
-            }}
-          >
-            {messages.map((msg) => (
-              <Box
-                key={msg.id}
-                sx={{
-                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                  maxWidth: '82%'
-                }}
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <MotionDiv
+                key={message.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                style={{ display: 'flex', justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start' }}
               >
-                <Paper
-                  elevation={0}
+                <Box
                   sx={{
-                    p: 2,
-                    borderRadius: msg.role === 'user' ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
-                    background: msg.role === 'user'
-                      ? 'linear-gradient(135deg, #0f766e, #1f9d8b)'
-                      : '#f8fafc',
-                    color: msg.role === 'user' ? '#ffffff' : '#0f172a',
+                    maxWidth: { xs: '95%', sm: '80%' },
+                    px: 1.6,
+                    py: 1.2,
+                    borderRadius: '22px',
+                    borderBottomRightRadius: message.role === 'user' ? 6 : 18,
+                    borderBottomLeftRadius: message.role === 'assistant' ? 6 : 18,
+                    background:
+                      message.role === 'user'
+                        ? palette.userBubble
+                        : isDark
+                          ? 'linear-gradient(145deg, rgba(30,41,59,0.95), rgba(15,23,42,0.9))'
+                          : 'linear-gradient(145deg, rgba(255,255,255,0.98), rgba(248,250,252,0.95))',
+                    color: message.role === 'user' ? '#f8fafc' : palette.textPrimary,
                     border:
-                      msg.role === 'user'
-                        ? '1px solid rgba(15,118,110,0.4)'
-                        : '1px solid rgba(148,163,184,0.2)',
-                    whiteSpace: 'pre-wrap',
+                      message.role === 'assistant'
+                        ? `1px solid ${palette.assistantBorder}`
+                        : '1px solid rgba(15,118,110,0.38)',
+                    backdropFilter: message.role === 'assistant' ? 'blur(8px)' : 'none',
                     boxShadow:
-                      msg.role === 'user'
-                        ? '0 10px 22px rgba(15, 118, 110, 0.25)'
-                        : '0 8px 18px rgba(15, 23, 42, 0.06)'
+                      message.role === 'user'
+                        ? '0 10px 25px rgba(13, 148, 136, 0.3)'
+                        : isDark
+                          ? '0 14px 30px rgba(2, 6, 23, 0.35)'
+                          : '0 14px 30px rgba(15, 23, 42, 0.14)',
                   }}
                 >
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: 'block',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.08em',
-                      opacity: 0.8,
-                      mb: 0.5
-                    }}
-                  >
-                    {msg.role === 'user' ? 'You' : 'Guide'}
-                  </Typography>
-                  <Typography variant="body1" sx={{ fontSize: '0.95rem' }}>
-                    {msg.text}
-                  </Typography>
-                  {msg.meta?.latency != null && (
+                  {message.role === 'assistant' ? (
+                    <FormattedGuideMessage
+                      content={message.content}
+                      palette={palette}
+                      isError={message.isError}
+                    />
+                  ) : (
                     <Typography
-                      variant="caption"
                       sx={{
-                        display: 'block',
-                        mt: 1,
-                        color: msg.role === 'user' ? '#d1fae5' : '#64748b'
+                        whiteSpace: 'pre-wrap',
+                        fontSize: '0.95rem',
+                        lineHeight: 1.5,
+                        fontWeight: 500,
+                        overflowWrap: 'anywhere',
                       }}
                     >
-                      Response time: {msg.meta.latency} ms | {msg.meta.sourceLabel || 'Model'}
+                      {message.content}
                     </Typography>
                   )}
-                </Paper>
-              </Box>
+                  <Typography sx={{ mt: 0.6, fontSize: '0.72rem', opacity: 0.8, textAlign: 'right' }}>
+                    {formatMessageTime(message.createdAt)}
+                  </Typography>
+                </Box>
+              </MotionDiv>
             ))}
-            <Box ref={messagesEndRef} />
-            {isStreaming && <LinearProgress sx={{ mt: 1 }} />}
-          </Box>
+          </AnimatePresence>
 
-          <Divider />
-
-          <Stack spacing={1.5}>
-            <TextField
-              placeholder={`Ask about ${promptDestination}`}
-              multiline
-              minRows={2}
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleAsk();
-                }
-              }}
-              fullWidth
-            />
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="center">
-              <Button
-                variant="contained"
-                startIcon={<SendIcon />}
-                onClick={handleAsk}
-                sx={{ textTransform: 'none', fontWeight: 700 }}
+          {showTyping && (
+            <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 1.1,
+                  borderRadius: '16px',
+                  background: palette.assistantBubble,
+                  border: `1px solid ${palette.assistantBorder}`,
+                }}
               >
-                Send
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={listening ? <MicOffIcon /> : <MicIcon />}
-                onClick={handleMicToggle}
-                sx={{ textTransform: 'none' }}
-              >
-                {listening ? 'Stop voice' : 'Voice input'}
-              </Button>
-              <Box sx={{ flex: 1 }} />
-              <Tooltip title="Copy latest answer">
-                <IconButton onClick={handleCopyLatest}>
-                  <ContentCopyIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Download latest answer as PDF">
-                <IconButton onClick={handleDownloadLatest}>
-                  <DownloadIcon />
-                </IconButton>
-              </Tooltip>
-              {audioEnabled && (
-                <>
-                  <Tooltip title="Replay audio">
-                    <IconButton onClick={() => speakText(messages[messages.length - 1]?.text || '')}>
-                      <VolumeUpIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Stop audio">
-                    <IconButton onClick={stopAudio}>
-                      <StopCircleIcon />
-                    </IconButton>
-                  </Tooltip>
-                </>
-              )}
-            </Stack>
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 1,
-                flexWrap: 'nowrap',
-                overflowX: 'auto',
-                pb: 0.5
-              }}
-            >
-              {quickPrompts.map((prompt) => (
-                <Chip
-                  key={prompt}
-                  label={prompt}
-                  onClick={() => handleQuickPrompt(prompt)}
-                  variant="outlined"
-                  size="small"
-                />
-              ))}
+                <TypingDots color={palette.typingDot} />
+              </Box>
             </Box>
+          )}
+          <Box ref={messagesEndRef} />
+        </Box>
+
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1,
+            borderRadius: '18px',
+            background: palette.inputBg,
+            border: `1px solid ${palette.inputBorder}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+          }}
+        >
+          <TextField
+            multiline
+            minRows={2}
+            maxRows={5}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Ask about any destination worldwide..."
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                queueSend();
+              }
+            }}
+            fullWidth
+            variant="standard"
+            InputProps={{
+              disableUnderline: true,
+              sx: {
+                px: 1,
+                color: palette.textPrimary,
+                fontWeight: 500,
+                '& textarea::placeholder': {
+                  color: palette.textSecondary,
+                  opacity: 1,
+                },
+              },
+            }}
+          />
+
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Tooltip title={isListening ? 'Stop voice input' : 'Start voice input'}>
+                <IconButton
+                  onClick={toggleMic}
+                  sx={{
+                    borderRadius: '12px',
+                    border: `1px solid ${palette.inputBorder}`,
+                    color: isListening ? '#ef4444' : palette.textPrimary,
+                  }}
+                >
+                  {isListening ? <MicOffRoundedIcon /> : <MicRoundedIcon />}
+                </IconButton>
+              </Tooltip>
+              <Chip
+                label={
+                  isListening
+                    ? 'Listening...'
+                    : isSpeaking
+                      ? 'Speaking...'
+                      : `Voice: ${selectedVoiceName.split(' ')[0] || 'Ready'}`
+                }
+                size="small"
+                sx={{
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  color: palette.textPrimary,
+                  border: `1px solid ${palette.inputBorder}`,
+                  backgroundColor: 'transparent',
+                }}
+              />
+            </Stack>
+
+            <Tooltip title="Send message">
+              <span>
+                <IconButton
+                  onClick={queueSend}
+                  disabled={!draft.trim() || isStreaming}
+                  sx={{
+                    width: 46,
+                    height: 46,
+                    borderRadius: '14px',
+                    color: '#f8fafc',
+                    background: 'linear-gradient(135deg, #0f766e, #14b8a6)',
+                    boxShadow: '0 12px 20px rgba(15, 118, 110, 0.3)',
+                    '&:hover': { background: 'linear-gradient(135deg, #0d9488, #2dd4bf)' },
+                    '&.Mui-disabled': {
+                      background: 'rgba(148,163,184,0.55)',
+                      color: '#f8fafc',
+                    },
+                  }}
+                >
+                  <SendRoundedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
           </Stack>
         </Paper>
-      </Box>
+      </Paper>
     </Box>
   );
 }
+

@@ -37,11 +37,33 @@ export default function ExploreGuides() {
   const [language, setLanguage] = useState('All Languages');
   const [minRating, setMinRating] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
+  const [rateTypeFilter, setRateTypeFilter] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [loading, setLoading] = useState(true);
+  const [agentBookingRequest, setAgentBookingRequest] = useState(null);
   const [favorites, setFavorites] = useState(
     JSON.parse(localStorage.getItem('favoriteGuides') || '[]')
   );
+
+  useEffect(() => {
+    const handleAgentPrefill = (event) => {
+      const payload = event?.detail || {};
+      if (payload.search) setSearch(payload.search);
+      if (payload.language) setLanguage(payload.language);
+      if (payload.minRating) setMinRating(String(payload.minRating));
+      if (payload.maxPrice) setMaxPrice(String(payload.maxPrice));
+      if (payload.rateType) setRateTypeFilter(payload.rateType);
+      if (payload.openBooking) {
+        setAgentBookingRequest({
+          guideUserId: payload.guideUserId || '',
+          guideName: payload.guideName || payload.search || '',
+        });
+      }
+    };
+
+    window.addEventListener('agentExploreGuidesPrefill', handleAgentPrefill);
+    return () => window.removeEventListener('agentExploreGuidesPrefill', handleAgentPrefill);
+  }, []);
 
   // Fetch guides from backend
   useEffect(() => {
@@ -163,9 +185,31 @@ export default function ExploreGuides() {
 
     const matchesRating = !minRating || guide.rating >= parseFloat(minRating);
     const matchesPrice = !maxPrice || guide.price <= parseFloat(maxPrice);
+    const matchesRateType = !rateTypeFilter || guide.rateType === rateTypeFilter;
 
-    return matchesSearch && matchesLanguage && matchesRating && matchesPrice;
+    return matchesSearch && matchesLanguage && matchesRating && matchesPrice && matchesRateType;
   });
+
+  useEffect(() => {
+    if (!agentBookingRequest || loading || !guides.length) return;
+
+    const byUserId = agentBookingRequest.guideUserId
+      ? guides.find((guide) => String(guide.userId) === String(agentBookingRequest.guideUserId))
+      : null;
+
+    const byName = !byUserId && agentBookingRequest.guideName
+      ? guides.find((guide) =>
+          guide.name?.toLowerCase().includes(agentBookingRequest.guideName.toLowerCase())
+        )
+      : null;
+
+    const targetGuide = byUserId || byName;
+    if (targetGuide) {
+      setSelectedGuide(targetGuide);
+      setDialogOpen(true);
+    }
+    setAgentBookingRequest(null);
+  }, [agentBookingRequest, guides, loading]);
 
   const isFavorite = (guide) => {
     return favorites.some((fav) => fav._id === guide._id);
@@ -283,6 +327,7 @@ export default function ExploreGuides() {
             setLanguage('All Languages');
             setMinRating('');
             setMaxPrice('');
+            setRateTypeFilter('');
           }}
           guideCount={filteredGuides.length}
         />

@@ -125,6 +125,12 @@ class PlacesService {
     });
   }
 
+  extractFeatures(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.features)) return payload.features;
+    return [];
+  }
+
   /**
    * Search for places by name and location
    * @param {string} query - Search query (place name)
@@ -136,6 +142,10 @@ class PlacesService {
    */
   async searchPlacesByName(query, latitude, longitude, radius = 5000, limit = 20) {
     try {
+      if (!this.hasApiKey()) {
+        return [];
+      }
+
       // Find OSM object ID by coordinates and search within radius
       const response = await axios.get(`${this.aroundUrl}`, {
         params: {
@@ -144,17 +154,19 @@ class PlacesService {
           lat: latitude,
           radius: radius,
           limit: Math.min(limit, 50), // Max 50 from API
-          format: 'json',
+          format: 'geojson',
         },
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
       });
 
+      const features = this.extractFeatures(response.data);
+
       // Filter results by name similarity if query provided
       if (query) {
-        return this.filterAndFormatResults(response.data.features, query);
+        return this.filterAndFormatResults(features, query);
       }
 
-      return this.formatPlaces(response.data.features || []);
+      return this.formatPlaces(features);
     } catch (error) {
       console.error('Places search error:', error.message);
       return [];
@@ -168,17 +180,23 @@ class PlacesService {
    */
   async getPlaceDetails(xid) {
     try {
-      const response = await axios.get(`${this.detailsUrl}`, {
+      if (!xid || !this.hasApiKey()) return null;
+
+      const response = await axios.get(
+        `${this.detailsUrl}/${encodeURIComponent(xid)}`,
+        {
         params: {
           apikey: this.apiKey,
-          xid: xid,
-          format: 'json',
         },
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-      });
+      }
+      );
 
       return this.formatPlaceDetails(response.data);
     } catch (error) {
+      if (error?.response?.status === 429) {
+        return null;
+      }
       console.error('Place details error:', error.message);
       return null;
     }
@@ -205,7 +223,7 @@ class PlacesService {
         lat: latitude,
         radius: radius,
         limit: Math.min(limit, 50),
-        format: 'json',
+        format: 'geojson',
       };
 
       // Add category filter if provided
@@ -218,8 +236,45 @@ class PlacesService {
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
       });
 
-      return this.formatPlaces(response.data.features || []);
+      const features = this.extractFeatures(response.data);
+      return this.formatPlaces(features);
     } catch (error) {
+      if (error?.response?.status === 400) {
+        if (
+          typeof category === 'string' &&
+          category.includes(',')
+        ) {
+          const tokens = category
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .slice(0, 8);
+
+          if (tokens.length > 1) {
+            const perTokenLimit = Math.max(4, Math.ceil(limit / tokens.length));
+            const tokenResults = await Promise.all(
+              tokens.map((token) =>
+                this.getAttractionsByCategory(
+                  latitude,
+                  longitude,
+                  token,
+                  radius,
+                  perTokenLimit
+                )
+              )
+            );
+
+            const merged = tokenResults.flat();
+            return this.dedupePlaces(merged).slice(0, limit);
+          }
+        }
+        return [];
+      }
+
+      if (error?.response?.status === 429) {
+        return [];
+      }
+
       console.error('Category attractions error:', error.message);
       return [];
     }
@@ -248,7 +303,17 @@ class PlacesService {
         Math.min(limit * 2, 50)
       );
 
-      const unique = this.dedupePlaces(raw);
+      const broadFallback = raw.length >= Math.max(8, Math.floor(limit / 2))
+        ? []
+        : await this.getAttractionsByCategory(
+            coords.lat,
+            coords.lon,
+            '',
+            12000,
+            Math.min(limit * 2, 50)
+          );
+
+      const unique = this.dedupePlaces([...raw, ...broadFallback]);
       return this.shufflePlaces(unique).slice(0, limit);
     } catch (error) {
       console.error('Popular attractions error:', error.message);
@@ -262,19 +327,19 @@ class PlacesService {
    */
   filterAndFormatResults(features, query) {
     const queryLower = query.toLowerCase();
+    const formatted = this.formatPlaces(features);
 
-    return features
-      .filter((f) => f.properties?.name?.toLowerCase().includes(queryLower))
+    return formatted
+      .filter((place) => (place?.name || '').toLowerCase().includes(queryLower))
       .sort((a, b) => {
         // Prioritize exact matches or name starts with query
-        const aName = (a.properties?.name || '').toLowerCase();
-        const bName = (b.properties?.name || '').toLowerCase();
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
         if (aName.startsWith(queryLower)) return -1;
         if (bName.startsWith(queryLower)) return 1;
         return aName.localeCompare(bName);
       })
-      .slice(0, 20)
-      .map((f) => this.formatPlace(f));
+      .slice(0, 20);
   }
 
   /**
@@ -282,23 +347,53 @@ class PlacesService {
    * @private
    */
   formatPlace(feature) {
-    const props = feature.properties || {};
-    const coords = feature.geometry?.coordinates || [0, 0];
+    if (!feature || typeof feature !== 'object') return null;
+
+    const isGeoJson = Boolean(feature.geometry && feature.properties);
+    const props = isGeoJson ? feature.properties || {} : feature;
+    const name = String(props.name || feature.name || '').trim();
+    const lat =
+      Number(
+        isGeoJson
+          ? feature.geometry?.coordinates?.[1]
+          : feature.point?.lat ?? feature.location?.lat ?? feature.lat
+      ) || 0;
+    const lon =
+      Number(
+        isGeoJson
+          ? feature.geometry?.coordinates?.[0]
+          : feature.point?.lon ?? feature.location?.lon ?? feature.lon
+      ) || 0;
+    const kinds = props.kinds || feature.kinds || '';
+    const xid = props.xid || feature.xid || feature.id || null;
+
+    const rawRating = Number(props.rate ?? feature.rate ?? 0);
+    const rating = Number.isFinite(rawRating)
+      ? Math.min(5, Math.max(0, rawRating))
+      : 0;
 
     return {
-      id: props.xid,
-      name: props.name || 'Unknown',
-      category: this.mapCategory(props.kinds),
+      id: xid,
+      name,
+      category: this.mapCategory(kinds),
       location: {
         coordinates: {
-          latitude: coords[1],
-          longitude: coords[0],
+          latitude: lat,
+          longitude: lon,
         },
-        address: props.address || '',
+        address:
+          props.address ||
+          (props.dist ? `Approx. ${Math.round(Number(props.dist) || 0)}m from center` : ''),
       },
-      rating: props.rate || 0,
+      rating,
       imageUrl: this.getImageUrl(props),
-      description: props.wikipedia_extracts?.text || '',
+      description:
+        props.wikipedia_extracts?.text ||
+        props.info?.descr ||
+        feature.wikipedia_extracts?.text ||
+        '',
+      kinds,
+      openingHours: props.opening_hours || props.open_hours || feature.open_hours || null,
     };
   }
 
@@ -307,7 +402,10 @@ class PlacesService {
    * @private
    */
   formatPlaces(features) {
-    return features.map((f) => this.formatPlace(f)).filter((p) => p.id);
+    const list = this.extractFeatures(features);
+    return list
+      .map((f) => this.formatPlace(f))
+      .filter((p) => p?.id && p?.name && p.name.toLowerCase() !== 'unknown');
   }
 
   /**
@@ -318,6 +416,11 @@ class PlacesService {
     if (!data || !data.geometry) return null;
 
     const coords = data.geometry?.coordinates || [0, 0];
+
+    const rawRating = Number(data.rate ?? 0);
+    const rating = Number.isFinite(rawRating)
+      ? Math.min(5, Math.max(0, rawRating))
+      : 0;
 
     return {
       id: data.xid,
@@ -333,13 +436,14 @@ class PlacesService {
           ? `${data.address.house_number} ${data.address.road}`
           : '',
       },
-      rating: data.rate || 0,
+      rating,
       imageUrl: this.getImageUrl(data),
       openingHours: data.open_hours || null,
       phoneNumber: data.phone || null,
       website: data.url || null,
       wikipediaUrl: data.wikipedia || null,
       tags: data.kinds || [],
+      kinds: data.kinds || '',
     };
   }
 
@@ -350,6 +454,13 @@ class PlacesService {
   mapCategory(kinds) {
     if (!kinds) return 'sightseeing';
 
+    const kindsList = Array.isArray(kinds)
+      ? kinds
+      : String(kinds)
+          .split(',')
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean);
+
     const categoryMap = {
       // Sightseeing & Culture
       'historic': 'culture',
@@ -359,6 +470,9 @@ class PlacesService {
       'palaces': 'sightseeing',
       'temples': 'culture',
       'churches': 'culture',
+      'mosques': 'culture',
+      'synagogues': 'culture',
+      'cathedrals': 'culture',
       'castles': 'sightseeing',
 
       // Food & Dining
@@ -366,6 +480,8 @@ class PlacesService {
       'cafes': 'food',
       'bars': 'food',
       'food': 'food',
+      'fast_food': 'food',
+      'pubs': 'food',
 
       // Shopping
       'shops': 'shopping',
@@ -377,22 +493,32 @@ class PlacesService {
       'parks': 'nature',
       'gardens': 'nature',
       'beaches': 'nature',
+      'lakes': 'nature',
+      'viewpoints': 'nature',
       'mountains': 'adventure',
       'hiking': 'adventure',
+      'trekking': 'adventure',
+      'climbing': 'adventure',
+      'skiing': 'adventure',
 
       // Entertainment
       'entertainment': 'entertainment',
       'cinemas': 'entertainment',
       'theatres': 'entertainment',
       'amusement_parks': 'entertainment',
+      'zoo': 'entertainment',
+      'aquariums': 'entertainment',
 
       // Relaxation
       'spas': 'relaxation',
       'swimming_pools': 'relaxation',
     };
 
-    for (let kind of kinds) {
+    for (const kind of kindsList) {
       if (categoryMap[kind]) return categoryMap[kind];
+
+      const fuzzy = Object.keys(categoryMap).find((key) => kind.includes(key));
+      if (fuzzy) return categoryMap[fuzzy];
     }
 
     return 'sightseeing';
@@ -403,7 +529,7 @@ class PlacesService {
    * @private
    */
   getImageUrl(props) {
-    return props.image || props.preview?.source || null;
+    return props.image || props.preview?.source || props.wikidata_image || null;
   }
 
   /**

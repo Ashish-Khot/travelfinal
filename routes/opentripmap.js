@@ -189,7 +189,7 @@ router.get('/search', async (req, res) => {
     let features = [];
 
     try {
-      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${searchLon}&lat=${searchLat}&limit=${limit}&apikey=${OPENTRIPMAP_API_KEY}`;
+      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=${radius}&lon=${searchLon}&lat=${searchLat}&limit=${limit}&format=geojson&apikey=${OPENTRIPMAP_API_KEY}`;
       const { data } = await axios.get(radiusUrl, { timeout: 8000 });
       features = data.features || [];
 

@@ -5,6 +5,7 @@
 
 import React from 'react';
 import {
+  Alert,
   Box,
   Card,
   CardContent,
@@ -19,6 +20,10 @@ const BudgetDashboard = ({ itinerary }) => {
   const budget = itinerary?.budget || {};
   const currency = budget.currency || 'INR';
   const totalBudget = budget.totalBudget || 0;
+  const requestedBudget = budget.requestedBudget || totalBudget;
+  const minimumRecommended = budget.minimumRecommended || 0;
+  const comfortableEstimate = budget.comfortableEstimate || 0;
+  const premiumEstimate = budget.premiumEstimate || 0;
   const totalSpent =
     (budget.accommodation || 0) +
     (budget.transportation || 0) +
@@ -28,6 +33,7 @@ const BudgetDashboard = ({ itinerary }) => {
 
   const remaining = totalBudget - totalSpent;
   const spentPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+  const budgetStatus = budget.status || 'within-range';
 
   const budgetBreakdown = [
     { name: 'Accommodation', value: budget.accommodation || 0 },
@@ -38,6 +44,30 @@ const BudgetDashboard = ({ itinerary }) => {
   ].filter(b => b.value > 0);
 
   const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
+
+  const statusMeta = {
+    'below-minimum': {
+      severity: 'warning',
+      title: 'Budget adjusted to practical minimum',
+      description:
+        budget.adjustmentMessage ||
+        'The requested budget was below realistic costs for this destination.',
+    },
+    'within-range': {
+      severity: 'success',
+      title: 'Budget is in realistic range',
+      description:
+        budget.adjustmentMessage ||
+        'Your itinerary budget aligns with common costs for this destination.',
+    },
+    'above-premium': {
+      severity: 'info',
+      title: 'Budget is above premium range',
+      description:
+        budget.adjustmentMessage ||
+        'Your budget can support luxury options while still showing realistic ranges.',
+    },
+  }[budgetStatus];
 
   const formatMoney = (value) => {
     const amount = Number(value);
@@ -55,13 +85,20 @@ const BudgetDashboard = ({ itinerary }) => {
 
   return (
     <Box>
+      <Alert severity={statusMeta?.severity || 'info'} sx={{ mb: 3 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+          {statusMeta?.title || 'Budget status'}
+        </Typography>
+        <Typography variant="body2">{statusMeta?.description}</Typography>
+      </Alert>
+
       {/* Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Budget
+                Planned Budget
               </Typography>
               <Typography variant="h5">{formatMoney(totalBudget)}</Typography>
             </CardContent>
@@ -71,10 +108,10 @@ const BudgetDashboard = ({ itinerary }) => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>
-                Total Spent
+                Requested Budget
               </Typography>
-              <Typography variant="h5" sx={{ color: '#ff6b6b' }}>
-                {formatMoney(totalSpent)}
+              <Typography variant="h5" sx={{ color: '#0f766e' }}>
+                {formatMoney(requestedBudget)}
               </Typography>
             </CardContent>
           </Card>
@@ -98,6 +135,39 @@ const BudgetDashboard = ({ itinerary }) => {
                 Spent %
               </Typography>
               <Typography variant="h5">{spentPercentage.toFixed(1)}%</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Minimum Practical
+              </Typography>
+              <Typography variant="h6">{formatMoney(minimumRecommended)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Comfortable Estimate
+              </Typography>
+              <Typography variant="h6">{formatMoney(comfortableEstimate)}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography color="textSecondary" gutterBottom>
+                Premium Estimate
+              </Typography>
+              <Typography variant="h6">{formatMoney(premiumEstimate)}</Typography>
             </CardContent>
           </Card>
         </Grid>

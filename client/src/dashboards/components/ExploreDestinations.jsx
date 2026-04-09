@@ -60,10 +60,16 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 }
 
 export default function ExploreDestinations() {
+  const olaConfigured = Boolean(
+    import.meta.env.VITE_OLA_MAPS_TILE_URL && import.meta.env.VITE_OLA_MAPS_API_KEY
+  );
   const [search, setSearch] = useState('');
   const [pendingSearch, setPendingSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [filter, setFilter] = useState('All');
+  const [mapProvider, setMapProvider] = useState(
+    (import.meta.env.VITE_MAP_PROVIDER || 'osm').toLowerCase() === 'ola' ? 'ola' : 'osm'
+  );
   const [rating, setRating] = useState(0);
   const [distance, setDistance] = useState(0);
   const [userLocation, setUserLocation] = useState(null);
@@ -355,6 +361,17 @@ export default function ExploreDestinations() {
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
                 <TextField
                   select
+                  label="Map Provider"
+                  value={mapProvider}
+                  onChange={e => setMapProvider(e.target.value)}
+                  sx={{ minWidth: 170, flex: 1 }}
+                >
+                  <MenuItem value="osm">OpenStreetMap (Free)</MenuItem>
+                  <MenuItem value="ola">Ola Maps (API key)</MenuItem>
+                </TextField>
+
+                <TextField
+                  select
                   label="Category"
                   value={category}
                   onChange={e => setCategory(e.target.value)}
@@ -448,6 +465,11 @@ export default function ExploreDestinations() {
                   </Button>
                 )}
               </Stack>
+              {mapProvider === 'ola' && !olaConfigured && (
+                <Typography variant="caption" sx={{ color: '#8B5E00', fontWeight: 600 }}>
+                  Ola Maps key/tile URL not configured, so map will automatically fall back to free OpenStreetMap tiles.
+                </Typography>
+              )}
 
               {/* View Mode Toggle */}
               <Stack direction="row" spacing={1} justifyContent="flex-end">
@@ -562,6 +584,7 @@ export default function ExploreDestinations() {
               destinations={filtered}
               center={{ lat: 36.3932, lng: 25.4615 }}
               zoom={2}
+              mapProvider={mapProvider}
               onMarkerClick={dest => {
                 setSelected(dest);
               }}
@@ -776,6 +799,7 @@ export default function ExploreDestinations() {
                     destinations={[selected]}
                     center={{ lat: selected.lat, lng: selected.lon }}
                     zoom={13}
+                    mapProvider={mapProvider}
                   />
                 </Box>
               )}

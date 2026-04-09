@@ -9,6 +9,39 @@
 // ============================================================================
 
 const ENV = import.meta.env.MODE || 'development';
+const MAP_PROVIDER = (import.meta.env.VITE_MAP_PROVIDER || 'osm').toLowerCase();
+const OLA_MAPS_API_KEY = import.meta.env.VITE_OLA_MAPS_API_KEY || '';
+const OLA_MAPS_TILE_URL = import.meta.env.VITE_OLA_MAPS_TILE_URL || '';
+const LEAFLET_TILE_VARIABLES = new Set(['s', 'x', 'y', 'z', 'r']);
+
+const appendApiKeyToTileUrl = (url, apiKey) => {
+  if (!url) return '';
+  let normalizedUrl = url.replace('https://{s}.tile.olamaps.io', 'https://tile.olamaps.io');
+  const safeApiKey = encodeURIComponent(apiKey || '');
+
+  // Replace explicit template placeholder first.
+  normalizedUrl = normalizedUrl.replace(/\{apiKey\}/gi, safeApiKey);
+
+  // If api_key already exists and uses any {...} token, force it to the provided API key.
+  if (/(^|[?&])(api_key|apikey)=/i.test(normalizedUrl)) {
+    normalizedUrl = normalizedUrl.replace(
+      /([?&](?:api_key|apikey)=)\{[^}]+\}/gi,
+      `$1${safeApiKey}`
+    );
+    return normalizedUrl;
+  }
+
+  // Guard against accidental unknown variable tokens in query params.
+  normalizedUrl = normalizedUrl.replace(/\{([^}]+)\}/g, (match, varName) => {
+    return LEAFLET_TILE_VARIABLES.has(varName) ? match : safeApiKey;
+  });
+
+  return `${normalizedUrl}${normalizedUrl.includes('?') ? '&' : '?'}api_key=${safeApiKey}`;
+};
+
+const olaTileUrl = appendApiKeyToTileUrl(OLA_MAPS_TILE_URL, OLA_MAPS_API_KEY);
+const hasInlineOlaApiKey = /(^|[?&])(api_key|apikey)=([^&{}][^&]*)/i.test(OLA_MAPS_TILE_URL);
+const hasOlaTileConfig = Boolean(olaTileUrl && (OLA_MAPS_API_KEY || hasInlineOlaApiKey));
 
 // Map API Configuration
 export const MAP_CONFIG = {
@@ -44,10 +77,19 @@ export const MAP_CONFIG = {
       maxZoom: 17,
       minZoom: 2,
     },
+    OLA_Light: {
+      url:
+        hasOlaTileConfig && olaTileUrl
+          ? olaTileUrl
+          : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: hasOlaTileConfig ? '© Ola Maps' : '© OpenStreetMap contributors',
+      maxZoom: 20,
+      minZoom: 2,
+    },
   },
 
   // Default tile server
-  DEFAULT_TILE: 'CartoDB_Light',
+  DEFAULT_TILE: MAP_PROVIDER === 'ola' && hasOlaTileConfig ? 'OLA_Light' : 'CartoDB_Light',
 
   // Map center (default to world center)
   DEFAULT_CENTER: [20.5937, 78.9629], // India center
@@ -105,6 +147,14 @@ export const GEOCODING_CONFIG = {
   // Cache settings
   CACHE_DURATION: 1000 * 60 * 60, // 1 hour
   USE_CACHE: true,
+};
+
+export const OLA_CONFIG = {
+  API_KEY: OLA_MAPS_API_KEY,
+  TILE_URL_TEMPLATE: OLA_MAPS_TILE_URL,
+  TILE_URL: olaTileUrl,
+  IS_CONFIGURED: hasOlaTileConfig,
+  PROVIDER: MAP_PROVIDER,
 };
 
 // ============================================================================
@@ -382,10 +432,15 @@ export const logConfigStatus = () => {
   );
   console.log('✓ Leaflet:', 'Ready');
   console.log('✓ OpenStreetMap Tiles:', 'Ready');
+  console.log(
+    '✓ Ola Maps Tiles:',
+    OLA_CONFIG.IS_CONFIGURED ? 'Ready' : '⚠️ Not configured (using OSM fallback)'
+  );
 };
 
 export default {
   MAP_CONFIG,
+  OLA_CONFIG,
   GEOCODING_CONFIG,
   ROUTING_CONFIG,
   MARKER_CONFIG,

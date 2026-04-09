@@ -47,6 +47,20 @@ const normalizeStringArray = (value, maxItems = 8) => {
     .slice(0, maxItems);
 };
 
+const clampNumber = (value, min, max, fallback = 0) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+};
+
+const normalizeGeneratedActivities = (activities) => {
+  if (!Array.isArray(activities)) return [];
+  return activities.map((activity) => ({
+    ...activity,
+    rating: clampNumber(activity?.rating, 0, 5, 0),
+  }));
+};
+
 const normalizeBudgetSplit = (split) => {
   if (!split || typeof split !== 'object') return null;
   const keys = Object.keys(DEFAULT_BUDGET_SPLIT);
@@ -142,6 +156,7 @@ class ItineraryController {
         destination,
         days,
         budget,
+        currency,
         interests,
         travelStyle,
         numberOfTravelers,
@@ -153,12 +168,14 @@ class ItineraryController {
 
       const coord = generated.coordinates || { latitude: 40, longitude: 0 };
       const weatherForecast = generated.weatherForecast || [];
-      const activities = generated.activities || [];
+      const activities = normalizeGeneratedActivities(generated.activities || []);
       const aiPlan = generated.aiPlan || null;
+      const budgetInsights = generated.budgetInsights || null;
       const highlightedFallback = generated.highlights || [];
 
       // Create itinerary document
-      const endDate = new Date(startDate);
+      const tripStartDate = startDate ? new Date(startDate) : new Date();
+      const endDate = new Date(tripStartDate);
       endDate.setDate(endDate.getDate() + days - 1);
 
       // DEBUG: Log what was generated
@@ -175,8 +192,12 @@ class ItineraryController {
       const highlightedPlaces =
         highlightsFromAI.length > 0 ? highlightsFromAI : defaultHighlights;
 
-      const totalBudgetValue = Number(budget) || 0;
-      const currencyValue = String(currency || 'INR').toUpperCase();
+      const requestedBudgetValue = Number(budget) || 0;
+      const totalBudgetValue =
+        Number(budgetInsights?.adjustedBudget) || requestedBudgetValue;
+      const currencyValue = String(
+        budgetInsights?.currency || currency || 'INR'
+      ).toUpperCase();
       const budgetAllocation = buildBudgetAllocation(
         totalBudgetValue,
         aiPlan?.budgetSplit
@@ -213,7 +234,7 @@ class ItineraryController {
       const itinerary = new Itinerary({
         title: `${days}-Day Trip to ${destination}`,
         description: aiPlan?.summary || `AI-generated itinerary for ${destination}`,
-        startDate: new Date(startDate),
+        startDate: tripStartDate,
         endDate,
         numberOfDays: days,
         destination: {
@@ -230,7 +251,19 @@ class ItineraryController {
         season: seasonValue,
         budget: {
           totalBudget: totalBudgetValue,
+          requestedBudget: requestedBudgetValue,
           currency: currencyValue,
+          minimumRecommended: Number(budgetInsights?.minimumRecommended) || 0,
+          comfortableEstimate: Number(budgetInsights?.comfortableEstimate) || 0,
+          premiumEstimate: Number(budgetInsights?.premiumEstimate) || 0,
+          suggestedDailyBudget: Number(budgetInsights?.suggestedDailyBudget) || 0,
+          status: budgetInsights?.budgetStatus || 'within-range',
+          adjustmentApplied: Boolean(budgetInsights?.adjustmentApplied),
+          adjustmentMessage: budgetInsights?.adjustmentMessage || '',
+          destinationCostLevel:
+            budgetInsights?.destinationProfile?.costLevel || 'medium',
+          destinationType:
+            budgetInsights?.destinationProfile?.destinationType || 'domestic-city',
           ...budgetAllocation,
         },
         weatherData: {
@@ -243,6 +276,15 @@ class ItineraryController {
         tags: tagsFromAI.length > 0 ? tagsFromAI : interests || [],
         highlightedPlaces,
         aiPlan: aiPlanPayload || undefined,
+        planningInsights: {
+          averageActivityDurationMinutes:
+            Number(generated.metadata?.averageActivityDurationMinutes) || 0,
+          totalEstimatedTravelMinutes:
+            Number(generated.metadata?.totalEstimatedTravelMinutes) || 0,
+          budgetStatus: budgetInsights?.budgetStatus || 'within-range',
+          destinationProfile: budgetInsights?.destinationProfile || null,
+          weatherStatus: weatherForecast.length > 0 ? 'live' : 'unavailable',
+        },
       });
 
       // Save initial itinerary with activities
@@ -256,14 +298,24 @@ class ItineraryController {
           weatherForecastDays: weatherForecast.length,
           aiPlanUsed: Boolean(aiPlan),
           highlightedPlacesCount: highlightedPlaces.length,
+          budgetStatus: budgetInsights?.budgetStatus || 'within-range',
+          budgetAdjusted: Boolean(budgetInsights?.adjustmentApplied),
+          budgetAdjustmentMessage: budgetInsights?.adjustmentMessage || '',
         },
       });
     } catch (error) {
       console.error('Generate itinerary error:', error);
+      const message = String(error?.message || '');
+      const isInputOrDataIssue =
+        message.includes('Unable to resolve coordinates for destination') ||
+        message.includes('Could not build enough live, location-based activities');
+
       res
-        .status(500)
+        .status(isInputOrDataIssue ? 422 : 500)
         .json({
-          message: 'Error generating itinerary',
+          message: isInputOrDataIssue
+            ? 'Unable to generate fully dynamic itinerary with live location data'
+            : 'Error generating itinerary',
           error: error.message,
         });
     }
@@ -380,7 +432,7 @@ class ItineraryController {
         endTime: activityData.endTime,
         duration: activityData.duration || 120,
         estimatedCost: activityData.estimatedCost || 0,
-        currency: activityData.currency || 'USD',
+        currency: activityData.currency || itinerary?.budget?.currency || 'INR',
         notes: activityData.notes || '',
         importance: activityData.importance || 'recommended',
         imageUrl: activityData.imageUrl || null,

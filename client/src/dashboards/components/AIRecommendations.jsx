@@ -45,9 +45,16 @@ export default function AIRecommendations() {
   const fetchRecommendations = async () => {
     try {
       setLoading(true);
-      // Fetch all tours and get top rated ones
-      const toursRes = await api.get('/tours').catch(() => ({ data: [] }));
-      const tours = Array.isArray(toursRes.data) ? toursRes.data : [];
+      // Backend doesn't expose /tours. Use destination APIs to build recommendations.
+      const destinationsRes = await api
+        .get('/destination/destinations')
+        .catch(() => ({ data: [] }));
+      let tours = Array.isArray(destinationsRes.data) ? destinationsRes.data : [];
+
+      if (tours.length === 0) {
+        const popularRes = await api.get('/opentripmap/popular').catch(() => ({ data: [] }));
+        tours = Array.isArray(popularRes.data) ? popularRes.data : [];
+      }
 
       // Filter and sort by rating
       const topTours = tours
@@ -59,15 +66,17 @@ export default function AIRecommendations() {
       const enrichedTours = await Promise.all(
         topTours.map(async (tour) => {
           try {
-            const bookingsRes = await api.get(`/booking/guide/${tour.guideId}`).catch(() => ({ data: [] }));
+            const bookingsRes = tour.guideId
+              ? await api.get(`/booking/guide/${tour.guideId}`).catch(() => ({ data: [] }))
+              : { data: [] };
             const bookings = Array.isArray(bookingsRes.data) ? bookingsRes.data : [];
             const completedCount = bookings.filter(b => b.status === 'completed').length;
 
             return {
               ...tour,
-              title: tour.destination || tour.title,
+              title: tour.destination || tour.name || tour.title,
               desc: tour.description || `Guided tour by an experienced local guide`,
-              tag: getCategoryTag(tour.destination),
+              tag: getCategoryTag(tour.destination || tour.name || ''),
               price: `$${tour.price || 0}`,
               rating: tour.rating || 4.5,
               image: tour.image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=400&q=80',
@@ -76,9 +85,9 @@ export default function AIRecommendations() {
           } catch (err) {
             return {
               ...tour,
-              title: tour.destination || tour.title,
+              title: tour.destination || tour.name || tour.title,
               desc: tour.description || `Explore this amazing destination`,
-              tag: getCategoryTag(tour.destination),
+              tag: getCategoryTag(tour.destination || tour.name || ''),
               price: `$${tour.price || 0}`,
               rating: tour.rating || 4.5,
               image: tour.image || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=400&q=80',
@@ -176,7 +185,7 @@ export default function AIRecommendations() {
           ) : (
             <Grid container spacing={3}>
               {recommendations.map((rec, idx) => (
-                <Grid item xs={12} sm={4} key={rec._id || idx}>
+                <Grid size={{ xs: 12, sm: 4 }} key={rec._id || idx}>
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}

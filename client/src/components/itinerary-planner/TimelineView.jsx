@@ -72,14 +72,14 @@ const TimelineView = ({ itinerary, onActivityUpdate }) => {
   const formatTimeRange = (start, end) => {
     if (!start && !end) return '';
     if (!end) return start;
-    return `${start} – ${end}`;
+    return `${start} - ${end}`;
   };
 
   const extractTips = (text) => {
     if (!text || typeof text !== 'string') return [];
     const cleaned = text
       .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/•/g, '\n')
+      .replace(/�/g, '\n')
       .replace(/\s+-\s+/g, '\n');
     return cleaned
       .split(/\n|;|\u2022/)
@@ -241,3 +241,4 @@ const TimelineView = ({ itinerary, onActivityUpdate }) => {
 };
 
 export default TimelineView;
+

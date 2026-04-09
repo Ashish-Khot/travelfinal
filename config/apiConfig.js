@@ -10,7 +10,8 @@ module.exports = {
     API_KEY: process.env.OPENTRIPMAP_API_KEY || '',
     BASE_URL: 'https://api.opentripmap.com/0.1/en/places',
     DETAILS_URL: 'https://api.opentripmap.com/0.1/en/places/xid',
-    AROUND_URL: 'https://api.opentripmap.com/0.1/en/places/around',
+    // Radius endpoint returns stable place data for itinerary generation
+    AROUND_URL: 'https://api.opentripmap.com/0.1/en/places/radius',
   },
 
   // OpenWeatherMap API - Free weather data
@@ -27,6 +28,13 @@ module.exports = {
     API_KEY: process.env.OPENROUTER_API_KEY || '',
     BASE_URL: 'https://openrouter.ai/api/v1',
     MODEL: process.env.OPENROUTER_MODEL || 'openrouter/free', // Free models router
+  },
+
+  // Groq API - Fast inference for chat models
+  GROQ: {
+    API_KEY: process.env.GROQ_API_KEY || '',
+    BASE_URL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
+    MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
   },
 
   // Google Gemini API - Multimodal AI (text + images)
@@ -50,6 +58,18 @@ module.exports = {
   // Preferred AI provider (openai | gemini | openrouter)
   AI: {
     PROVIDER: process.env.AI_PROVIDER || '',
+  },
+
+  // Virtual Guide AI routing
+  GUIDE_AI: {
+    PROVIDER: process.env.GUIDE_AI_PROVIDER || '',
+    PROVIDER_SEQUENCE: process.env.GUIDE_AI_PROVIDER_SEQUENCE || 'openai,openrouter,groq',
+    OPENAI_MODEL: process.env.GUIDE_AI_OPENAI_MODEL || process.env.OPENAI_MODEL || 'gpt-oss-20b',
+    OPENROUTER_MODEL:
+      process.env.GUIDE_AI_OPENROUTER_MODEL || process.env.OPENROUTER_MODEL || 'openrouter/free',
+    GROQ_MODEL:
+      process.env.GUIDE_AI_GROQ_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    STREAM_TIMEOUT_MS: Number(process.env.GUIDE_AI_STREAM_TIMEOUT_MS || 45000),
   },
 
   // Google Maps (optional for premium features)

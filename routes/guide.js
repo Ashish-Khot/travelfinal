@@ -1,10 +1,12 @@
 const express = require('express');
 const Guide = require('../models/Guide');
-const Travelogue = require('../models/Travelogue');
-const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
+const { askGuide } = require('../controllers/guideAiController');
 
 const router = express.Router();
+
+// Real-time virtual guide route (SSE streaming)
+router.post('/ask', verifyToken, askGuide);
 
 // Guide application route
 router.post('/apply', verifyToken, authorizeRoles('guide'), async (req, res) => {
@@ -48,8 +50,6 @@ router.get('/profile/:userId', async (req, res) => {
   }
 });
 
-module.exports = router;
-
 // Get all approved guides (for tourists to explore)
 router.get('/', async (req, res) => {
   try {
@@ -60,3 +60,5 @@ router.get('/', async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
+module.exports = router;

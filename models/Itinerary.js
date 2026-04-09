@@ -99,6 +99,11 @@ const ItinerarySchema = new mongoose.Schema(
 
     // Budget tracking
     budget: {
+      requestedBudget: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
       totalBudget: {
         type: Number,
         default: 0,
@@ -107,6 +112,47 @@ const ItinerarySchema = new mongoose.Schema(
       currency: {
         type: String,
         default: 'USD',
+      },
+      minimumRecommended: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      comfortableEstimate: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      premiumEstimate: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      suggestedDailyBudget: {
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      status: {
+        type: String,
+        enum: ['below-minimum', 'within-range', 'above-premium'],
+        default: 'within-range',
+      },
+      adjustmentApplied: {
+        type: Boolean,
+        default: false,
+      },
+      adjustmentMessage: {
+        type: String,
+        default: '',
+      },
+      destinationCostLevel: {
+        type: String,
+        default: 'medium',
+      },
+      destinationType: {
+        type: String,
+        default: 'domestic-city',
       },
       accommodation: {
         type: Number,
@@ -288,6 +334,31 @@ const ItinerarySchema = new mongoose.Schema(
       createdAt: {
         type: Date,
         default: Date.now,
+      },
+    },
+
+    planningInsights: {
+      averageActivityDurationMinutes: {
+        type: Number,
+        default: 0,
+      },
+      totalEstimatedTravelMinutes: {
+        type: Number,
+        default: 0,
+      },
+      budgetStatus: {
+        type: String,
+        enum: ['below-minimum', 'within-range', 'above-premium'],
+        default: 'within-range',
+      },
+      destinationProfile: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null,
+      },
+      weatherStatus: {
+        type: String,
+        enum: ['live', 'unavailable'],
+        default: 'unavailable',
       },
     },
 
