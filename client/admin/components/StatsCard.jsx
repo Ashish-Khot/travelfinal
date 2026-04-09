@@ -1,14 +1,5 @@
 import React from 'react';
-import {
-  Paper,
-  Typography,
-  Box,
-  Avatar,
-  LinearProgress,
-  Tooltip,
-  useTheme,
-  alpha,
-} from '@mui/material';
+import { Paper, Typography, Box, Avatar, LinearProgress, alpha } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { motion } from 'framer-motion';
@@ -17,8 +8,7 @@ export default function StatsCard({
   label,
   value,
   icon: Icon,
-  color = '#3b82f6',
-  bgColor,
+  color = '#2563eb',
   trend = null,
   trendValue = null,
   percentage = null,
@@ -26,176 +16,84 @@ export default function StatsCard({
   onClick = null,
   loading = false,
 }) {
-  const theme = useTheme();
-  const calculatedBgColor = bgColor || alpha(color, 0.1);
-
-  const containerVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.4, ease: 'easeOut' },
-    },
-    hover: {
-      y: -8,
-      boxShadow:
-        theme.palette.mode === 'light'
-          ? '0 20px 40px rgba(0, 0, 0, 0.1)'
-          : '0 20px 40px rgba(0, 0, 0, 0.5)',
-    },
-  };
-
-  const content = (
+  return (
     <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      whileHover="hover"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.22 }}
       style={{ height: '100%', cursor: onClick ? 'pointer' : 'default' }}
     >
       <Paper
-        elevation={2}
+        elevation={0}
         sx={{
-          borderRadius: 3,
-          p: 2.5,
+          borderRadius: '14px',
+          p: 2.25,
+          minHeight: 158,
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          background:
-            theme.palette.mode === 'light'
-              ? '#ffffff'
-              : alpha('#ffffff', 0.05),
-          border: `1px solid ${alpha(color, 0.2)}`,
-          overflow: 'hidden',
+          background: '#ffffff',
+          border: '1px solid #e5e7eb',
+          boxShadow: '0 14px 32px rgba(15,23,42,0.05)',
           position: 'relative',
+          overflow: 'hidden',
           '&::before': {
             content: '""',
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: '4px',
-            background: `linear-gradient(90deg, ${color}, ${alpha(color, 0.5)})`,
+            inset: '0 0 auto 0',
+            height: 3,
+            background: `linear-gradient(90deg, ${color}, ${alpha(color, 0.55)})`,
           },
         }}
         onClick={onClick}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: 'text.secondary',
-                fontWeight: 600,
-                fontSize: '0.875rem',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-              }}
-            >
-              {label}
-            </Typography>
-          </Box>
-          <Avatar
-            sx={{
-              bgcolor: calculatedBgColor,
-              color,
-              width: 40,
-              height: 40,
-              fontSize: '1.25rem',
-            }}
-          >
-            {Icon && <Icon />}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.25 }}>
+          <Typography sx={{ color: '#64748b', fontWeight: 600, fontSize: '0.8rem', lineHeight: 1.35 }}>{label}</Typography>
+          <Avatar sx={{ bgcolor: alpha(color, 0.12), color, width: 34, height: 34 }}>
+            {Icon && <Icon fontSize="small" />}
           </Avatar>
         </Box>
 
-        <Box sx={{ flex: 1, my: 1 }}>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 900,
-              background: `linear-gradient(135deg, ${color}, ${alpha(color, 0.6)})`,
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              letterSpacing: '-1px',
-            }}
-          >
+        <Box sx={{ flex: 1 }}>
+          <Typography sx={{ fontSize: '1.55rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
             {loading ? '...' : value}
           </Typography>
-          {subtitle && (
-            <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
-              {subtitle}
-            </Typography>
-          )}
+          {subtitle && <Typography sx={{ color: '#94a3b8', fontSize: '0.75rem', mt: 0.45 }}>{subtitle}</Typography>}
         </Box>
 
-        {percentage !== null && (
-          <Box sx={{ mb: 1 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Progress
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  fontWeight: 700,
-                  color,
-                }}
-              >
-                {percentage}%
-              </Typography>
+        {typeof percentage === 'number' || typeof percentage === 'string' ? (
+          <Box sx={{ mb: 0.75 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+              <Typography sx={{ color: '#94a3b8', fontSize: '0.7rem' }}>Progress</Typography>
+              <Typography sx={{ color, fontSize: '0.7rem', fontWeight: 600 }}>{percentage}%</Typography>
             </Box>
             <LinearProgress
               variant="determinate"
-              value={percentage}
+              value={Number(percentage) || 0}
               sx={{
                 height: 6,
-                borderRadius: 3,
-                backgroundColor: alpha(color, 0.1),
+                borderRadius: 999,
+                backgroundColor: alpha(color, 0.12),
                 '& .MuiLinearProgress-bar': {
-                  borderRadius: 3,
-                  background: `linear-gradient(90deg, ${color}, ${alpha(color, 0.6)})`,
+                  backgroundColor: color,
+                  borderRadius: 999,
                 },
               }}
             />
           </Box>
-        )}
+        ) : null}
 
         {trend !== null && trendValue !== null && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              pt: 1,
-              borderTop: `1px solid ${alpha(color, 0.2)}`,
-            }}
-          >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.25,
-                color: trend === 'up' ? '#22c55e' : '#ef4444',
-              }}
-            >
-              {trend === 'up' ? <TrendingUpIcon sx={{ fontSize: '1rem' }} /> : <TrendingDownIcon sx={{ fontSize: '1rem' }} />}
-              <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                {Math.abs(trendValue)}%
-              </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.65, mt: 'auto' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2, color: trend === 'up' ? '#16a34a' : '#dc2626' }}>
+              {trend === 'up' ? <TrendingUpIcon sx={{ fontSize: '0.9rem' }} /> : <TrendingDownIcon sx={{ fontSize: '0.9rem' }} />}
+              <Typography sx={{ fontSize: '0.72rem', fontWeight: 600 }}>{Math.abs(trendValue)}%</Typography>
             </Box>
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              from last month
-            </Typography>
+            <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem' }}>month over month</Typography>
           </Box>
         )}
       </Paper>
     </motion.div>
   );
-
-  if (onClick) {
-    return content;
-  }
-
-  return content;
 }

@@ -1,27 +1,54 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../src/api';
 import {
-  Box, Typography, Paper, Button, TextField, InputAdornment, MenuItem, Select, FormControl, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, IconButton, Grid
+  Box,
+  Typography,
+  Paper,
+  Button,
+  TextField,
+  InputAdornment,
+  MenuItem,
+  Select,
+  FormControl,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  IconButton,
+  Grid,
+  Stack,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-
-
+import GroupIcon from '@mui/icons-material/Group';
+import { motion } from 'framer-motion';
 import GuideInfoDialog from '../components/GuideInfoDialog';
 
 const roleColors = {
-  tourist: { label: 'tourist', color: 'primary', sx: { bgcolor: '#e0e7ff', color: '#2563eb', fontWeight: 600 } },
-  guide: { label: 'guide', color: 'success', sx: { bgcolor: '#d1fae5', color: '#059669', fontWeight: 600 } },
-  hotel: { label: 'hotel', color: 'secondary', sx: { bgcolor: '#ede9fe', color: '#7c3aed', fontWeight: 600 } },
-  hospital: { label: 'hospital', color: 'error', sx: { bgcolor: '#fee2e2', color: '#dc2626', fontWeight: 600 } },
+  tourist: { bg: '#dbeafe', fg: '#1d4ed8' },
+  guide: { bg: '#dcfce7', fg: '#15803d' },
+  hotel: { bg: '#ede9fe', fg: '#6d28d9' },
+  hospital: { bg: '#fee2e2', fg: '#b91c1c' },
 };
+
 const statusColors = {
-  pending: { label: 'pending', color: 'warning', sx: { bgcolor: '#fef9c3', color: '#b45309', fontWeight: 600 } },
-  active: { label: 'active', color: 'success', sx: { bgcolor: '#d1fae5', color: '#059669', fontWeight: 600 } },
-  disabled: { label: 'disabled', color: 'default', sx: { bgcolor: '#f3f4f6', color: '#6b7280', fontWeight: 600 } },
+  pending: { bg: '#fef3c7', fg: '#92400e' },
+  active: { bg: '#dcfce7', fg: '#166534' },
+  disabled: { bg: '#f3f4f6', fg: '#4b5563' },
+  rejected: { bg: '#fee2e2', fg: '#b91c1c' },
+};
+
+const cardSx = {
+  borderRadius: '14px',
+  p: 2.25,
+  border: '1px solid #e2e8f0',
+  background: '#fff',
+  boxShadow: '0 16px 32px rgba(15,23,42,0.05)',
 };
 
 export default function UserManagement() {
@@ -31,21 +58,20 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null); // user object (any role)
+  const [selectedUser, setSelectedUser] = useState(null);
   const [guideInfo, setGuideInfo] = useState(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 
-  // Open dialog and fetch guide info for guides, or show basic info for others
   const handleEditUser = async (user) => {
     setSelectedUser(user);
     setDialogOpen(true);
     setGuideInfo(null);
+
     if (user.role === 'guide' && user.guideId) {
       setGuideLoading(true);
       try {
-        // Fetch guide info by userId
         const res = await api.get(`/guide/profile/${user._id}`);
         setGuideInfo(res.data.guide);
       } catch (err) {
@@ -58,7 +84,6 @@ export default function UserManagement() {
     }
   };
 
-  // Refetch users from backend
   const refetchUsers = async () => {
     setLoading(true);
     try {
@@ -70,7 +95,6 @@ export default function UserManagement() {
     setLoading(false);
   };
 
-  // Approve guide from dialog
   const handleApproveGuide = async () => {
     if (!guideInfo?._id) return;
     setApproving(true);
@@ -89,7 +113,6 @@ export default function UserManagement() {
     setApproving(false);
   };
 
-  // Reject guide from dialog
   const handleRejectGuide = async () => {
     if (!guideInfo?._id) return;
     setRejecting(true);
@@ -97,10 +120,8 @@ export default function UserManagement() {
       const res = await api.post(`/adminGuide/action/${guideInfo._id}`, { action: 'reject' });
       if (res?.data?.message === 'Guide rejected') {
         alert('Guide rejected.');
-        // Keep dialog open so admin can still see info
         await refetchUsers();
-        // Optionally update guideInfo state to reflect rejection
-        setGuideInfo(prev => prev ? { ...prev, rejected: true, approved: false } : prev);
+        setGuideInfo((prev) => (prev ? { ...prev, rejected: true, approved: false } : prev));
       } else {
         alert('Failed to reject guide.');
       }
@@ -110,12 +131,11 @@ export default function UserManagement() {
     setRejecting(false);
   };
 
-  // Delete user
   const handleDeleteUser = async (user) => {
     if (!window.confirm(`Are you sure you want to delete user ${user.name}? This action cannot be undone.`)) return;
     try {
       await api.delete(`/admin/users/${user._id}`);
-      setUsers(prev => prev.filter(u => u._id !== user._id));
+      setUsers((prev) => prev.filter((u) => u._id !== user._id));
     } catch (err) {
       alert('Failed to delete user.');
     }
@@ -135,8 +155,7 @@ export default function UserManagement() {
     fetchUsers();
   }, []);
 
-  // Filtering logic
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = users.filter((user) => {
     const matchesSearch =
       user.name?.toLowerCase().includes(search.toLowerCase()) ||
       user.email?.toLowerCase().includes(search.toLowerCase());
@@ -146,118 +165,152 @@ export default function UserManagement() {
   });
 
   return (
-    <Box sx={{ p: { xs: 1, md: 4 }, background: 'var(--bg)' }}>
-      <Typography variant="h3" fontWeight={900} sx={{ mb: 1 }}>
-        User Management
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 4 }}>
-        Manage tourists, guides, hotels, and hospitals
-      </Typography>
-      <Grid container spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6} lg={7}>
-          <TextField
-            fullWidth
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon color="action" />
-                </InputAdornment>
-              ),
-              sx: { borderRadius: 2, background: '#fff' },
-            }}
-            size="medium"
-          />
+    <Box>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22 }}>
+        <Paper elevation={0} sx={{ ...cardSx, mb: 2.5, background: 'linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)' }}>
+          <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 0.75 }}>
+            <Box sx={{ width: 34, height: 34, borderRadius: '10px', bgcolor: '#dbeafe', color: '#2563eb', display: 'grid', placeItems: 'center' }}>
+              <GroupIcon fontSize="small" />
+            </Box>
+            <Typography sx={{ fontSize: '1.35rem', fontWeight: 700, color: '#0f172a' }}>User Management</Typography>
+          </Stack>
+          <Typography sx={{ fontSize: '0.85rem', color: '#64748b' }}>Manage tourists, guides, hotels and hospitals with fast moderation controls.</Typography>
+        </Paper>
+      </motion.div>
+
+      <Paper elevation={0} sx={{ ...cardSx, mb: 2.5 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={5}>
+            <TextField
+              fullWidth
+              placeholder="Search by name or email"
+              value={search}
+              size="small"
+              onChange={(e) => setSearch(e.target.value)}
+              InputProps={{ startAdornment: (<InputAdornment position="start"><SearchIcon fontSize="small" color="action" /></InputAdornment>) }}
+            />
+          </Grid>
+
+          <Grid item xs={6} md={2}>
+            <FormControl fullWidth size="small">
+              <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                <MenuItem value="all">All Roles</MenuItem>
+                <MenuItem value="tourist">Tourist</MenuItem>
+                <MenuItem value="guide">Guide</MenuItem>
+                <MenuItem value="hotel">Hotel</MenuItem>
+                <MenuItem value="hospital">Hospital</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={6} md={2}>
+            <FormControl fullWidth size="small">
+              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="active">Active</MenuItem>
+                <MenuItem value="disabled">Disabled</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} md={3} sx={{ textAlign: { xs: 'left', md: 'right' } }}>
+            <Button variant="contained" size="small" startIcon={<AddIcon fontSize="small" />} sx={{ textTransform: 'none' }}>
+              Add User
+            </Button>
+          </Grid>
         </Grid>
-        <Grid item xs={6} md={3} lg={2}>
-          <FormControl fullWidth size="medium">
-            <Select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} sx={{ borderRadius: 2, background: '#fff' }}>
-              <MenuItem value="all">All Roles</MenuItem>
-              <MenuItem value="tourist">Tourist</MenuItem>
-              <MenuItem value="guide">Guide</MenuItem>
-              <MenuItem value="hotel">Hotel</MenuItem>
-              <MenuItem value="hospital">Hospital</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={6} md={3} lg={2}>
-          <FormControl fullWidth size="medium">
-            <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} sx={{ borderRadius: 2, background: '#fff' }}>
-              <MenuItem value="all">All Status</MenuItem>
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="active">Active</MenuItem>
-              <MenuItem value="disabled">Disabled</MenuItem>
-            </Select>
-          </FormControl>
-        </Grid>
-        <Grid item xs={12} md={12} lg={1} sx={{ textAlign: { xs: 'right', md: 'right' } }}>
-          <Button variant="contained" startIcon={<AddIcon />} sx={{ borderRadius: 2, fontWeight: 700, background: '#0f172a', color: '#fff', px: 3, py: 1.5, boxShadow: 'none', textTransform: 'none' }}>
-            Add User
-          </Button>
-        </Grid>
-      </Grid>
-      <Paper elevation={1} sx={{ borderRadius: 3, overflow: 'hidden' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Email</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Role</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Location</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 16 }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">Loading...</TableCell>
-                </TableRow>
-              ) : filteredUsers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">No users found.</TableCell>
-                </TableRow>
-              ) : (
-                filteredUsers.map((user, idx) => (
-                  <TableRow key={user._id || idx}>
-                    <TableCell>{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>
-                      <Chip label={roleColors[user.role]?.label || user.role} sx={{ ...roleColors[user.role]?.sx, fontSize: 15, px: 2, py: 0.5, borderRadius: 2 }} />
-                    </TableCell>
-                    <TableCell>
-                      <Chip label={statusColors[user.status]?.label || user.status} sx={{ ...statusColors[user.status]?.sx, fontSize: 15, px: 2, py: 0.5, borderRadius: 2 }} />
-                    </TableCell>
-                    <TableCell>{user.location || '-'}</TableCell>
-                    <TableCell>
-                      {/* Edit button for all users */}
-                      <IconButton color="primary" sx={{ mr: 1 }} onClick={() => handleEditUser(user)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton color="error" onClick={() => handleDeleteUser(user)}><DeleteIcon /></IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
       </Paper>
-    {/* Guide Info Dialog (also used for non-guides) */}
-    <GuideInfoDialog
-      open={dialogOpen}
-      onClose={() => setDialogOpen(false)}
-      guide={selectedUser?.role === 'guide' ? guideInfo : selectedUser}
-      loading={guideLoading}
-      onApprove={handleApproveGuide}
-      onReject={handleRejectGuide}
-      approving={approving}
-      rejecting={rejecting}
-      isGuide={selectedUser?.role === 'guide'}
-    />
-  </Box>
+
+      <Paper elevation={0} sx={{ ...cardSx, p: 0, overflow: 'hidden' }}>
+        <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+          <TableContainer sx={{ p: 2.25, overflowX: 'auto' }}>
+            <Table sx={{ width: '100%', tableLayout: 'fixed' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ width: 140, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Name</TableCell>
+                  <TableCell sx={{ width: 240, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Email</TableCell>
+                  <TableCell sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Role</TableCell>
+                  <TableCell sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ width: 120, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Location</TableCell>
+                  <TableCell align="right" sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {loading ? (
+                  <TableRow><TableCell colSpan={6} align="center">Loading...</TableCell></TableRow>
+                ) : filteredUsers.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} align="center">No users found.</TableCell></TableRow>
+                ) : (
+                  filteredUsers.map((user, idx) => {
+                    const roleColor = roleColors[user.role] || { bg: '#f3f4f6', fg: '#374151' };
+                    const statusColor = statusColors[user.status] || { bg: '#f3f4f6', fg: '#374151' };
+                    return (
+                      <TableRow key={user._id || idx} hover sx={{ '& td': { py: 1.4, fontSize: '13px' } }}>
+                        <TableCell sx={{ fontWeight: 600 }}>{user.name}</TableCell>
+                        <TableCell sx={{ color: '#334155' }}>{user.email}</TableCell>
+                        <TableCell><Chip label={user.role} size="small" sx={{ bgcolor: roleColor.bg, color: roleColor.fg, borderRadius: '8px', fontWeight: 600, fontSize: '0.72rem' }} /></TableCell>
+                        <TableCell><Chip label={user.status} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.fg, borderRadius: '8px', fontWeight: 600, fontSize: '0.72rem' }} /></TableCell>
+                        <TableCell>{user.location || '-'}</TableCell>
+                        <TableCell align="right">
+                          <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}><EditIcon fontSize="small" /></IconButton>
+                          <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}><DeleteIcon fontSize="small" /></IconButton>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
+
+        <Box sx={{ display: { xs: 'block', md: 'none' }, p: 2 }}>
+          {loading ? (
+            <Typography sx={{ fontSize: '14px', color: '#6b7280', textAlign: 'center', py: 2 }}>Loading...</Typography>
+          ) : filteredUsers.length === 0 ? (
+            <Typography sx={{ fontSize: '14px', color: '#6b7280', textAlign: 'center', py: 2 }}>No users found.</Typography>
+          ) : (
+            <Stack spacing={1.2}>
+              {filteredUsers.map((user, idx) => {
+                const roleColor = roleColors[user.role] || { bg: '#f3f4f6', fg: '#374151' };
+                const statusColor = statusColors[user.status] || { bg: '#f3f4f6', fg: '#374151' };
+                return (
+                  <Paper key={user._id || idx} elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '10px', p: 1.35 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
+                      <Box>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#0f172a' }}>{user.name}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#64748b' }}>{user.email}</Typography>
+                      </Box>
+                      <Stack direction="row" spacing={0.5}>
+                        <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}><EditIcon fontSize="small" /></IconButton>
+                        <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}><DeleteIcon fontSize="small" /></IconButton>
+                      </Stack>
+                    </Box>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                      <Chip label={user.role} size="small" sx={{ bgcolor: roleColor.bg, color: roleColor.fg, borderRadius: '8px', fontWeight: 600 }} />
+                      <Chip label={user.status} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.fg, borderRadius: '8px', fontWeight: 600 }} />
+                      <Chip label={user.location || 'No location'} size="small" variant="outlined" sx={{ borderRadius: '8px' }} />
+                    </Stack>
+                  </Paper>
+                );
+              })}
+            </Stack>
+          )}
+        </Box>
+      </Paper>
+
+      <GuideInfoDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        guide={selectedUser?.role === 'guide' ? guideInfo : selectedUser}
+        loading={guideLoading}
+        onApprove={handleApproveGuide}
+        onReject={handleRejectGuide}
+        approving={approving}
+        rejecting={rejecting}
+        isGuide={selectedUser?.role === 'guide'}
+      />
+    </Box>
   );
 }

@@ -20,6 +20,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import WarningIcon from '@mui/icons-material/Warning';
 import InfoIcon from '@mui/icons-material/Info';
+import CloseIcon from '@mui/icons-material/Close';
 import { motion, AnimatePresence } from 'framer-motion';
 import { notificationManager, NOTIFICATION_TYPES } from '../services/notificationService';
 import { formatTimeAgo } from '../services/utilityService';
@@ -115,7 +116,7 @@ export default function NotificationBell() {
         onClose={handleClose}
         PaperProps={{
           sx: {
-            width: 380,
+            width: { xs: 'calc(100vw - 24px)', sm: 380 },
             maxHeight: 500,
             borderRadius: 2,
             boxShadow: theme.palette.mode === 'light' 
@@ -266,7 +267,7 @@ export default function NotificationBell() {
                           '&:hover': { opacity: 1, bgcolor: alpha(theme.palette.error.main, 0.1) },
                         }}
                       >
-                        ✕
+                        <CloseIcon fontSize="inherit" />
                       </IconButton>
                     </Box>
                   </MenuItem>
@@ -297,3 +298,5 @@ export default function NotificationBell() {
     </>
   );
 }
+
+

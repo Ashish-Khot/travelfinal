@@ -1,16 +1,23 @@
 import React from 'react';
-import { Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, Toolbar, Typography, Box, alpha, useTheme } from '@mui/material';
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Toolbar,
+  Typography,
+  Box,
+  alpha,
+  useTheme,
+  Divider,
+} from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import BookIcon from '@mui/icons-material/Book';
-import PlaceIcon from '@mui/icons-material/Place';
-import CategoryIcon from '@mui/icons-material/Category';
-import CommentIcon from '@mui/icons-material/Comment';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import SettingsIcon from '@mui/icons-material/Settings';
 import RateReviewIcon from '@mui/icons-material/RateReview';
-import HistoryIcon from '@mui/icons-material/History';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
@@ -19,103 +26,88 @@ const navItems = [
   { label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
   { label: 'Reviews', path: '/admin/reviews', icon: <RateReviewIcon /> },
   { label: 'Travelogues', path: '/admin/travelogues', icon: <BookIcon /> },
-  { label: 'Destinations', path: '/admin/destinations', icon: <PlaceIcon /> },
-  { label: 'Categories', path: '/admin/categories', icon: <CategoryIcon /> },
-  { label: 'Comments', path: '/admin/comments', icon: <CommentIcon /> },
-  { label: 'Analytics', path: '/admin/analytics', icon: <BarChartIcon /> },
-  { label: 'Activity Log', path: '/admin/activity-log', icon: <HistoryIcon /> },
-  { label: 'Notifications', path: '/admin/notifications', icon: <NotificationsIcon /> },
-  { label: 'Settings', path: '/admin/settings', icon: <SettingsIcon /> },
 ];
 
-export default function Sidebar() {
-  const theme = useTheme();
+const drawerWidth = 248;
+
+function SidebarContent({ theme, onClose }) {
+  const handleNavClick = () => {
+    if (onClose) onClose();
+  };
 
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: 240,
-        flexShrink: 0,
-        [`& .MuiDrawer-paper`]: {
-          width: 240,
-          boxSizing: 'border-box',
-          background: theme.palette.mode === 'light'
-            ? 'linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%)'
-            : 'linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%)',
-          color: theme.palette.text.primary,
-          borderRight: `1px solid ${alpha(theme.palette.divider, 0.3)}`,
-        },
-      }}
-    >
-      <Toolbar />
-      <Box sx={{ p: 2 }}>
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 900,
-              background: `linear-gradient(135deg, ${theme.palette.primary.main}, #6366f1)`,
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              fontSize: '1.1rem',
-              letterSpacing: '-0.5px',
-            }}
-          >
-            🚀 Admin Panel
-          </Typography>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Toolbar sx={{ minHeight: 72 }} />
+
+      <Box sx={{ px: 2, pb: 2 }}>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
+            <Box
+              sx={{
+                width: 34,
+                height: 34,
+                borderRadius: '10px',
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: '#2563eb',
+                color: '#fff',
+              }}
+            >
+              <TravelExploreIcon fontSize="small" />
+            </Box>
+            <Box>
+              <Typography sx={{ color: '#e5e7eb', fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.2px' }}>
+                Travelogue
+              </Typography>
+              <Typography sx={{ color: '#94a3b8', fontSize: '0.72rem', fontWeight: 500 }}>
+                Admin Console
+              </Typography>
+            </Box>
+          </Box>
         </motion.div>
       </Box>
-      <List sx={{ px: 1, flex: 1 }}>
+
+      <Divider sx={{ borderColor: alpha('#94a3b8', 0.2), mb: 1 }} />
+
+      <List sx={{ px: 1.5, flex: 1 }}>
         {navItems.map((item, index) => (
           <motion.div
             key={item.path}
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.05 }}
+            transition={{ duration: 0.2, delay: index * 0.04 }}
           >
-            <NavLink to={item.path} style={{ textDecoration: 'none', color: 'inherit' }}>
+            <NavLink to={item.path} style={{ textDecoration: 'none', color: 'inherit' }} onClick={handleNavClick}>
               {({ isActive }) => (
                 <ListItem disablePadding>
                   <ListItemButton
                     selected={isActive}
                     sx={{
-                      borderRadius: 2,
+                      borderRadius: '12px',
                       mb: 0.75,
+                      px: 1.25,
+                      minHeight: 44,
                       transition: 'all 0.2s ease',
                       background: isActive
-                        ? alpha(theme.palette.primary.main, 0.15)
+                        ? 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(30,64,175,0.15))'
                         : 'transparent',
-                      borderLeft: isActive
-                        ? `3px solid ${theme.palette.primary.main}`
-                        : `3px solid transparent`,
-                      color: isActive
-                        ? theme.palette.primary.main
-                        : theme.palette.text.primary,
+                      border: isActive ? `1px solid ${alpha('#60a5fa', 0.35)}` : '1px solid transparent',
+                      color: isActive ? '#dbeafe' : '#cbd5e1',
                       '&:hover': {
-                        background: alpha(theme.palette.primary.main, 0.1),
-                        borderLeftColor: theme.palette.primary.main,
+                        background: isActive
+                          ? 'linear-gradient(135deg, rgba(37,99,235,0.2), rgba(30,64,175,0.2))'
+                          : alpha('#93c5fd', 0.08),
                       },
                       '& .MuiListItemIcon-root': {
-                        color: isActive
-                          ? theme.palette.primary.main
-                          : 'inherit',
-                        minWidth: 40,
+                        color: isActive ? '#93c5fd' : '#94a3b8',
+                        minWidth: 34,
                       },
                     }}
                   >
                     <ListItemIcon>{item.icon}</ListItemIcon>
                     <ListItemText
                       primary={item.label}
-                      primaryTypographyProps={{
-                        fontSize: '0.95rem',
-                        fontWeight: isActive ? 700 : 500,
-                      }}
+                      primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: isActive ? 600 : 500 }}
                     />
                   </ListItemButton>
                 </ListItem>
@@ -124,6 +116,50 @@ export default function Sidebar() {
           </motion.div>
         ))}
       </List>
-    </Drawer>
+    </Box>
+  );
+}
+
+export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
+  const theme = useTheme();
+
+  return (
+    <>
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={onClose}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', lg: 'none' },
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            background: '#0b1220',
+            borderRight: '1px solid #1f2937',
+          },
+        }}
+      >
+        <SidebarContent theme={theme} onClose={onClose} />
+      </Drawer>
+
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: 'none', lg: 'block' },
+          width: drawerWidth,
+          flexShrink: 0,
+          [`& .MuiDrawer-paper`]: {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            background: 'linear-gradient(180deg, #0b1220 0%, #0f172a 100%)',
+            color: '#cbd5e1',
+            borderRight: '1px solid #1f2937',
+          },
+        }}
+      >
+        <SidebarContent theme={theme} />
+      </Drawer>
+    </>
   );
 }
