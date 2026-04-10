@@ -4,11 +4,13 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { motion, AnimatePresence } from 'framer-motion';
 
+const FALLBACK_DEST_IMAGE = '/no-image-fallback.png';
+
 const DestinationGallery = ({ images = [], title = '' }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Ensure we have at least one image
-  const displayImages = images && images.length > 0 ? images : ['/fallback-destination.jpg'];
+  const displayImages = images && images.length > 0 ? images : [FALLBACK_DEST_IMAGE];
 
   const nextImage = () => {
     setCurrentIndex((prev) => (prev + 1) % displayImages.length);
@@ -52,7 +54,7 @@ const DestinationGallery = ({ images = [], title = '' }) => {
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.5 }}
             onError={(e) => {
-              e.target.src = '/fallback-destination.jpg';
+              e.target.src = FALLBACK_DEST_IMAGE;
             }}
             style={{
               position: 'absolute',

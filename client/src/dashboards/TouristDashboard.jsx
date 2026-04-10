@@ -9,7 +9,6 @@ import { io } from 'socket.io-client';
 import theme from '../theme';
 import AppBarTop from './components/AppBarTop';
 import SidebarNav from './components/SidebarNav';
-import VoiceAssistant from '../components/VoiceAssistant';
 
 import ExploreGuides from './components/ExploreGuides';
 import ExploreHotels from './components/ExploreHotels';
@@ -31,7 +30,6 @@ import WeatherForecastCard from './components/WeatherForecastCard';
 import WeatherSearch from './components/WeatherSearch';
 import VirtualGuide from './components/VirtualGuide';
 import ItineraryPlanner from '../components/itinerary-planner/ItineraryPlanner';
-import FloatingChatbot from './components/FloatingChatbot';
 import { Tabs, Tab } from '@mui/material';
 
 function TouristDashboard() {
@@ -458,10 +456,6 @@ function TouristDashboard() {
           {/* Add other tab content as needed */}
         </Box>
       </Box>
-
-      {/* Voice Assistant - Floating Button */}
-      <VoiceAssistant userId={user._id} />
-      <FloatingChatbot onAgentAction={handleAgentAction} />
 
     </ThemeProvider>
   );

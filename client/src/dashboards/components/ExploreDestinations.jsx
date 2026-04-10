@@ -27,6 +27,8 @@ import PremiumDestinationMap from './PremiumDestinationMap';
 import DestinationGallery from './DestinationGallery';
 import OptimizedDestinationCard from './OptimizedDestinationCard';
 
+const FALLBACK_DEST_IMAGE = '/no-image-fallback.png';
+
 const categories = ['All', 'Island', 'Mountain', 'City', 'Heritage', 'Beach', 'Temple', 'Fort'];
 const filters = [
   'All',
@@ -81,6 +83,42 @@ export default function ExploreDestinations() {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('favorites') || '[]'));
   const [isSearchResult, setIsSearchResult] = useState(false); // Track if showing search results
+
+  const normalizeSelectedDestination = (baseDest, detail = null) => {
+    const detailKinds = detail?.kinds || '';
+    const baseKinds =
+      typeof baseDest?.details === 'string' ? baseDest.details : baseDest?.details?.kinds || '';
+    const kinds = detailKinds || baseKinds || baseDest?.category || '';
+    const description =
+      detail?.wikipedia_extracts?.text ||
+      detail?.wikipedia_extract ||
+      detail?.info?.descr ||
+      baseDest?.description ||
+      'Description not available for this place.';
+    const image =
+      detail?.preview?.source ||
+      detail?.image ||
+      baseDest?.image ||
+      FALLBACK_DEST_IMAGE;
+
+    const detailObject =
+      baseDest?.details && typeof baseDest.details === 'object' ? { ...baseDest.details } : {};
+
+    return {
+      ...baseDest,
+      description,
+      image,
+      city: detail?.address?.city || baseDest?.city || '',
+      country: detail?.address?.country || baseDest?.country || '',
+      // OpenTripMap rate is typically low-scale; convert roughly to /10 to fit existing UI.
+      rating: detail?.rate ? Number(detail.rate) * 2 : Number(baseDest?.rating || 0),
+      category: baseDest?.category || kinds,
+      details: {
+        ...detailObject,
+        kinds,
+      },
+    };
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -141,27 +179,27 @@ export default function ExploreDestinations() {
       let places = [];
       if (data.features) {
         places = data.features.map(f => {
-          if (f.properties.kinds === 'Wikipedia') {
-            return {
-              xid: null,
-              name: f.properties.name,
-              lat: null,
-              lon: null,
-              category: 'Wikipedia',
-              image: f.properties.image || '/fallback-destination.jpg',
-              description: f.properties.description || 'No description available.',
-            };
-          }
-          return {
-            xid: f.properties.xid,
-            name: f.properties.name,
-            lat: f.geometry.coordinates[1],
-            lon: f.geometry.coordinates[0],
-            category: f.properties.kinds,
-            image: f.properties.image || '/fallback-destination.jpg',
-            description: f.properties.description || '',
-          };
-        });
+              if (f.properties.kinds === 'Wikipedia') {
+                return {
+                  xid: null,
+                  name: f.properties.name,
+                  lat: null,
+                  lon: null,
+                  category: 'Wikipedia',
+                  image: f.properties.image || FALLBACK_DEST_IMAGE,
+                  description: f.properties.description || 'No description available.',
+                };
+              }
+              return {
+                xid: f.properties.xid,
+                name: f.properties.name,
+                lat: f.geometry.coordinates[1],
+                lon: f.geometry.coordinates[0],
+                category: f.properties.kinds,
+                image: f.properties.image || FALLBACK_DEST_IMAGE,
+                description: f.properties.description || '',
+              };
+            });
       }
       console.log('✅ Search completed, found', places.length, 'results');
       setDestinations(places);
@@ -544,20 +582,12 @@ export default function ExploreDestinations() {
                     try {
                       const detailRes = await fetch(`http://localhost:3001/api/opentripmap/place/${dest.xid}`);
                       const detail = await detailRes.json();
-                      setSelected({
-                        ...dest,
-                        description: detail.wikipedia_extract || detail.info?.descr || '',
-                        image: detail.preview?.source || '/fallback-destination.jpg',
-                        city: detail.address?.city || '',
-                        country: detail.address?.country || '',
-                        rating: detail.rate || 0,
-                        details: detail.kinds || '',
-                      });
+                      setSelected(normalizeSelectedDestination(dest, detail));
                     } catch {
-                      setSelected(dest);
+                      setSelected(normalizeSelectedDestination(dest));
                     }
                   } else {
-                    setSelected(dest);
+                    setSelected(normalizeSelectedDestination(dest));
                   }
                 }}
               />
@@ -586,7 +616,7 @@ export default function ExploreDestinations() {
               zoom={2}
               mapProvider={mapProvider}
               onMarkerClick={dest => {
-                setSelected(dest);
+                setSelected(normalizeSelectedDestination(dest));
               }}
             />
           </Box>
@@ -650,7 +680,7 @@ export default function ExploreDestinations() {
             <DialogContent sx={{ p: 3 }}>
               {/* Gallery */}
               <DestinationGallery
-                images={[selected.image || '/fallback-destination.jpg']}
+                images={[selected.image || FALLBACK_DEST_IMAGE]}
                 title={selected.name}
               />
 
@@ -673,7 +703,7 @@ export default function ExploreDestinations() {
                         Location
                       </Typography>
                       <Typography variant="body2" color="#6B7280">
-                        {[selected.city, selected.country].filter(Boolean).join(', ')} 
+                        {[selected.city, selected.country].filter(Boolean).join(', ') || 'Location not available'}
                         {selected.lat && selected.lon && ` (${selected.lat.toFixed(2)}, ${selected.lon.toFixed(2)})`}
                       </Typography>
                     </Box>
@@ -709,13 +739,20 @@ export default function ExploreDestinations() {
                     Category
                   </Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                    {(selected.details?.kinds || selected.category || '')
+                    {(
+                      selected.details?.kinds ||
+                      (typeof selected.details === 'string' ? selected.details : '') ||
+                      selected.category ||
+                      ''
+                    )
                       .split(',')
+                      .map((cat) => cat.trim())
+                      .filter(Boolean)
                       .slice(0, 5)
                       .map((cat, i) => (
                         <Chip
                           key={i}
-                          label={cat.trim()}
+                          label={cat}
                           variant="outlined"
                           sx={{
                             borderColor: '#4F8A8B',
@@ -731,16 +768,14 @@ export default function ExploreDestinations() {
               <Divider sx={{ my: 2 }} />
 
               {/* Description */}
-              {selected.description && (
-                <Box mb={3}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#1a1a1a' }}>
-                    About This Place
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#4B5563', lineHeight: 1.8 }}>
-                    {selected.description}
-                  </Typography>
-                </Box>
-              )}
+              <Box mb={3}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#1a1a1a' }}>
+                  About This Place
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#4B5563', lineHeight: 1.8 }}>
+                  {selected.description || 'Description not available for this place.'}
+                </Typography>
+              </Box>
 
               {/* Additional Info */}
               {(selected.history || selected.visitingHours || selected.ticketInfo) && (
