@@ -9,6 +9,42 @@ import { ROUTING_CONFIG, getRouteColor, isRoutingConfigured } from '../config/ma
 
 // Simple in-memory cache
 const routeCache = new Map();
+const MAX_LOCAL_ESTIMATED_FALLBACK_DISTANCE_METERS = 250000; // 250km for unknown-country local fallback
+const FLIGHT_CRUISE_SPEED_KMH = 820;
+const FLIGHT_FIXED_OVERHEAD_SECONDS = 90 * 60; // boarding/taxi/security buffer
+
+const MAJOR_AIRPORTS = [
+  { code: 'AMS', name: 'Amsterdam Schiphol', city: 'Amsterdam', country: 'Netherlands', lat: 52.3105, lon: 4.7683 },
+  { code: 'KTM', name: 'Tribhuvan International', city: 'Kathmandu', country: 'Nepal', lat: 27.6977, lon: 85.3591 },
+  { code: 'DEL', name: 'Indira Gandhi International', city: 'Delhi', country: 'India', lat: 28.5562, lon: 77.1 },
+  { code: 'BOM', name: 'Chhatrapati Shivaji Maharaj International', city: 'Mumbai', country: 'India', lat: 19.0896, lon: 72.8656 },
+  { code: 'BLR', name: 'Kempegowda International', city: 'Bengaluru', country: 'India', lat: 13.1986, lon: 77.7066 },
+  { code: 'MAA', name: 'Chennai International', city: 'Chennai', country: 'India', lat: 12.9941, lon: 80.1709 },
+  { code: 'CCU', name: 'Netaji Subhas Chandra Bose International', city: 'Kolkata', country: 'India', lat: 22.6547, lon: 88.4467 },
+  { code: 'GOI', name: 'Goa International', city: 'Goa', country: 'India', lat: 15.3808, lon: 73.8314 },
+  { code: 'LHR', name: 'Heathrow', city: 'London', country: 'United Kingdom', lat: 51.47, lon: -0.4543 },
+  { code: 'CDG', name: 'Charles de Gaulle', city: 'Paris', country: 'France', lat: 49.0097, lon: 2.5479 },
+  { code: 'FRA', name: 'Frankfurt Airport', city: 'Frankfurt', country: 'Germany', lat: 50.0379, lon: 8.5622 },
+  { code: 'MAD', name: 'Adolfo Suarez Madrid-Barajas', city: 'Madrid', country: 'Spain', lat: 40.4983, lon: -3.5676 },
+  { code: 'FCO', name: 'Leonardo da Vinci International', city: 'Rome', country: 'Italy', lat: 41.8003, lon: 12.2389 },
+  { code: 'IST', name: 'Istanbul Airport', city: 'Istanbul', country: 'Turkey', lat: 41.2753, lon: 28.7519 },
+  { code: 'DXB', name: 'Dubai International', city: 'Dubai', country: 'United Arab Emirates', lat: 25.2532, lon: 55.3657 },
+  { code: 'SIN', name: 'Singapore Changi', city: 'Singapore', country: 'Singapore', lat: 1.3644, lon: 103.9915 },
+  { code: 'BKK', name: 'Suvarnabhumi', city: 'Bangkok', country: 'Thailand', lat: 13.69, lon: 100.7501 },
+  { code: 'HND', name: 'Haneda', city: 'Tokyo', country: 'Japan', lat: 35.5494, lon: 139.7798 },
+  { code: 'ICN', name: 'Incheon International', city: 'Seoul', country: 'South Korea', lat: 37.4602, lon: 126.4407 },
+  { code: 'SYD', name: 'Sydney Kingsford Smith', city: 'Sydney', country: 'Australia', lat: -33.9399, lon: 151.1753 },
+  { code: 'JFK', name: 'John F. Kennedy International', city: 'New York', country: 'United States', lat: 40.6413, lon: -73.7781 },
+  { code: 'EWR', name: 'Newark Liberty International', city: 'Newark', country: 'United States', lat: 40.6895, lon: -74.1745 },
+  { code: 'LAX', name: 'Los Angeles International', city: 'Los Angeles', country: 'United States', lat: 33.9416, lon: -118.4085 },
+  { code: 'SFO', name: 'San Francisco International', city: 'San Francisco', country: 'United States', lat: 37.6213, lon: -122.379 },
+  { code: 'ORD', name: 'Chicago O Hare International', city: 'Chicago', country: 'United States', lat: 41.9742, lon: -87.9073 },
+  { code: 'YYZ', name: 'Toronto Pearson International', city: 'Toronto', country: 'Canada', lat: 43.6777, lon: -79.6248 },
+  { code: 'GRU', name: 'Sao Paulo Guarulhos International', city: 'Sao Paulo', country: 'Brazil', lat: -23.4356, lon: -46.4731 },
+  { code: 'JNB', name: 'O R Tambo International', city: 'Johannesburg', country: 'South Africa', lat: -26.1337, lon: 28.242 },
+  { code: 'CAI', name: 'Cairo International', city: 'Cairo', country: 'Egypt', lat: 30.1219, lon: 31.4056 },
+  { code: 'DOH', name: 'Hamad International', city: 'Doha', country: 'Qatar', lat: 25.2731, lon: 51.6081 },
+];
 
 /**
  * Clear expired cache entries
@@ -122,6 +158,230 @@ const estimateDurationByProfile = (distanceMeters, profile) => {
   if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return 0;
   const speedMetersPerSecond = (speedKmh * 1000) / 3600;
   return distanceMeters / speedMetersPerSecond;
+};
+
+const calculateHaversineDistance = (from, to) => {
+  const [fromLat, fromLng] = from || [];
+  const [toLat, toLng] = to || [];
+  if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) return 0;
+
+  const toRadians = (value) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRadians(toLat - fromLat);
+  const dLng = toRadians(toLng - fromLng);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(fromLat)) * Math.cos(toRadians(toLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const createEstimatedRouteFallback = (waypoints, profile, options = {}) => {
+  if (!Array.isArray(waypoints) || waypoints.length < 2) {
+    throw new Error('At least 2 waypoints are required');
+  }
+
+  const distances = [];
+  for (let index = 0; index < waypoints.length - 1; index += 1) {
+    distances.push(calculateHaversineDistance(waypoints[index], waypoints[index + 1]));
+  }
+
+  const totalDistance = distances.reduce((sum, segment) => sum + segment, 0);
+  const totalDuration = estimateDurationByProfile(totalDistance, profile);
+  const routeCoordinates = waypoints.map(([lat, lng]) => [lng, lat]);
+  const instructions = distances.map((distance, index) => {
+    const duration = estimateDurationByProfile(distance, profile);
+    return {
+      id: `estimated-${index}`,
+      stepNumber: index + 1,
+      text: index === 0 ? 'Head towards destination' : 'Continue to next waypoint',
+      name: '',
+      type: index === 0 ? 'depart' : 'continue',
+      modifier: null,
+      distance,
+      distanceText: formatDistance(distance),
+      duration,
+      durationText: formatDuration(duration),
+      fromIndex: index,
+      toIndex: index + 1,
+      fromCoord: waypoints[index],
+      toCoord: waypoints[index + 1],
+    };
+  });
+
+  instructions.push({
+    id: `estimated-arrive-${waypoints.length - 1}`,
+    stepNumber: instructions.length + 1,
+    text: 'You have arrived at your destination',
+    name: '',
+    type: 'arrive',
+    modifier: null,
+    distance: 0,
+    distanceText: formatDistance(0),
+    duration: 0,
+    durationText: formatDuration(0),
+    fromIndex: waypoints.length - 1,
+    toIndex: waypoints.length - 1,
+    fromCoord: waypoints[waypoints.length - 1],
+    toCoord: waypoints[waypoints.length - 1],
+  });
+
+  return {
+    success: true,
+    provider: 'estimated',
+    routes: [
+      {
+        id: 0,
+        type: 'route',
+        geometry: {
+          type: 'LineString',
+          coordinates: routeCoordinates,
+        },
+        distance: totalDistance,
+        duration: totalDuration,
+        ascent: 0,
+        descent: 0,
+        distanceKM: (totalDistance / 1000).toFixed(2),
+        durationHM: formatDuration(totalDuration),
+        color: options.color || getRouteColor(profile),
+        isAlternative: false,
+        segments: [],
+        instructions,
+        waypoints,
+      },
+    ],
+    waypoints,
+    profile,
+    timestamp: Date.now(),
+    fallback: true,
+  };
+};
+
+const getWaypointChainDistanceMeters = (waypoints = []) => {
+  if (!Array.isArray(waypoints) || waypoints.length < 2) return 0;
+  let totalDistance = 0;
+  for (let index = 0; index < waypoints.length - 1; index += 1) {
+    totalDistance += calculateHaversineDistance(waypoints[index], waypoints[index + 1]);
+  }
+  return totalDistance;
+};
+
+const normalizeCountry = (value = '') => String(value || '').trim().toLowerCase();
+
+const isNoRouteError = (error) => {
+  const message = String(
+    error?.response?.data?.error?.message
+    || error?.response?.data?.message
+    || error?.message
+    || ''
+  ).toLowerCase();
+
+  return (
+    message.includes('did not return a route')
+    || message.includes('could not find routable point')
+    || message.includes('no route')
+    || message.includes('route not found')
+    || message.includes('cannot find')
+  );
+};
+
+const findNearestAirport = (location, country = '') => {
+  const targetLat = Number(location?.lat);
+  const targetLon = Number(location?.lon ?? location?.lng);
+  if (![targetLat, targetLon].every(Number.isFinite)) return null;
+
+  const normalizedCountry = normalizeCountry(country || location?.country || '');
+  const countryPool = normalizedCountry
+    ? MAJOR_AIRPORTS.filter((airport) => normalizeCountry(airport.country) === normalizedCountry)
+    : [];
+  const pool = countryPool.length > 0 ? countryPool : MAJOR_AIRPORTS;
+
+  let winner = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  pool.forEach((airport) => {
+    const distance = calculateHaversineDistance([targetLat, targetLon], [airport.lat, airport.lon]);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      winner = airport;
+    }
+  });
+
+  if (!winner) return null;
+  return {
+    ...winner,
+    distanceMeters: bestDistance,
+    distanceKM: (bestDistance / 1000).toFixed(1),
+  };
+};
+
+const estimateFlightDurationSeconds = (distanceMeters) => {
+  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) return FLIGHT_FIXED_OVERHEAD_SECONDS;
+  const speedMetersPerSecond = (FLIGHT_CRUISE_SPEED_KMH * 1000) / 3600;
+  return Math.round(distanceMeters / speedMetersPerSecond) + FLIGHT_FIXED_OVERHEAD_SECONDS;
+};
+
+export const getMultimodalSuggestion = (origin, destination, options = {}) => {
+  if (!origin || !destination) return null;
+
+  const originCountry = options.originCountry || origin?.country || '';
+  const destinationCountry = options.destinationCountry || destination?.country || '';
+
+  const departureAirport = findNearestAirport(origin, originCountry);
+  const arrivalAirport = findNearestAirport(destination, destinationCountry);
+  if (!departureAirport || !arrivalAirport) return null;
+
+  const originRoadMeters = calculateHaversineDistance(
+    [Number(origin.lat), Number(origin.lon ?? origin.lng)],
+    [departureAirport.lat, departureAirport.lon]
+  );
+  const destinationRoadMeters = calculateHaversineDistance(
+    [arrivalAirport.lat, arrivalAirport.lon],
+    [Number(destination.lat), Number(destination.lon ?? destination.lng)]
+  );
+  const flightMeters = calculateHaversineDistance(
+    [departureAirport.lat, departureAirport.lon],
+    [arrivalAirport.lat, arrivalAirport.lon]
+  );
+
+  const profile = options.profile || ROUTING_CONFIG.DEFAULT_PROFILE;
+  const originRoadSeconds = estimateDurationByProfile(originRoadMeters, profile);
+  const destinationRoadSeconds = estimateDurationByProfile(destinationRoadMeters, profile);
+  const flightSeconds = estimateFlightDurationSeconds(flightMeters);
+  const totalSeconds = originRoadSeconds + flightSeconds + destinationRoadSeconds;
+
+  return {
+    success: true,
+    type: 'multimodal',
+    reason: 'No direct road path available',
+    totalDistanceKM: ((originRoadMeters + flightMeters + destinationRoadMeters) / 1000).toFixed(1),
+    totalDurationHM: formatDuration(totalSeconds),
+    departureAirport,
+    arrivalAirport,
+    legs: [
+      {
+        mode: 'road',
+        title: `Road to ${departureAirport.code}`,
+        from: origin?.name || 'Origin',
+        to: `${departureAirport.city} (${departureAirport.code})`,
+        distanceKM: (originRoadMeters / 1000).toFixed(1),
+        durationHM: formatDuration(originRoadSeconds),
+      },
+      {
+        mode: 'flight',
+        title: `Flight ${departureAirport.code} -> ${arrivalAirport.code}`,
+        from: `${departureAirport.city} (${departureAirport.code})`,
+        to: `${arrivalAirport.city} (${arrivalAirport.code})`,
+        distanceKM: (flightMeters / 1000).toFixed(1),
+        durationHM: formatDuration(flightSeconds),
+      },
+      {
+        mode: 'road',
+        title: `Road to destination`,
+        from: `${arrivalAirport.city} (${arrivalAirport.code})`,
+        to: destination?.name || 'Destination',
+        distanceKM: (destinationRoadMeters / 1000).toFixed(1),
+        durationHM: formatDuration(destinationRoadSeconds),
+      },
+    ],
+  };
 };
 
 const buildInstructionTextFromOSRM = (step) => {
@@ -334,12 +594,41 @@ export const getRoute = async (waypoints, options = {}) => {
     }
 
     if (!routeData && (provider === 'auto' || provider === 'osrm')) {
-      routeData = await getRouteFromOSRM(coordinates, waypoints, profile, options);
+      try {
+        routeData = await getRouteFromOSRM(coordinates, waypoints, profile, options);
+      } catch (error) {
+        lastError = error;
+      }
     }
 
     if (!routeData) {
-      if (lastError?.message) throw lastError;
-      throw new Error('No routing provider available');
+      if (provider === 'auto') {
+        if (isNoRouteError(lastError)) {
+          throw new Error(
+            'No direct road route found. This trip likely needs a flight or ferry for part of the journey.'
+          );
+        }
+
+        const originCountry = normalizeCountry(options.originCountry);
+        const destinationCountry = normalizeCountry(options.destinationCountry);
+        const sameCountry = Boolean(
+          originCountry
+          && destinationCountry
+          && originCountry === destinationCountry
+        );
+        const straightLineDistance = getWaypointChainDistanceMeters(waypoints);
+        if (sameCountry || straightLineDistance <= MAX_LOCAL_ESTIMATED_FALLBACK_DISTANCE_METERS) {
+          routeData = createEstimatedRouteFallback(waypoints, profile, options);
+        } else {
+          throw new Error(
+            'No direct road route found. This trip likely needs a flight or ferry for part of the journey.'
+          );
+        }
+      } else if (lastError?.message) {
+        throw lastError;
+      } else {
+        throw new Error('No routing provider available');
+      }
     }
 
     cacheRoute(cacheKey, routeData);
@@ -578,6 +867,7 @@ export default {
   getRoute,
   getIsochrone,
   getTravelMatrix,
+  getMultimodalSuggestion,
   calculateRouteStats,
   formatDuration,
   formatDistance,

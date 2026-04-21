@@ -6,7 +6,7 @@ import 'leaflet-markercluster/MarkerCluster.Default.css';
 import 'leaflet-markercluster/leaflet.markercluster.js';
 import { MAP_CONFIG } from '../../config/mapConfig';
 import { autocompleteLocation } from '../../services/geocodingService';
-import { getRoute } from '../../services/routingService';
+import { getMultimodalSuggestion, getRoute } from '../../services/routingService';
 
 const DEFAULT_CENTER = { lat: 36.3932, lng: 25.4615 };
 const DEFAULT_ZOOM = 2;
@@ -177,6 +177,15 @@ const createPopupMarkup = (place) => {
 };
 
 const hasCoords = (value) => value && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lon));
+
+const inferCountryFromLabel = (label = '') => {
+  const parts = String(label || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return '';
+  return parts[parts.length - 1];
+};
 
 const getDistanceMeters = (from, to) => {
   if (!from || !to) return Number.POSITIVE_INFINITY;
@@ -370,6 +379,7 @@ const PremiumDestinationMap = ({
   const [isRouting, setIsRouting] = useState(false);
   const [routeError, setRouteError] = useState('');
   const [routeSummary, setRouteSummary] = useState(null);
+  const [multimodalPlan, setMultimodalPlan] = useState(null);
   const [routeCandidates, setRouteCandidates] = useState([]);
   const [selectedRouteId, setSelectedRouteId] = useState(0);
   const [showInstructions, setShowInstructions] = useState(true);
@@ -429,7 +439,14 @@ const PremiumDestinationMap = ({
 
   const routeDestination = hasCoords(searchedLocation)
     ? searchedLocation
-    : (selectedPlace ? { name: selectedPlace.name, lat: selectedPlace.lat, lon: selectedPlace.lon } : null);
+    : (selectedPlace
+      ? {
+          name: selectedPlace.name,
+          lat: selectedPlace.lat,
+          lon: selectedPlace.lon,
+          country: selectedPlace.country || '',
+        }
+      : null);
   const routeOrigin = hasCoords(manualOrigin)
     ? manualOrigin
     : (hasCoords(userLocation)
@@ -820,6 +837,7 @@ const PremiumDestinationMap = ({
       liveWatchRef.current = null;
     }
     setRouteSummary(null);
+    setMultimodalPlan(null);
     setRouteCandidates([]);
     setSelectedRouteId(0);
     setRouteError('');
@@ -835,7 +853,13 @@ const PremiumDestinationMap = ({
     const lat = toNumber(suggestion?.lat, null);
     const lon = toNumber(suggestion?.lng, null);
     if (lat === null || lon === null) return;
-    const selected = { name: suggestion?.name || suggestion?.label || 'Starting point', label: suggestion?.label || '', lat, lon };
+    const selected = {
+      name: suggestion?.name || suggestion?.label || 'Starting point',
+      label: suggestion?.label || '',
+      lat,
+      lon,
+      country: inferCountryFromLabel(suggestion?.label),
+    };
     setFromQuery(selected.name || '');
     setFromSearchResults([]);
     setManualOrigin(selected);
@@ -848,7 +872,13 @@ const PremiumDestinationMap = ({
     const lat = toNumber(suggestion?.lat, null);
     const lon = toNumber(suggestion?.lng, null);
     if (lat === null || lon === null) return;
-    const selected = { name: suggestion?.name || suggestion?.label || 'Destination', label: suggestion?.label || '', lat, lon };
+    const selected = {
+      name: suggestion?.name || suggestion?.label || 'Destination',
+      label: suggestion?.label || '',
+      lat,
+      lon,
+      country: inferCountryFromLabel(suggestion?.label),
+    };
     setToQuery(selected.name || '');
     setToSearchResults([]);
     setSearchedLocation(selected);
@@ -891,6 +921,7 @@ const PremiumDestinationMap = ({
         label: firstMatch?.label || '',
         lat,
         lon,
+        country: inferCountryFromLabel(firstMatch?.label),
       };
     } catch {
       return null;
@@ -1001,6 +1032,9 @@ const PremiumDestinationMap = ({
     setIsRouting(true);
     isRoutingRef.current = true;
     setRouteError('');
+    setMultimodalPlan(null);
+    setRouteSummary(null);
+    setRouteCandidates([]);
     try {
       const effectivePreference = trafficMode ? 'fastest' : routePreference;
       const routeResponse = await getRoute(
@@ -1011,6 +1045,8 @@ const PremiumDestinationMap = ({
           color: '#0f766e',
           provider: 'auto',
           routeOptions: { preference: effectivePreference },
+          originCountry: origin.country || '',
+          destinationCountry: target.country || '',
         }
       );
       const routes = routeResponse?.routes || [];
@@ -1042,7 +1078,29 @@ const PremiumDestinationMap = ({
       setShowInstructions(true);
       return true;
     } catch (error) {
-      setRouteError(error?.error || error?.message || 'Route calculation failed. Please check your network.');
+      const rawMessage = (error?.error || error?.message || '').toLowerCase();
+      if (
+        rawMessage.includes('no direct road route found') ||
+        rawMessage.includes('did not return a route') ||
+        rawMessage.includes('could not find routable point')
+      ) {
+        const suggestion = getMultimodalSuggestion(
+          origin,
+          target,
+          {
+            profile: routeMode,
+            originCountry: origin.country || '',
+            destinationCountry: target.country || '',
+          }
+        );
+        setMultimodalPlan(suggestion);
+        setRouteError(
+          'No continuous road route is available for this trip. Use flight/ferry for the long leg, then route locally from arrival city.'
+        );
+      } else {
+        setMultimodalPlan(null);
+        setRouteError(error?.error || error?.message || 'Route calculation failed. Please check your network.');
+      }
       return false;
     } finally {
       setIsRouting(false);
@@ -1459,6 +1517,22 @@ const PremiumDestinationMap = ({
 
             {navigationStatus && <div className="travel-ui-alert info">{navigationStatus}</div>}
             {routeError && <div className="travel-ui-alert error">{routeError}</div>}
+            {multimodalPlan && (
+              <div className="travel-ui-alert info" style={{ marginTop: '10px', display: 'grid', gap: '8px', alignItems: 'start' }}>
+                <strong>Suggested multimodal route</strong>
+                <span>{multimodalPlan.totalDistanceKM} km | {multimodalPlan.totalDurationHM}</span>
+                <span>Air leg: {multimodalPlan.departureAirport.code}{' -> '}{multimodalPlan.arrivalAirport.code}</span>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {multimodalPlan.legs.map((leg, index) => (
+                    <div key={`${leg.mode}-${index}`} style={{ borderRadius: '10px', border: '1px solid rgba(15,118,110,.22)', background: 'rgba(255,255,255,.78)', padding: '8px 10px', color: '#0f172a' }}>
+                      <div style={{ fontWeight: 700, fontSize: '12px' }}>{leg.title}</div>
+                      <div style={{ fontSize: '11px' }}>{leg.from}{' -> '}{leg.to}</div>
+                      <div style={{ fontSize: '11px', opacity: 0.9 }}>{leg.distanceKM} km | {leg.durationHM}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             </div>
           )}
         </div>

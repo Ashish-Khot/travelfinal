@@ -185,7 +185,7 @@ export const ROUTING_CONFIG = {
 
   // Request options
   REQUEST_OPTIONS: {
-    timeout: 15000,
+    timeout: 30000,
     radiusFormat: 'm', // meters
     format: 'geojson',
   },
