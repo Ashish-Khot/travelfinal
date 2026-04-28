@@ -41,18 +41,6 @@ import itineraryService from '../../services/itineraryService.js';
 import useItinerary from '../../hooks/useItinerary.js';
 import './itineraryPlanner.css';
 
-const interestOptions = [
-  { value: 'nature', label: 'Nature' },
-  { value: 'culture', label: 'Culture' },
-  { value: 'food', label: 'Food' },
-  { value: 'adventure', label: 'Adventure' },
-  { value: 'shopping', label: 'Shopping' },
-  { value: 'history', label: 'History' },
-  { value: 'nightlife', label: 'Nightlife' },
-  { value: 'relaxation', label: 'Relaxation' },
-  { value: 'photography', label: 'Photography' },
-];
-
 const quickPrompts = [
   'Weekend foodie escape',
   'Luxury slow travel',
@@ -106,11 +94,11 @@ function ItineraryPlanner() {
 
   const [formData, setFormData] = useState({
     destination: '',
+    placesToVisit: '',
     days: 5,
     budget: 30000,
     numberOfTravelers: 1,
     travelStyle: 'solo',
-    interests: [],
     startDate: new Date().toISOString().split('T')[0],
     aiNotes: '',
   });
@@ -185,14 +173,12 @@ function ItineraryPlanner() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const toggleInterest = (value) => {
-    setFormData((prev) => ({
-      ...prev,
-      interests: prev.interests.includes(value)
-        ? prev.interests.filter((item) => item !== value)
-        : [...prev.interests, value],
-    }));
-  };
+  const parsePlacesToVisit = (value) =>
+    String(value || '')
+      .split(/[,\n;|]/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 20);
 
   const handleGenerate = async (overrideData = null) => {
     const sourceData = overrideData ? { ...formData, ...overrideData } : formData;
@@ -200,14 +186,14 @@ function ItineraryPlanner() {
     if (!sourceData.destination.trim()) missing.push('destination');
     if (!sourceData.days || sourceData.days < 1) missing.push('trip length');
     if (!sourceData.budget || sourceData.budget < 100) missing.push('budget');
-    if (!sourceData.interests.length) missing.push('interests');
 
     if (missing.length) {
       addMessage('assistant', `I need ${missing.join(', ')} to build the itinerary.`);
       return;
     }
 
-    const userSummary = `${sourceData.days}-day ${sourceData.travelStyle} trip to ${sourceData.destination} for ${sourceData.numberOfTravelers} traveler(s). Budget INR ${sourceData.budget}. Start ${sourceData.startDate}. Interests: ${sourceData.interests.join(", ")}. ${sourceData.aiNotes ? `Notes: ${sourceData.aiNotes}` : ""}`;
+    const requestedPlaces = parsePlacesToVisit(sourceData.placesToVisit);
+    const userSummary = `${sourceData.days}-day ${sourceData.travelStyle} trip to ${sourceData.destination} for ${sourceData.numberOfTravelers} traveler(s). Budget INR ${sourceData.budget}. Start ${sourceData.startDate}.${requestedPlaces.length ? ` Places: ${requestedPlaces.join(', ')}.` : ''} ${sourceData.aiNotes ? `Notes: ${sourceData.aiNotes}` : ''}`;
     addMessage('user', userSummary);
     addMessage('assistant', 'Generating your itinerary now. I will post updates as soon as it is ready.');
 
@@ -222,7 +208,8 @@ function ItineraryPlanner() {
         currency: 'INR',
         numberOfTravelers: parseInt(sourceData.numberOfTravelers, 10),
         travelStyle: sourceData.travelStyle,
-        interests: sourceData.interests,
+        interests: [],
+        placesToVisit: requestedPlaces,
         startDate: sourceData.startDate,
         aiNotes: sourceData.aiNotes,
       });
@@ -277,12 +264,12 @@ function ItineraryPlanner() {
       const payload = event?.detail || {};
       const updates = {
         destination: payload.destination || '',
+        placesToVisit: Array.isArray(payload.placesToVisit)
+          ? payload.placesToVisit.join(', ')
+          : '',
         days: payload.days || 4,
         budget: payload.budget || 20000,
         numberOfTravelers: payload.numberOfTravelers || 1,
-        interests: Array.isArray(payload.interests) && payload.interests.length
-          ? payload.interests
-          : ['culture', 'food'],
         startDate: payload.startDate || new Date().toISOString().split('T')[0],
         aiNotes: payload.aiNotes || '',
       };
@@ -322,6 +309,14 @@ function ItineraryPlanner() {
                 placeholder="Paris, Tokyo, Bali"
                 value={formData.destination}
                 onChange={(e) => handleInputChange('destination', e.target.value)}
+                fullWidth
+              />
+              <TextField
+                label="Places to visit (optional)"
+                placeholder="Triund, Bhagsu Waterfall, Dalai Lama Temple"
+                value={formData.placesToVisit}
+                onChange={(e) => handleInputChange('placesToVisit', e.target.value)}
+                helperText="Comma-separated places. Planner will prioritize these."
                 fullWidth
               />
               <Stack direction="row" spacing={2}>
@@ -375,23 +370,6 @@ function ItineraryPlanner() {
                   <MenuItem value="relaxation">Relaxation</MenuItem>
                 </Select>
               </FormControl>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1, color: '#475569' }}>
-                  Interests
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {interestOptions.map((option) => (
-                    <Chip
-                      key={option.value}
-                      label={option.label}
-                      onClick={() => toggleInterest(option.value)}
-                      color={formData.interests.includes(option.value) ? 'primary' : 'default'}
-                      variant={formData.interests.includes(option.value) ? 'filled' : 'outlined'}
-                      sx={{ mb: 1 }}
-                    />
-                  ))}
-                </Stack>
-              </Box>
             </Stack>
           </Box>
 

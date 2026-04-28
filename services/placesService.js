@@ -70,10 +70,11 @@ class PlacesService {
   }
 
   async getCoordinatesForDestination(destination) {
-    const query = destination ? String(destination).split(',')[0].trim() : '';
-    if (!query) return null;
-
-    const normalized = query.toLowerCase();
+    const raw = destination ? String(destination).trim() : '';
+    if (!raw) return null;
+    const primaryQuery = raw;
+    const fallbackQuery = String(raw).split(',')[0].trim();
+    const normalized = fallbackQuery.toLowerCase();
     const fallback = this.getKnownCoordinates(normalized);
 
     if (this.hasApiKey()) {
@@ -81,7 +82,7 @@ class PlacesService {
         const geoUrl = `${this.baseUrl}/geoname`;
         const { data } = await axios.get(geoUrl, {
           params: {
-            name: query,
+            name: primaryQuery,
             apikey: this.apiKey,
           },
           timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
@@ -95,7 +96,10 @@ class PlacesService {
       }
     }
 
-    const nominatim = await this.geocodeWithNominatim(query);
+    let nominatim = await this.geocodeWithNominatim(primaryQuery);
+    if (!nominatim && fallbackQuery && fallbackQuery !== primaryQuery) {
+      nominatim = await this.geocodeWithNominatim(fallbackQuery);
+    }
     if (nominatim) return nominatim;
 
     return fallback;

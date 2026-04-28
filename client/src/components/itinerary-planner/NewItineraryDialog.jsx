@@ -12,9 +12,6 @@ import {
   TextField,
   Button,
   CircularProgress,
-  FormControlLabel,
-  Checkbox,
-  FormGroup,
   Select,
   MenuItem,
   FormControl,
@@ -37,26 +34,14 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
   const [imageName, setImageName] = useState(null);
   const [formData, setFormData] = useState({
     destination: '',
+    placesToVisit: '',
     days: 5,
     budget: 30000,
     numberOfTravelers: 1,
     travelStyle: 'solo',
-    interests: [],
     startDate: new Date().toISOString().split('T')[0],
     aiNotes: '',
   });
-
-  const interestOptions = [
-    { value: 'nature', label: 'Nature' },
-    { value: 'culture', label: 'Culture' },
-    { value: 'food', label: 'Food' },
-    { value: 'adventure', label: 'Adventure' },
-    { value: 'shopping', label: 'Shopping' },
-    { value: 'history', label: 'History' },
-    { value: 'nightlife', label: 'Nightlife' },
-    { value: 'relaxation', label: 'Relaxation' },
-    { value: 'photography', label: 'Photography' },
-  ];
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -66,14 +51,12 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
     }));
   };
 
-  const handleInterestToggle = (interestValue) => {
-    setFormData(prev => ({
-      ...prev,
-      interests: prev.interests.includes(interestValue)
-        ? prev.interests.filter(i => i !== interestValue)
-        : [...prev.interests, interestValue],
-    }));
-  };
+  const parsePlacesToVisit = (value) =>
+    String(value || '')
+      .split(/[,\n;|]/g)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 20);
 
   const handleImageFile = (file) => {
     if (!file) return;
@@ -153,24 +136,11 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       setError('Budget should be at least INR 100');
       return;
     }
-    if (formData.interests.length === 0) {
-      setError('Please select at least one interest');
-      return;
-    }
-    
-    // Check that interests are valid (should be lowercase from our array)
-    const validInterests = formData.interests.every(i => 
-      interestOptions.some(opt => opt.value === i)
-    );
-    if (!validInterests) {
-      setError('Invalid interest selected');
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
+      const requestedPlaces = parsePlacesToVisit(formData.placesToVisit);
       // Call API to generate itinerary
       const generatedItinerary = await itineraryService.generateItinerary({
         destination: formData.destination,
@@ -179,7 +149,8 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
         currency: 'INR',
         numberOfTravelers: parseInt(formData.numberOfTravelers),
         travelStyle: formData.travelStyle,
-        interests: formData.interests,
+        interests: [],
+        placesToVisit: requestedPlaces,
         startDate: formData.startDate,
         aiNotes: formData.aiNotes,
         imageData,
@@ -197,11 +168,11 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
       // Close dialog and reset form
       setFormData({
         destination: '',
+        placesToVisit: '',
         days: 5,
         budget: 30000,
         numberOfTravelers: 1,
         travelStyle: 'solo',
-        interests: [],
         startDate: new Date().toISOString().split('T')[0],
         aiNotes: '',
       });
@@ -248,6 +219,17 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
             onChange={handleInputChange}
             disabled={loading}
             helperText="Enter city or destination name"
+          />
+
+          <TextField
+            fullWidth
+            label="Places to visit (optional)"
+            placeholder="e.g., Eiffel Tower, Louvre Museum, Montmartre"
+            name="placesToVisit"
+            value={formData.placesToVisit}
+            onChange={handleInputChange}
+            disabled={loading}
+            helperText="Comma-separated places. The itinerary will prioritize these."
           />
 
           {/* Days and Budget Row */}
@@ -396,30 +378,6 @@ const NewItineraryDialog = ({ open, onClose, onItineraryCreated }) => {
             placeholder="Example: focus on local food, avoid long hikes, prefer sunrise spots"
           />
 
-          {/* Interests */}
-          <Box>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>
-              What are your interests? (Select at least one)
-            </label>
-            <FormGroup>
-              <Grid container spacing={1}>
-                {interestOptions.map(option => (
-                  <Grid item xs={6} key={option.value}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={formData.interests.includes(option.value)}
-                          onChange={() => handleInterestToggle(option.value)}
-                          disabled={loading}
-                        />
-                      }
-                      label={option.label}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </FormGroup>
-          </Box>
         </Box>
       </DialogContent>
 
