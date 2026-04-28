@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import api from "./api";
 
@@ -14,6 +14,7 @@ import MenuItem from "@mui/material/MenuItem";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 
 import PersonIcon from "@mui/icons-material/Person";
 import RoomIcon from "@mui/icons-material/Room";
@@ -21,13 +22,10 @@ import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HotelIcon from "@mui/icons-material/Hotel";
 import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
-import ExploreOutlinedIcon from "@mui/icons-material/ExploreOutlined";
-import CalendarMonthOutlinedIcon from "@mui/icons-material/CalendarMonthOutlined";
-import CollectionsBookmarkOutlinedIcon from "@mui/icons-material/CollectionsBookmarkOutlined";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 
-import styles from "./Register.module.css";
+import styles from "./Auth.module.scss";
 
 const languageOptions = [
   "English", "Hindi", "Spanish", "French", "German", "Chinese", "Other"
@@ -38,49 +36,26 @@ const roles = [
     value: "tourist",
     label: "Tourist",
     icon: <PersonIcon fontSize="small" />,
-    description: "Create trips, compare options, and publish travelogues from your account.",
   },
   {
     value: "guide",
     label: "Guide",
     icon: <RoomIcon fontSize="small" />,
-    description: "Set up your guide profile, experience, and language coverage for approvals.",
   },
   {
     value: "hotel",
     label: "Hotel",
     icon: <HotelIcon fontSize="small" />,
-    description: "Manage room inventory, bookings, and guest interactions in one workspace.",
   },
   {
     value: "hospital",
     label: "Hospital",
     icon: <LocalHospitalIcon fontSize="small" />,
-    description: "Register as a medical partner for Travelogue emergency support visibility.",
   },
   {
     value: "admin",
     label: "Admin",
     icon: <AdminPanelSettingsIcon fontSize="small" />,
-    description: "Create an admin account for moderation and platform operations.",
-  },
-];
-
-const onboardingHighlights = [
-  {
-    title: "Personal travel profile",
-    description: "Store your identity, interests, and travel preferences in one place.",
-    icon: <ExploreOutlinedIcon fontSize="small" />,
-  },
-  {
-    title: "Booking-ready access",
-    description: "Get immediate access to guide and hotel flows after creating your account.",
-    icon: <CalendarMonthOutlinedIcon fontSize="small" />,
-  },
-  {
-    title: "Story-first workspace",
-    description: "Capture memories, drafts, and published travelogues in your account.",
-    icon: <CollectionsBookmarkOutlinedIcon fontSize="small" />,
   },
 ];
 
@@ -105,11 +80,6 @@ export default function Register() {
     experienceYears: "",
     languages: [],
   });
-
-  const activeRole = useMemo(
-    () => roles.find((role) => role.value === selectedRole) || roles[0],
-    [selectedRole]
-  );
 
   const handleRole = (event, newRole) => {
     if (newRole !== null) setSelectedRole(newRole);
@@ -170,222 +140,225 @@ export default function Register() {
   };
 
   return (
-    <Box className={styles.authShell}>
+    <Box className={`${styles.authShell} ${styles.registerShell}`}>
       <Box className={styles.authFrame}>
-        <Box className={styles.brandPanel}>
+        <Box className={`${styles.brandPanel} ${styles.registerBrandPanel}`}>
           <Box className={styles.brandBadge}>
             <TravelExploreIcon fontSize="small" />
             Travelogue
           </Box>
           <Typography component="h1" className={styles.brandTitle}>
-            Build a travel-ready account that fits how you explore, host, or guide.
+            Create your Travelogue account
           </Typography>
           <Typography className={styles.brandSub}>
-            Register once and start working with bookings, itineraries, and
-            travel stories across the full Travelogue ecosystem.
+            Join and start in minutes.
           </Typography>
-
-          <Box className={styles.featureList}>
-            {onboardingHighlights.map((item) => (
-              <Box key={item.title} className={styles.featureCard}>
-                <Box className={styles.featureIcon}>{item.icon}</Box>
-                <Box>
-                  <Typography className={styles.featureTitle}>{item.title}</Typography>
-                  <Typography className={styles.featureText}>{item.description}</Typography>
-                </Box>
-              </Box>
-            ))}
+          <Box className={styles.registerPills}>
+            <Typography className={styles.registerPill}>Fast signup</Typography>
+            <Typography className={styles.registerPill}>Secure access</Typography>
+            <Typography className={styles.registerPill}>All roles</Typography>
           </Box>
         </Box>
 
-        <Box className={styles.formPanel}>
-          <Box className={styles.formHeader}>
-            <Box className={styles.iconHalo}>
-              <PersonIcon />
+        <Box className={`${styles.formPanel} ${styles.registerFormPanel}`}>
+          <Link to="/" className={styles.backLink}>
+            <ArrowBackRoundedIcon fontSize="small" />
+            Back to Home
+          </Link>
+
+          <Box className={`${styles.formCard} ${styles.registerCard}`}>
+            <Box className={styles.formHeader}>
+              <Box className={styles.iconHalo}>
+                <PersonIcon />
+              </Box>
+              <Typography component="h2" className={styles.formTitle}>
+                Create Account
+              </Typography>
+              <Typography className={styles.formSubtitle}>
+                Set up your account details.
+              </Typography>
             </Box>
-            <Typography component="h2" className={styles.formTitle}>
-              Create your account
-            </Typography>
-            <Typography className={styles.formSubtitle}>
-              Fill in your details and choose the role that matches your workspace.
-            </Typography>
-          </Box>
-
-          <Typography className={styles.sectionLabel}>Register as</Typography>
-          <ToggleButtonGroup
-            value={selectedRole}
-            exclusive
-            onChange={handleRole}
-            className={styles.roleGroup}
-          >
-            {roles.map((role) => (
-              <ToggleButton
-                key={role.value}
-                value={role.value}
-                className={styles.roleBtnSquare}
-              >
-                <Box className={styles.roleInner}>
-                  {role.icon}
-                  <Typography className={styles.roleLabel}>{role.label}</Typography>
-                </Box>
-              </ToggleButton>
-            ))}
-          </ToggleButtonGroup>
-          <Typography className={styles.roleHint}>{activeRole.description}</Typography>
-
-          <form onSubmit={handleSubmit} className={styles.form}>
-            <Box className={styles.formGrid}>
-              <TextField
-                fullWidth
-                required
-                label="Full name"
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                className={styles.formField}
-              />
-              <TextField
-                fullWidth
-                required
-                label="Email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={handleChange}
-                className={styles.formField}
-              />
-              <TextField
-                fullWidth
-                required
-                label="Password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                autoComplete="new-password"
-                value={form.password}
-                onChange={handleChange}
-                className={styles.formField}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton
-                        edge="end"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword ? (
-                          <VisibilityOffOutlinedIcon />
-                        ) : (
-                          <VisibilityOutlinedIcon />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <TextField
-                fullWidth
-                required
-                label="Phone"
-                name="phone"
-                type="tel"
-                autoComplete="tel"
-                value={form.phone}
-                onChange={handleChange}
-                className={styles.formField}
-              />
-              <TextField
-                fullWidth
-                required
-                label="Country"
-                name="country"
-                value={form.country}
-                onChange={handleChange}
-                className={styles.formField}
-              />
-              <TextField
-                fullWidth
-                label="Interests"
-                name="interests"
-                value={form.interests}
-                onChange={handleChange}
-                helperText="Optional: beaches, trekking, food tours, culture, photography..."
-                className={`${styles.formField} ${styles.fullWidth}`}
-              />
-            </Box>
-
-            {selectedRole === "guide" && (
-              <>
-                <Typography className={styles.sectionTitle}>Guide profile</Typography>
-                <Typography className={styles.sectionHint}>
-                  Guide accounts are reviewed by admin before dashboard access is enabled.
-                </Typography>
-                <Box className={styles.formGrid}>
-                  <TextField
-                    fullWidth
-                    required
-                    label="Bio"
-                    name="bio"
-                    value={form.bio}
-                    onChange={handleChange}
-                    multiline
-                    rows={3}
-                    className={`${styles.formField} ${styles.fullWidth}`}
-                  />
-                  <TextField
-                    fullWidth
-                    required
-                    label="Experience (years)"
-                    name="experienceYears"
-                    value={form.experienceYears}
-                    onChange={handleChange}
-                    type="number"
-                    inputProps={{ min: 0 }}
-                    className={styles.formField}
-                  />
-                  <TextField
-                    select
-                    fullWidth
-                    required
-                    label="Languages"
-                    name="languages"
-                    value={form.languages}
-                    onChange={handleLanguagesChange}
-                    SelectProps={{
-                      multiple: true,
-                      renderValue: (selected) => selected.join(", "),
-                    }}
-                    className={`${styles.formField} ${styles.fullWidth}`}
-                  >
-                    {languageOptions.map((lang) => (
-                      <MenuItem key={lang} value={lang}>
-                        {lang}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Box>
-              </>
-            )}
-
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              size="large"
-              className={styles.submitBtn}
-              disabled={loading}
+            <Typography className={styles.sectionLabel}>Choose role</Typography>
+            <ToggleButtonGroup
+              value={selectedRole}
+              exclusive
+              onChange={handleRole}
+              className={styles.roleGroup}
             >
-              {loading ? <CircularProgress size={22} color="inherit" /> : "Create account"}
-            </Button>
-          </form>
+              {roles.map((role) => (
+                <ToggleButton
+                  key={role.value}
+                  value={role.value}
+                  className={styles.roleBtn}
+                >
+                  <Box className={styles.roleInner}>
+                    {role.icon}
+                    <Typography className={styles.roleLabel}>{role.label}</Typography>
+                  </Box>
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
 
-          <Box className={styles.footerText}>
-            <Typography variant="body2">
-              Already have an account?{" "}
-              <Link to="/login" className={styles.registerLink}>
-                Sign in
-              </Link>
-            </Typography>
+            <form onSubmit={handleSubmit} className={`${styles.form} ${styles.registerForm}`}>
+              <Box className={`${styles.formGrid} ${styles.registerGrid}`}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Full name"
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  className={styles.formField}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  className={styles.formField}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Password"
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={handleChange}
+                  className={styles.formField}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          edge="end"
+                          onClick={() => setShowPassword((prev) => !prev)}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? (
+                            <VisibilityOffOutlinedIcon />
+                          ) : (
+                            <VisibilityOutlinedIcon />
+                          )}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  value={form.phone}
+                  onChange={handleChange}
+                  className={styles.formField}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Country"
+                  name="country"
+                  value={form.country}
+                  onChange={handleChange}
+                  className={styles.formField}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  label="Interests"
+                  name="interests"
+                  value={form.interests}
+                  onChange={handleChange}
+                  placeholder="Optional"
+                  className={styles.formField}
+                />
+              </Box>
+
+              {selectedRole === "guide" && (
+                <>
+                  <Typography className={styles.sectionTitle}>Guide profile</Typography>
+                  <Box className={`${styles.formGrid} ${styles.registerGuideGrid}`}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="Bio"
+                      name="bio"
+                      value={form.bio}
+                      onChange={handleChange}
+                      multiline
+                      rows={2}
+                      className={`${styles.formField} ${styles.guideBio}`}
+                    />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="Experience (years)"
+                      name="experienceYears"
+                      value={form.experienceYears}
+                      onChange={handleChange}
+                      type="number"
+                      inputProps={{ min: 0 }}
+                      className={`${styles.formField} ${styles.guideExperience}`}
+                    />
+                    <TextField
+                      size="small"
+                      select
+                      fullWidth
+                      required
+                      label="Languages"
+                      name="languages"
+                      value={form.languages}
+                      onChange={handleLanguagesChange}
+                      SelectProps={{
+                        multiple: true,
+                        renderValue: (selected) => selected.join(", "),
+                      }}
+                      className={`${styles.formField} ${styles.guideLanguages}`}
+                    >
+                      {languageOptions.map((lang) => (
+                        <MenuItem key={lang} value={lang}>
+                          {lang}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Box>
+                </>
+              )}
+
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                className={styles.submitBtn}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={22} color="inherit" /> : "Create Account"}
+              </Button>
+            </form>
+
+            <Box className={styles.footerText}>
+              <Typography variant="body2">
+                Already have an account?{" "}
+                <Link to="/login" className={styles.registerLink}>
+                  Sign In
+                </Link>
+              </Typography>
+            </Box>
           </Box>
         </Box>
       </Box>

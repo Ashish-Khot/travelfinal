@@ -18,9 +18,9 @@ const KIND_QUERIES = {
   culture: 'historic',
   nature: 'natural',
   shopping: 'markets',
-  entertainment: 'entertainment',
-  relaxation: 'spas',
-  food: 'restaurants',
+  entertainment: 'nightclubs,bars,adult,cinemas,theatres,amusements',
+  relaxation: 'spas,gardens,parks,beaches,view_points',
+  food: 'restaurants,cafes,fast_food,food_courts',
   adventure: 'hiking',
 };
 
@@ -133,6 +133,11 @@ const pickVariant = (list, seed) => {
 };
 
 const normalizePlaceName = (value) => String(value || '').trim().toLowerCase();
+const splitPlacesText = (value) =>
+  String(value || '')
+    .split(/[,\n;|]/g)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 2);
 
 const parseTimeToMinutes = (timeStr) => {
   const [h, m] = String(timeStr || '00:00').split(':').map(Number);
@@ -278,6 +283,58 @@ class ItineraryGenerator {
       photography: 'sightseeing',
     };
     return map[value] || value;
+  }
+
+  getRequestedCategories(interests = []) {
+    const allowed = new Set([
+      'culture',
+      'nature',
+      'shopping',
+      'entertainment',
+      'relaxation',
+      'food',
+      'adventure',
+      'sightseeing',
+    ]);
+    const normalized = (interests || [])
+      .map((item) => this.normalizeInterest(item))
+      .filter((item) => allowed.has(item));
+    return [...new Set(normalized)];
+  }
+
+  extractPreferredPlaces(params = {}) {
+    const explicitList = Array.isArray(params.placesToVisit)
+      ? params.placesToVisit
+      : [];
+    const notes = String(params.aiNotes || '');
+    const noteMatches = [];
+    const patterns = [
+      /(?:places?\s*(?:to\s*visit)?|must\s*visit|include|cover)\s*[:\-]\s*([^\n]+)/gi,
+    ];
+
+    patterns.forEach((pattern) => {
+      let match = pattern.exec(notes);
+      while (match) {
+        noteMatches.push(match[1]);
+        match = pattern.exec(notes);
+      }
+    });
+
+    const normalized = [...explicitList, ...noteMatches]
+      .flatMap((item) => splitPlacesText(item))
+      .map((item) => item.replace(/\s{2,}/g, ' ').trim())
+      .filter(Boolean);
+
+    const deduped = [];
+    const seen = new Set();
+    normalized.forEach((item) => {
+      const key = normalizePlaceName(item);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      deduped.push(item);
+    });
+
+    return deduped.slice(0, 12);
   }
 
   pickNextPlace(pool, usedIds, usedNames) {
@@ -711,7 +768,7 @@ class ItineraryGenerator {
   }
 
   getDayPlanCategories(dayNumber, interests, weatherDay, travelStyle, poolSizes = {}) {
-    const interestPool = (interests || []).map((item) => this.normalizeInterest(item));
+    const interestPool = this.getRequestedCategories(interests);
     const fallbackOrder = [
       'culture',
       'nature',
@@ -722,7 +779,9 @@ class ItineraryGenerator {
       'adventure',
     ];
 
-    const merged = [...new Set([...interestPool, ...fallbackOrder])];
+    const merged = interestPool.length > 0
+      ? [...interestPool]
+      : [...new Set([...interestPool, ...fallbackOrder])];
     const offset = (dayNumber - 1) % merged.length;
     const rotated = [...merged.slice(offset), ...merged.slice(0, offset)];
 
@@ -759,7 +818,12 @@ class ItineraryGenerator {
     const categories = [morningCategory, afternoonCategory, eveningCategory];
     let rotateIdx = 3;
     while (categories.length < slotCount) {
-      categories.push(adaptCategory(rotated[rotateIdx % rotated.length] || 'sightseeing'));
+      categories.push(
+        adaptCategory(
+          rotated[rotateIdx % rotated.length] ||
+            (interestPool.length > 0 ? rotated[0] : 'sightseeing')
+        )
+      );
       rotateIdx += 1;
     }
 
@@ -775,7 +839,9 @@ class ItineraryGenerator {
     }
 
     // Keep at most two food stops per day to avoid overloading meal-only plans.
-    const nonFoodFallback = [
+    const nonFoodFallback = interestPool.length > 0
+      ? interestPool.filter((item) => item !== 'food')
+      : [
       'culture',
       'sightseeing',
       'nature',
@@ -789,9 +855,11 @@ class ItineraryGenerator {
       if (categories[i] !== 'food') continue;
       foodCount += 1;
       if (foodCount <= 2) continue;
-      categories[i] = adaptCategory(
-        nonFoodFallback[(i + dayNumber) % nonFoodFallback.length]
-      );
+      if (nonFoodFallback.length > 0) {
+        categories[i] = adaptCategory(
+          nonFoodFallback[(i + dayNumber) % nonFoodFallback.length]
+        );
+      }
     }
 
     const dayStartByStyle = {
@@ -845,13 +913,23 @@ class ItineraryGenerator {
       ];
 
       for (const [poolKey, kinds, radius, limit] of queryPlan) {
-        const places = await this.placesService.getAttractionsByKinds(
+        let places = await this.placesService.getAttractionsByKinds(
           coord.latitude,
           coord.longitude,
           kinds,
           radius,
           limit
         );
+        if ((places || []).length < Math.max(4, Math.floor(limit / 3))) {
+          const expanded = await this.placesService.getAttractionsByKinds(
+            coord.latitude,
+            coord.longitude,
+            kinds,
+            Math.max(radius, 35000),
+            limit
+          );
+          places = this.dedupeAndShufflePool([...(places || []), ...(expanded || [])]);
+        }
         pools[poolKey] = shuffle(places);
       }
     }
@@ -897,6 +975,43 @@ class ItineraryGenerator {
     return pools;
   }
 
+  async buildPreferredPlacePool(destination, coordinates, preferredPlaces = []) {
+    if (!Array.isArray(preferredPlaces) || preferredPlaces.length === 0) return [];
+    const coord = coordinates || {};
+    const hasCoords = Number.isFinite(coord.latitude) && Number.isFinite(coord.longitude);
+    if (!hasCoords) return [];
+
+    const matches = [];
+    for (const name of preferredPlaces) {
+      const results = await this.placesService.searchPlacesByName(
+        name,
+        coord.latitude,
+        coord.longitude,
+        22000,
+        20
+      );
+
+      const scored = (results || [])
+        .map((place) => {
+          const normalizedName = normalizePlaceName(place?.name);
+          const queryKey = normalizePlaceName(name);
+          const score = normalizedName === queryKey
+            ? 3
+            : normalizedName.includes(queryKey) || queryKey.includes(normalizedName)
+              ? 2
+              : 1;
+          return { place, score };
+        })
+        .sort((a, b) => b.score - a.score)
+        .map((item) => item.place)
+        .slice(0, 3);
+
+      matches.push(...scored);
+    }
+
+    return this.dedupeAndShufflePool(matches).slice(0, 20);
+  }
+
   dedupeAndShufflePool(pool = []) {
     const seen = new Set();
     const unique = [];
@@ -928,6 +1043,7 @@ class ItineraryGenerator {
     currency,
     detailsCache,
     detailsBudget,
+    forcedPlacesQueue = [],
   }) {
     const activities = [];
     const poolSizes = this.getPoolSizes(pools);
@@ -948,7 +1064,13 @@ class ItineraryGenerator {
     for (let index = 0; index < plan.length; index += 1) {
       const slot = plan[index];
       const desiredStart = Math.max(cursorMinutes, slot.preferredStart);
-      const rawPlace = this.pickPlaceForCategory(slot.category, pools, usedIds, usedNames);
+      const forcedPlaceCandidate =
+        slot.role !== 'food-stop' && forcedPlacesQueue.length > 0
+          ? this.pickNextPlace(forcedPlacesQueue, usedIds, usedNames)
+          : null;
+      const rawPlace =
+        forcedPlaceCandidate ||
+        this.pickPlaceForCategory(slot.category, pools, usedIds, usedNames);
       if (!rawPlace) continue;
 
       const place = await this.enrichPlaceDetails(rawPlace, detailsCache, detailsBudget);
@@ -1008,7 +1130,7 @@ class ItineraryGenerator {
         startMinutes,
         durationMinutes,
         categoryOverride: resolvedCategory,
-        importance: slot.importance,
+        importance: forcedPlaceCandidate ? 'must-do' : slot.importance,
         fallbackCoordinates: coordinates,
         travelMinutes: travelImpact.travelMinutes,
         distanceKm: travelImpact.distanceKm,
@@ -1041,10 +1163,12 @@ class ItineraryGenerator {
     const destination = String(params.destination || '').trim();
     const days = clamp(Number(params.days) || 1, 1, 14);
     const interests = Array.isArray(params.interests) ? params.interests : [];
+    const requestedCategories = this.getRequestedCategories(interests);
     const travelStyle = String(params.travelStyle || 'solo').toLowerCase();
     const numberOfTravelers = clamp(Number(params.numberOfTravelers) || 1, 1, 20);
     const currency = String(params.currency || 'INR').toUpperCase();
     const requestedBudget = Number(params.budget) || 0;
+    const preferredPlaces = this.extractPreferredPlaces(params);
 
     const coords = await this.placesService.getCoordinatesForDestination(destination);
     let coordinates = coords ? { latitude: coords.lat, longitude: coords.lon } : null;
@@ -1078,7 +1202,7 @@ class ItineraryGenerator {
       travelStyle,
     });
 
-    const [weatherForecast, hotels, pools] = await Promise.all([
+    const [weatherForecast, hotels, pools, preferredPool] = await Promise.all([
       this.weatherService.getDailyForecast(
         coordinates.latitude,
         coordinates.longitude,
@@ -1090,7 +1214,21 @@ class ItineraryGenerator {
         6
       ),
       this.buildPlacePools(destination, coordinates),
+      this.buildPreferredPlacePool(destination, coordinates, preferredPlaces),
     ]);
+
+    if (preferredPool.length > 0) {
+      pools.sightseeing = this.dedupeAndShufflePool([
+        ...preferredPool,
+        ...pools.sightseeing,
+      ]);
+      preferredPool.forEach((place) => {
+        const category = String(place?.category || 'sightseeing').toLowerCase();
+        if (Array.isArray(pools[category])) {
+          pools[category] = this.dedupeAndShufflePool([place, ...pools[category]]);
+        }
+      });
+    }
 
     const usedIds = new Set();
     const usedNames = new Set();
@@ -1116,6 +1254,7 @@ class ItineraryGenerator {
         currency,
         detailsCache,
         detailsBudget,
+        forcedPlacesQueue: preferredPool,
       });
       activities.push(...dayActivities);
     }
@@ -1138,12 +1277,26 @@ class ItineraryGenerator {
       budget: budgetInsights.adjustedBudget,
       currency,
       interests,
+      placesToVisit: preferredPlaces,
       travelStyle,
       travelers: numberOfTravelers,
       startDate: params.startDate,
       aiNotes: params.aiNotes,
       imageData: params.imageData,
       imageMimeType: params.imageMimeType,
+    });
+
+    const narrativeText = await this.aiService.generateItineraryNarrative({
+      destination,
+      days,
+      budget: budgetInsights.adjustedBudget,
+      currency,
+      interests,
+      travelStyle,
+      travelers: numberOfTravelers,
+      startDate: params.startDate,
+      placesToVisit: preferredPlaces,
+      activities,
     });
 
     const totalTravelMinutes = activities.reduce(
@@ -1169,6 +1322,7 @@ class ItineraryGenerator {
       hotels,
       highlights,
       aiPlan,
+      narrativeText,
       budgetInsights,
       metadata: {
         totalActivities: activities.length,

@@ -61,6 +61,12 @@ const normalizeGeneratedActivities = (activities) => {
   }));
 };
 
+const buildSafeDescription = (summary, destination) => {
+  const fallback = `AI-generated itinerary for ${destination}`;
+  const raw = String(summary || '').trim() || fallback;
+  return raw.length > 900 ? `${raw.slice(0, 897)}...` : raw;
+};
+
 const normalizeBudgetSplit = (split) => {
   if (!split || typeof split !== 'object') return null;
   const keys = Object.keys(DEFAULT_BUDGET_SPLIT);
@@ -119,6 +125,7 @@ class ItineraryController {
         days,
         budget,
         interests,
+        placesToVisit,
         travelStyle,
         numberOfTravelers,
         startDate,
@@ -158,6 +165,7 @@ class ItineraryController {
         budget,
         currency,
         interests,
+        placesToVisit,
         travelStyle,
         numberOfTravelers,
         startDate,
@@ -217,6 +225,7 @@ class ItineraryController {
       const aiPlanPayload = aiPlan
         ? {
             summary: aiPlan.summary || '',
+            detailedPlan: generated.narrativeText || '',
             highlights: highlightedPlaces,
             dailyThemes: Array.isArray(aiPlan.dailyThemes)
               ? aiPlan.dailyThemes
@@ -228,12 +237,24 @@ class ItineraryController {
             notes: aiNotes || '',
             imageBased: Boolean(normalizedImage?.data),
           }
-        : null;
+        : (generated.narrativeText
+          ? {
+              summary: '',
+              detailedPlan: generated.narrativeText,
+              highlights: highlightedPlaces,
+              dailyThemes: [],
+              packingTips: [],
+              localTips: [],
+              budgetSplit: DEFAULT_BUDGET_SPLIT,
+              notes: aiNotes || '',
+              imageBased: Boolean(normalizedImage?.data),
+            }
+          : null);
 
 
       const itinerary = new Itinerary({
         title: `${days}-Day Trip to ${destination}`,
-        description: aiPlan?.summary || `AI-generated itinerary for ${destination}`,
+        description: buildSafeDescription(aiPlan?.summary, destination),
         startDate: tripStartDate,
         endDate,
         numberOfDays: days,

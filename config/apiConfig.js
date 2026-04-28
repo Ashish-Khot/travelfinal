@@ -58,6 +58,7 @@ module.exports = {
   // Preferred AI provider (openai | gemini | openrouter)
   AI: {
     PROVIDER: process.env.AI_PROVIDER || '',
+    PROVIDER_SEQUENCE: process.env.AI_PROVIDER_SEQUENCE || 'gemini,openrouter',
   },
 
   // Virtual Guide AI routing

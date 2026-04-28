@@ -305,6 +305,10 @@ const ItinerarySchema = new mongoose.Schema(
         type: String,
         default: '',
       },
+      detailedPlan: {
+        type: String,
+        default: '',
+      },
       highlights: [String],
       dailyThemes: [
         {

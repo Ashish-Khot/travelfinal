@@ -1,0 +1,617 @@
+@use "./styles/auth/variables" as v;
+@use "./styles/auth/mixins" as m;
+@use "./styles/auth/animations";
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Sora:wght@600;700&display=swap");
+
+.authShell {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 20px;
+  overflow: hidden;
+  color: v.$ink;
+  font-family: v.$font-body;
+  background:
+    radial-gradient(circle at 10% 6%, rgba(219, 122, 91, 0.2), transparent 40%),
+    radial-gradient(circle at 86% 88%, rgba(119, 170, 147, 0.22), transparent 38%),
+    v.$page-bg;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+    filter: blur(2px);
+    z-index: 0;
+  }
+
+  &::before {
+    width: 380px;
+    height: 380px;
+    left: -140px;
+    top: -145px;
+    background: radial-gradient(circle, rgba(239, 179, 156, 0.5), transparent 70%);
+    animation: authFloat 8s ease-in-out infinite;
+  }
+
+  &::after {
+    width: 420px;
+    height: 420px;
+    right: -150px;
+    bottom: -170px;
+    background: radial-gradient(circle, rgba(119, 170, 147, 0.36), transparent 70%);
+    animation: authDrift 10s ease-in-out infinite;
+  }
+}
+
+.authFrame {
+  position: relative;
+  z-index: 1;
+  width: min(1160px, 100%);
+  display: grid;
+  grid-template-columns: 1.06fr 0.94fr;
+  border-radius: v.$radius-xl;
+  overflow: hidden;
+  @include m.glass-panel(0.8);
+  animation: authRise 560ms ease-out both;
+}
+
+.brandPanel {
+  position: relative;
+  padding: 48px;
+  color: #fff;
+  overflow: hidden;
+  background:
+    linear-gradient(0deg, rgba(70, 42, 29, 0.34), rgba(70, 42, 29, 0.34)),
+    linear-gradient(128deg, rgba(219, 122, 91, 0.82), rgba(119, 170, 147, 0.26)),
+    url("https://images.unsplash.com/photo-1564501049412-61c2a3083791?auto=format&fit=crop&w=1800&q=80")
+      center/cover no-repeat;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.34));
+  }
+}
+
+.brandBadge,
+.brandTitle,
+.brandSub,
+.featureList {
+  position: relative;
+  z-index: 1;
+}
+
+.brandBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.brandTitle {
+  margin: 18px 0 10px;
+  max-width: 460px;
+  font-family: v.$font-display;
+  font-size: clamp(2rem, 3.1vw, 3.05rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+
+.brandSub {
+  margin: 0;
+  max-width: 470px;
+  color: rgba(255, 255, 255, 0.93);
+  font-size: 1rem;
+  line-height: 1.54;
+}
+
+.featureList {
+  margin-top: 26px;
+  display: grid;
+  gap: 12px;
+}
+
+.featureCard {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 14px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(4px);
+  animation: authRise 620ms ease both;
+
+  &:nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  &:nth-child(3) {
+    animation-delay: 130ms;
+  }
+}
+
+.featureIcon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08));
+}
+
+.featureTitle {
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.featureText {
+  margin-top: 3px;
+  font-size: 0.86rem;
+  line-height: 1.46;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.formPanel {
+  padding: 40px 34px;
+  background: linear-gradient(180deg, #fff 0%, #fffdf9 100%);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: #6e757e;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: color 0.2s ease;
+
+  &:hover {
+    color: v.$brand;
+  }
+}
+
+.formCard {
+  padding: 28px 26px 24px;
+  border-radius: v.$radius-lg;
+  border: 1px solid v.$line-soft;
+  box-shadow: v.$shadow-soft;
+  background: v.$paper;
+  animation: authRise 640ms ease-out both;
+}
+
+.formHeader {
+  margin-bottom: 18px;
+}
+
+.iconHalo {
+  width: 54px;
+  height: 54px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: v.$brand-deep;
+  background: linear-gradient(145deg, rgba(219, 122, 91, 0.2), rgba(119, 170, 147, 0.2));
+  border: 1px solid rgba(219, 122, 91, 0.28);
+}
+
+.formTitle {
+  margin-top: 12px;
+  font-family: v.$font-display;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.formSubtitle {
+  margin-top: 4px;
+  color: v.$ink-soft;
+  font-size: 0.95rem;
+}
+
+.sectionLabel {
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #4b535d;
+}
+
+.roleGroup {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(111, 119, 130, 0.26);
+  border-radius: v.$radius-md;
+  background: #f9f7f2;
+}
+
+.roleBtn {
+  border: none !important;
+  border-radius: 11px !important;
+  padding: 10px 4px !important;
+  text-transform: none !important;
+  color: #58606c !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
+
+  &:hover {
+    background: rgba(219, 122, 91, 0.1) !important;
+  }
+
+  &.Mui-selected {
+    color: v.$brand-deep !important;
+    background: linear-gradient(145deg, rgba(219, 122, 91, 0.2), rgba(239, 179, 156, 0.13)) !important;
+    box-shadow: inset 0 0 0 1px rgba(219, 122, 91, 0.34);
+  }
+}
+
+.roleInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.roleLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.roleHint {
+  margin: 9px 0 15px;
+  min-height: 36px;
+  color: #5d6672;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.sectionHint {
+  margin: -10px 0 0;
+  font-size: 0.82rem;
+  color: #7a8391;
+}
+
+.formField {
+  :global(.MuiInputBase-root) {
+    border-radius: 12px;
+    background: #fbfaf7;
+  }
+
+  :global(.MuiOutlinedInput-notchedOutline) {
+    border-color: rgba(111, 119, 130, 0.34);
+  }
+
+  :global(.Mui-focused .MuiOutlinedInput-notchedOutline) {
+    @include m.field-focus;
+  }
+
+  :global(.MuiIconButton-root) {
+    color: #78808b;
+  }
+
+  :global(.MuiFormHelperText-root) {
+    color: #89919b;
+  }
+}
+
+.loginBtn {
+  @include m.btn-orange;
+}
+
+.submitBtn {
+  @include m.btn-orange;
+}
+
+.footerText {
+  margin-top: 16px;
+  text-align: center;
+  color: #7a838f;
+}
+
+.registerLink {
+  color: v.$brand;
+  text-decoration: none;
+  font-weight: 700;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.registerShell {
+  padding: 18px 16px;
+
+  .authFrame {
+    grid-template-columns: minmax(270px, 0.37fr) minmax(0, 1fr);
+    width: min(1260px, 100%);
+    border: 1px solid rgba(98, 71, 56, 0.16);
+    background: rgba(255, 255, 255, 0.86);
+  }
+
+  .registerBrandPanel {
+    padding: 28px 24px;
+    background:
+      linear-gradient(170deg, rgba(40, 27, 22, 0.46), rgba(40, 27, 22, 0.58)),
+      linear-gradient(140deg, rgba(219, 122, 91, 0.8), rgba(119, 170, 147, 0.24)),
+      url("https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80")
+        center/cover no-repeat;
+  }
+
+  .brandTitle {
+    font-size: clamp(1.45rem, 2.05vw, 2.05rem);
+    line-height: 1.12;
+    margin-top: 14px;
+    margin-bottom: 8px;
+  }
+
+  .brandSub {
+    font-size: 0.95rem;
+    line-height: 1.45;
+    max-width: 280px;
+  }
+
+  .registerPills {
+    margin-top: 16px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .registerPill {
+    width: fit-content;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.14);
+    color: rgba(255, 255, 255, 0.96);
+  }
+
+  .formHeader {
+    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    column-gap: 12px;
+  }
+
+  .iconHalo {
+    width: 48px;
+    height: 48px;
+    margin: 0;
+    border-radius: 12px;
+  }
+
+  .formTitle {
+    margin: 0;
+    font-size: 1.55rem;
+  }
+
+  .formSubtitle {
+    grid-column: 2;
+    margin-top: -2px;
+    font-size: 0.9rem;
+  }
+
+  .sectionLabel {
+    margin-bottom: 8px;
+    text-transform: none;
+    letter-spacing: 0.03em;
+    font-size: 0.88rem;
+  }
+
+  .roleGroup {
+    gap: 6px;
+    padding: 6px;
+    border-radius: 12px;
+  }
+
+  .roleBtn {
+    min-height: 42px;
+    padding: 7px 8px !important;
+    border-radius: 10px !important;
+  }
+
+  .roleLabel {
+    font-size: 0.84rem;
+    font-weight: 600;
+  }
+
+  .roleInner {
+    flex-direction: row;
+    gap: 7px;
+  }
+}
+
+.registerFormPanel {
+  padding: 16px 16px 16px 10px;
+  background: linear-gradient(180deg, #fffefc 0%, #fffcf7 100%);
+}
+
+.registerCard {
+  width: min(920px, 100%);
+  margin-inline: auto;
+  padding: 18px 18px 16px;
+  border: 1px solid rgba(111, 119, 130, 0.18);
+  box-shadow: 0 18px 35px rgba(62, 44, 34, 0.1);
+}
+
+.registerForm {
+  gap: 12px;
+}
+
+.registerGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.registerGuideGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.guideBio {
+  grid-column: span 2;
+}
+
+.guideLanguages {
+  grid-column: 1 / -1;
+}
+
+.guideExperience {
+  grid-column: span 1;
+}
+
+@media (max-width: 1100px) {
+  .authFrame {
+    grid-template-columns: 1fr;
+  }
+
+  .brandPanel {
+    min-height: 370px;
+    padding: 36px 30px;
+  }
+}
+
+@media (max-width: 760px) {
+  .authShell {
+    padding: 28px 14px;
+  }
+
+  .formPanel {
+    padding: 20px 14px 26px;
+  }
+
+  .formCard {
+    padding: 22px 16px 20px;
+  }
+
+  .roleGroup {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .registerShell {
+    .authFrame {
+      grid-template-columns: 1fr;
+    }
+
+    .registerBrandPanel {
+      min-height: 190px;
+      padding: 22px 20px;
+    }
+
+    .registerPills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .formHeader {
+      grid-template-columns: auto 1fr;
+    }
+  }
+
+  .registerGrid,
+  .registerGuideGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guideBio {
+    grid-column: 1 / -1;
+  }
+
+  .guideLanguages {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .brandPanel {
+    min-height: 330px;
+    padding: 30px 20px;
+  }
+
+  .featureCard {
+    grid-template-columns: 1fr;
+  }
+
+  .roleGroup {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .registerShell {
+    .registerBrandPanel {
+      min-height: 160px;
+      padding: 18px 16px;
+    }
+
+    .roleInner {
+      justify-content: center;
+    }
+  }
+
+  .registerFormPanel {
+    padding: 10px 10px 14px;
+  }
+
+  .registerCard {
+    padding: 14px 12px 14px;
+  }
+
+  .registerGrid,
+  .registerGuideGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .guideLanguages {
+    grid-column: 1 / -1;
+  }
+}

@@ -119,6 +119,32 @@ const AIPlanner = ({ itinerary }) => {
               </Typography>
             )}
 
+            {itinerary.aiPlan.detailedPlan && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2">Detailed Plan</Typography>
+                <Paper
+                  sx={{
+                    mt: 1,
+                    p: 1.5,
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    maxHeight: 360,
+                    overflowY: 'auto',
+                  }}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      whiteSpace: 'pre-line',
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    {itinerary.aiPlan.detailedPlan}
+                  </Typography>
+                </Paper>
+              </Box>
+            )}
+
             {itinerary.aiPlan.highlights?.length > 0 && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2">Highlights</Typography>

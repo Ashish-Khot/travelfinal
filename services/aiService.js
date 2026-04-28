@@ -29,6 +29,26 @@ class AIService {
     this.hasOpenAIAccess = Boolean(this.openaiKey);
 
     this.preferredProvider = (API_CONFIG.AI?.PROVIDER || '').trim().toLowerCase();
+    this.providerSequence = this.parseProviderSequence(
+      API_CONFIG.AI?.PROVIDER_SEQUENCE || 'gemini,openrouter'
+    );
+  }
+
+  parseProviderSequence(sequence) {
+    const allowedProviders = ['gemini', 'openrouter', 'openai'];
+    const raw = String(sequence || '')
+      .split(',')
+      .map((provider) => provider.trim().toLowerCase())
+      .filter(Boolean);
+
+    const deduped = [];
+    raw.forEach((provider) => {
+      if (allowedProviders.includes(provider) && !deduped.includes(provider)) {
+        deduped.push(provider);
+      }
+    });
+
+    return deduped.length ? deduped : ['gemini', 'openrouter'];
   }
 
   normalizeImagePayload(imageData, imageMimeType) {
@@ -55,7 +75,10 @@ class AIService {
   }
 
   getProviderSequence() {
-    const providers = ['openai', 'gemini', 'openrouter'];
+    const providers = this.providerSequence.length
+      ? [...this.providerSequence]
+      : ['gemini', 'openrouter'];
+
     if (providers.includes(this.preferredProvider)) {
       return [
         this.preferredProvider,
@@ -706,12 +729,167 @@ class AIService {
     return null;
   }
 
+  async generateItineraryNarrative(params) {
+    const prompt = this.buildNarrativePrompt(params);
+    const providers = this.getProviderSequence();
+
+    for (const provider of providers) {
+      if (provider === 'gemini' && this.hasGeminiAccess) {
+        try {
+          const content = await this.callGemini({
+            prompt,
+            temperature: 0.45,
+            maxOutputTokens: 2200,
+          });
+          if (content) return content.trim();
+        } catch (error) {
+          console.error('Gemini narrative generation error:', error.message);
+        }
+      }
+
+      if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+        try {
+          const response = await axios.post(
+            `${this.openRouterBaseUrl}/chat/completions`,
+            {
+              model: this.openRouterModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.45,
+              max_tokens: 2200,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${this.openRouterKey}`,
+                'Content-Type': 'application/json',
+              },
+              timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 30000),
+            }
+          );
+          const content = response.data?.choices?.[0]?.message?.content || '';
+          if (content) return content.trim();
+        } catch (error) {
+          console.error('OpenRouter narrative generation error:', error.message);
+        }
+      }
+
+      if (provider === 'openai' && this.hasOpenAIAccess) {
+        try {
+          const content = await this.callOpenAIResponse({
+            prompt,
+            maxOutputTokens: 2200,
+            responseFormat: null,
+          });
+          if (content) return content.trim();
+        } catch (error) {
+          console.error('OpenAI narrative generation error:', error.message);
+        }
+      }
+    }
+
+    return this.buildNarrativeFallback(params);
+  }
+
+  buildNarrativePrompt(params) {
+    const activitiesByDay = (params.activities || []).reduce((acc, activity) => {
+      const day = Number(activity?.dayNumber) || 1;
+      if (!acc[day]) acc[day] = [];
+      acc[day].push(activity);
+      return acc;
+    }, {});
+
+    const dayBlocks = Object.keys(activitiesByDay)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((dayKey) => {
+        const dayActivities = activitiesByDay[dayKey]
+          .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')))
+          .slice(0, 8)
+          .map((item) => `- ${item.startTime || 'TBD'} ${item.name} (${item.category || 'activity'})`)
+          .join('\n');
+        return `Day ${dayKey}:\n${dayActivities}`;
+      })
+      .join('\n\n');
+
+    return `
+You are an expert travel planner. Write a complete, practical itinerary answer in clear markdown.
+
+Trip input:
+- Destination: ${params.destination}
+- Days: ${params.days}
+- Budget: ${params.currency || 'INR'} ${params.budget}
+- Travelers: ${params.travelers || 1}
+- Travel style: ${params.travelStyle || 'solo'}
+- Start date: ${params.startDate || 'N/A'}
+- Interests: ${(params.interests || []).join(', ') || 'general'}
+- Preferred places: ${(params.placesToVisit || []).join(', ') || 'none'}
+
+Real activities to use (do not invent random generic places):
+${dayBlocks}
+
+Output format:
+1) Short "Trip Summary" with route and budget range.
+2) "Day-wise Itinerary" with Morning/Afternoon/Evening and named places.
+3) "Budget Breakdown" as a table in INR.
+4) "Must-Try Foods".
+5) "Travel Tips".
+
+Rules:
+- Use the provided real activities as the primary source.
+- Keep tone practical and specific.
+- If any slot has limited data, suggest a nearby real-world type of venue in that same locality.
+`;
+  }
+
+  buildNarrativeFallback(params) {
+    const activities = Array.isArray(params.activities) ? params.activities : [];
+    const grouped = activities.reduce((acc, item) => {
+      const day = Number(item?.dayNumber) || 1;
+      if (!acc[day]) acc[day] = [];
+      acc[day].push(item);
+      return acc;
+    }, {});
+
+    const dayText = Object.keys(grouped)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((dayKey) => {
+        const items = grouped[dayKey]
+          .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')))
+          .map((activity) => `- ${activity.startTime || 'TBD'} ${activity.name} (${activity.category || 'activity'})`)
+          .join('\n');
+        return `### Day ${dayKey}\n${items || '- Explore local attractions and food spots.'}`;
+      })
+      .join('\n\n');
+
+    return `## Trip Summary
+${params.days}-day trip to ${params.destination} for ${params.travelers || 1} traveler(s), budget ${params.currency || 'INR'} ${params.budget}.
+
+## Day-wise Itinerary
+${dayText}
+
+## Budget Breakdown
+- Accommodation: 35%
+- Transportation: 15%
+- Activities: 25%
+- Food: 20%
+- Misc: 5%
+
+## Must-Try Foods
+- Explore regional specialties and popular local cafes.
+
+## Travel Tips
+- Start early for major attractions.
+- Keep a buffer for local transfers and weather.
+- Use verified local transport options for safety and cost control.`;
+  }
+
   /**
    * Build enhancement prompt for Gemini
    * @private
    */
   buildEnhancementPrompt(params) {
     const notes = params?.aiNotes ? `Additional notes: ${params.aiNotes}` : '';
+    const preferredPlaces = Array.isArray(params?.placesToVisit) && params.placesToVisit.length
+      ? `- Preferred places to include: ${params.placesToVisit.join(', ')}`
+      : '';
     return `
       You are a travel planning assistant. Create structured metadata for a trip.
 
@@ -721,6 +899,7 @@ class AIService {
       - Budget: ${params.currency || 'INR'} ${params.budget}
       - Travelers: ${params.travelers || params.numberOfTravelers || 1}
       - Interests: ${(params.interests || []).join(', ')}
+      ${preferredPlaces}
       - Travel style: ${params.travelStyle}
       - Start date: ${params.startDate || 'N/A'}
       ${notes}

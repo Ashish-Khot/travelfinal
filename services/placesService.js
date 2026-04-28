@@ -478,10 +478,8 @@ class PlacesService {
       // Food & Dining
       'restaurants': 'food',
       'cafes': 'food',
-      'bars': 'food',
       'food': 'food',
       'fast_food': 'food',
-      'pubs': 'food',
 
       // Shopping
       'shops': 'shopping',
@@ -503,6 +501,10 @@ class PlacesService {
 
       // Entertainment
       'entertainment': 'entertainment',
+      'nightclubs': 'entertainment',
+      'bars': 'entertainment',
+      'pubs': 'entertainment',
+      'karaoke': 'entertainment',
       'cinemas': 'entertainment',
       'theatres': 'entertainment',
       'amusement_parks': 'entertainment',

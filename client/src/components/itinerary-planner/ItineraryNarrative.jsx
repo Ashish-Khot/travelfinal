@@ -163,6 +163,7 @@ const ItineraryNarrative = ({ itinerary }) => {
   const destinationName = itinerary?.destination?.name || itinerary?.destination || 'Destination';
   const currency = itinerary?.budget?.currency || 'INR';
   const overview = itinerary?.aiPlan?.summary || itinerary?.description || '';
+  const detailedPlan = itinerary?.aiPlan?.detailedPlan || '';
   const weatherForecast = (itinerary?.weatherData?.forecast || []).slice(0, itinerary?.numberOfDays || 7);
   const [primaryColor, secondaryColor] = getDestinationPalette(destinationName);
   const budgetMeta = getBudgetStatusMeta(itinerary?.budget?.status);
@@ -236,6 +237,26 @@ const ItineraryNarrative = ({ itinerary }) => {
               Trip Overview
             </Typography>
             <Typography variant="body1">{overview}</Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {detailedPlan && (
+        <Card sx={{ mb: 3 }} className="story-card">
+          <CardContent>
+            <Typography variant="h6" sx={{ mb: 1 }} className="story-card-title">
+              Detailed Itinerary Plan
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{
+                whiteSpace: 'pre-line',
+                lineHeight: 1.75,
+                color: '#1e293b',
+              }}
+            >
+              {detailedPlan}
+            </Typography>
           </CardContent>
         </Card>
       )}
