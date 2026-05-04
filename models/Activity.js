@@ -97,6 +97,10 @@ const ActivitySchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  reachOptions: {
+    type: [String],
+    default: [],
+  },
   importance: {
     type: String,
     enum: ['must-do', 'recommended', 'optional'],

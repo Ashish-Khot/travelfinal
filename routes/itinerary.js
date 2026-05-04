@@ -55,23 +55,9 @@ router.delete('/:id/activity/:activityId', (req, res) =>
   controller.removeActivity(req, res)
 );
 
-/**
- * AI & RECOMMENDATIONS
- */
-
-// Suggest activities for a day
-router.post('/:id/suggest-activities', (req, res) =>
-  controller.suggestActivities(req, res)
-);
-
-// Get weather-based recommendations
-router.post('/:id/weather-recommendations', (req, res) =>
-  controller.getWeatherRecommendations(req, res)
-);
-
-// Optimize itinerary schedule
-router.post('/:id/optimize', (req, res) =>
-  controller.optimizeItinerary(req, res)
+// Update activity in itinerary
+router.patch('/:id/activity/:activityId', (req, res) =>
+  controller.updateActivity(req, res)
 );
 
 /**

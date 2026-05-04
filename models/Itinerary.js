@@ -287,6 +287,20 @@ const ItinerarySchema = new mongoose.Schema(
     // Weather data (cached)
     weatherData: {
       lastUpdated: Date,
+      current: {
+        temperature: Number,
+        feelsLike: Number,
+        minTemp: Number,
+        maxTemp: Number,
+        humidity: Number,
+        windSpeed: Number,
+        condition: String,
+        description: String,
+        rainProbability: Number,
+        visibility: Number,
+        pressure: Number,
+        lastUpdated: Date,
+      },
       forecast: [
         {
           day: Number,

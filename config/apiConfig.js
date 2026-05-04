@@ -34,7 +34,7 @@ module.exports = {
   GROQ: {
     API_KEY: process.env.GROQ_API_KEY || '',
     BASE_URL: process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1',
-    MODEL: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    MODEL: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
   },
 
   // Google Gemini API - Multimodal AI (text + images)
@@ -42,7 +42,7 @@ module.exports = {
   GEMINI: {
     API_KEY: process.env.GEMINI_API_KEY || '',
     BASE_URL: process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta',
-    MODEL: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+    MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
     VISION_MODEL: process.env.GEMINI_VISION_MODEL || '',
     MAX_IMAGE_MB: Number(process.env.GEMINI_MAX_IMAGE_MB || 4),
   },
@@ -59,6 +59,29 @@ module.exports = {
   AI: {
     PROVIDER: process.env.AI_PROVIDER || '',
     PROVIDER_SEQUENCE: process.env.AI_PROVIDER_SEQUENCE || 'gemini,openrouter',
+  },
+
+  // Itinerary-only AI routing and credentials
+  ITINERARY_AI: {
+    PROVIDER: process.env.ITINERARY_AI_PROVIDER || 'gemini',
+    PROVIDER_SEQUENCE:
+      process.env.ITINERARY_AI_PROVIDER_SEQUENCE || 'gemini,openrouter',
+    GEMINI_API_KEY: process.env.ITINERARY_GEMINI_API_KEY || '',
+    GEMINI_MODEL: process.env.ITINERARY_GEMINI_MODEL || 'gemini-2.5-flash',
+    GEMINI_BASE_URL:
+      process.env.ITINERARY_GEMINI_BASE_URL ||
+      process.env.GEMINI_BASE_URL ||
+      'https://generativelanguage.googleapis.com/v1beta',
+    GEMINI_VISION_MODEL: process.env.ITINERARY_GEMINI_VISION_MODEL || '',
+    OPENROUTER_API_KEY: process.env.ITINERARY_OPENROUTER_API_KEY || '',
+    OPENROUTER_MODEL:
+      process.env.ITINERARY_OPENROUTER_MODEL ||
+      process.env.OPENROUTER_MODEL ||
+      'openrouter/free',
+    OPENROUTER_BASE_URL:
+      process.env.ITINERARY_OPENROUTER_BASE_URL ||
+      process.env.OPENROUTER_BASE_URL ||
+      'https://openrouter.ai/api/v1',
   },
 
   // Virtual Guide AI routing

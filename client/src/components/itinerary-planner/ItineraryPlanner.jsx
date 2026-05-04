@@ -1,538 +1,270 @@
-/**
- * Premium Itinerary Planner
- * Chat-first itinerary builder with live output modules
- */
-
-import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  TextField,
-  Stack,
-  Paper,
-  Chip,
-  Tabs,
-  Tab,
-  CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Divider,
-} from '@mui/material';
-import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import SendRoundedIcon from '@mui/icons-material/SendRounded';
-import MapRoundedIcon from '@mui/icons-material/MapRounded';
-import TimelineRoundedIcon from '@mui/icons-material/TimelineRounded';
-import ViewListRoundedIcon from '@mui/icons-material/ViewListRounded';
-import AccountBalanceWalletRoundedIcon from '@mui/icons-material/AccountBalanceWalletRounded';
-import InsightsRoundedIcon from '@mui/icons-material/InsightsRounded';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import ItineraryNarrative from './ItineraryNarrative.jsx';
-import TimelineView from './TimelineView.jsx';
-import MapPlanner from './MapPlanner.jsx';
-import ActivityList from './ActivityList.jsx';
-import BudgetDashboard from './BudgetDashboard.jsx';
-import AIPlanner from './AIPlanner.jsx';
-import NewItineraryDialog from './NewItineraryDialog.jsx';
+﻿import React, { useEffect, useMemo, useState } from 'react';
+import { MapContainer, Marker, Polyline, Popup, TileLayer } from 'react-leaflet';
+import L from 'leaflet';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import 'leaflet/dist/leaflet.css';
 import itineraryService from '../../services/itineraryService.js';
-import useItinerary from '../../hooks/useItinerary.js';
-import './itineraryPlanner.css';
+import './itineraryPlanner.saas.css';
 
-const quickPrompts = [
-  'Weekend foodie escape',
-  'Luxury slow travel',
-  'Family friendly highlights',
-  'Hidden gems and local markets',
-];
+const NAV_ITEMS = ['Dashboard', 'New Trip', 'My Trips', 'Settings'];
 
-const moduleTabs = [
-  { id: 'overview', label: 'Overview', icon: <AutoAwesomeRoundedIcon fontSize="small" /> },
-  { id: 'timeline', label: 'Timeline', icon: <TimelineRoundedIcon fontSize="small" /> },
-  { id: 'map', label: 'Map', icon: <MapRoundedIcon fontSize="small" /> },
-  { id: 'activities', label: 'Activities', icon: <ViewListRoundedIcon fontSize="small" /> },
-  { id: 'budget', label: 'Budget', icon: <AccountBalanceWalletRoundedIcon fontSize="small" /> },
-  { id: 'ai', label: 'AI Studio', icon: <InsightsRoundedIcon fontSize="small" /> },
-];
+const initialForm = {
+  destination: '',
+  startDate: new Date().toISOString().split('T')[0],
+  days: 4,
+  travelers: 2,
+  budget: 25000,
+  travelStyle: 'solo',
+  preferences: '',
+};
 
-const progressSteps = [
-  'Analyzing preferences',
-  'Curating highlights',
-  'Optimizing routes',
-  'Balancing time blocks',
-  'Final polish',
-];
+L.Icon.Default.mergeOptions({
+  iconUrl: markerIcon,
+  iconRetinaUrl: markerIcon2x,
+  shadowUrl: markerShadow,
+});
 
-const formatMoney = (value, currency = 'INR') => {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return '';
+const todayISO = () => new Date().toISOString().split('T')[0];
+
+const fmt = (value, currency = 'INR') => {
+  const amount = Number(value || 0);
   try {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    }).format(amount);
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount);
   } catch {
     return `${currency} ${amount.toFixed(0)}`;
   }
 };
 
+const cleanText = (text) => String(text || '').replace(/```json/gi, '').replace(/```/g, '').replace(/\s{2,}/g, ' ').trim();
+
+const safeTips = (tips, fallbackText) => {
+  if (Array.isArray(tips) && tips.length) return tips.map((t) => cleanText(t)).filter(Boolean).slice(0, 8);
+  const raw = String(fallbackText || '');
+  return raw.split(/\b\d+\.\s*/).map((x) => cleanText(x)).filter((x) => x.length > 18).slice(0, 8);
+};
+
+const formatDate = (dateISO, addDays = 0) => {
+  const date = new Date(dateISO || Date.now());
+  if (!Number.isFinite(date.getTime())) return '';
+  date.setDate(date.getDate() + addDays);
+  return date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+};
+
+const extractArrival = (notes) => {
+  const m = String(notes || '').match(/Arrival:\s*([^|]+)/i);
+  return m ? m[1].trim() : '';
+};
+
+const validCoords = (activity) => {
+  const lon = Number(activity?.location?.coordinates?.[0]);
+  const lat = Number(activity?.location?.coordinates?.[1]);
+  return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001;
+};
+
 function ItineraryPlanner() {
-  const [openAdvanced, setOpenAdvanced] = useState(false);
-  const [activeModule, setActiveModule] = useState('overview');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progressIndex, setProgressIndex] = useState(0);
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: 'Tell me your destination, dates, and vibe. I will craft a day-by-day itinerary.',
-    },
-  ]);
-
-  const [formData, setFormData] = useState({
-    destination: '',
-    placesToVisit: '',
-    days: 5,
-    budget: 30000,
-    numberOfTravelers: 1,
-    travelStyle: 'solo',
-    startDate: new Date().toISOString().split('T')[0],
-    aiNotes: '',
-  });
-
-  const { itinerary, loading, setItinerary, addActivity, updateActivity, removeActivity } =
-    useItinerary();
-
-  if (loading && !itinerary) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="70vh">
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const [activeNav, setActiveNav] = useState('New Trip');
+  const [form, setForm] = useState(initialForm);
+  const [itinerary, setItinerary] = useState(null);
+  const [myTrips, setMyTrips] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [errorText, setErrorText] = useState('');
+  const [okText, setOkText] = useState('');
 
   useEffect(() => {
-    if (!isGenerating) {
-      setProgressIndex(0);
-      return;
-    }
-    const timer = setInterval(() => {
-      setProgressIndex((prev) => Math.min(prev + 1, progressSteps.length));
-    }, 950);
-    return () => clearInterval(timer);
-  }, [isGenerating]);
+    if (activeNav !== 'My Trips') return;
+    let ignore = false;
+    (async () => {
+      try {
+        const trips = await itineraryService.getUserItineraries();
+        if (!ignore) setMyTrips(Array.isArray(trips) ? trips : []);
+      } catch {
+        if (!ignore) setMyTrips([]);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [activeNav]);
 
-  const addMessage = (role, content) => {
-    setMessages((prev) => [
-      ...prev,
-      { id: `${Date.now()}-${Math.random()}`, role, content },
-    ]);
-  };
+  const dayGroups = useMemo(() => {
+    if (!itinerary?.activities?.length) return [];
+    const grouped = itinerary.activities.reduce((acc, item) => {
+      const day = Number(item.dayNumber || 1);
+      if (!acc[day]) acc[day] = [];
+      acc[day].push(item);
+      return acc;
+    }, {});
 
-  const summaryText = useMemo(() => {
-    if (!itinerary) return '';
-    const destinationName = itinerary?.destination?.name || itinerary?.destination || itinerary?.title || 'Your trip';
-    const days = itinerary?.numberOfDays || itinerary?.days || '';
-    const travelers = itinerary?.numberOfTravelers || '';
-    const budget = itinerary?.budget?.totalBudget || '';
-    const currency = itinerary?.budget?.currency || 'INR';
-    return `${destinationName}${days ? `, ${days} days` : ''}${travelers ? `, ${travelers} travelers` : ''}${
-      budget ? `, budget ${formatMoney(budget, currency)}` : ''
-    }`;
+    return Object.keys(grouped).map(Number).sort((a, b) => a - b).map((day) => ({
+      day,
+      activities: grouped[day].sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || ''))),
+    }));
   }, [itinerary]);
 
-  const summaryChips = useMemo(() => {
-    if (!itinerary) return [];
-    const chips = [];
-    if (itinerary?.numberOfDays) chips.push(`${itinerary.numberOfDays} days`);
-    if (itinerary?.numberOfTravelers) chips.push(`${itinerary.numberOfTravelers} travelers`);
-    if (itinerary?.season) chips.push(`Season: ${itinerary.season}`);
-    if (itinerary?.budget?.totalBudget) {
-      const currency = itinerary?.budget?.currency || 'INR';
-      chips.push(`Budget: ${formatMoney(itinerary.budget.totalBudget, currency)}`);
-    }
-    if (itinerary?.budget?.minimumRecommended && itinerary?.budget?.premiumEstimate) {
-      const currency = itinerary?.budget?.currency || 'INR';
-      chips.push(
-        `Realistic range: ${formatMoney(
-          itinerary.budget.minimumRecommended,
-          currency
-        )} - ${formatMoney(itinerary.budget.premiumEstimate, currency)}`
-      );
-    }
-    if (itinerary?.budget?.status) {
-      chips.push(`Budget status: ${itinerary.budget.status}`);
-    }
-    return chips;
-  }, [itinerary]);
+  const tips = useMemo(() => safeTips(itinerary?.aiPlan?.localTips, itinerary?.aiPlan?.detailedPlan), [itinerary]);
 
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const parsePlacesToVisit = (value) =>
-    String(value || '')
-      .split(/[,\n;|]/g)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .slice(0, 20);
-
-  const handleGenerate = async (overrideData = null) => {
-    const sourceData = overrideData ? { ...formData, ...overrideData } : formData;
-    const missing = [];
-    if (!sourceData.destination.trim()) missing.push('destination');
-    if (!sourceData.days || sourceData.days < 1) missing.push('trip length');
-    if (!sourceData.budget || sourceData.budget < 100) missing.push('budget');
-
-    if (missing.length) {
-      addMessage('assistant', `I need ${missing.join(', ')} to build the itinerary.`);
-      return;
-    }
-
-    const requestedPlaces = parsePlacesToVisit(sourceData.placesToVisit);
-    const userSummary = `${sourceData.days}-day ${sourceData.travelStyle} trip to ${sourceData.destination} for ${sourceData.numberOfTravelers} traveler(s). Budget INR ${sourceData.budget}. Start ${sourceData.startDate}.${requestedPlaces.length ? ` Places: ${requestedPlaces.join(', ')}.` : ''} ${sourceData.aiNotes ? `Notes: ${sourceData.aiNotes}` : ''}`;
-    addMessage('user', userSummary);
-    addMessage('assistant', 'Generating your itinerary now. I will post updates as soon as it is ready.');
-
-    setIsGenerating(true);
-    setProgressIndex(0);
-
+  const generate = async () => {
+    setOkText('');
+    setErrorText('');
+    setLoading(true);
     try {
-      const generatedItinerary = await itineraryService.generateItinerary({
-        destination: sourceData.destination,
-        days: parseInt(sourceData.days, 10),
-        budget: parseFloat(sourceData.budget),
+      const generated = await itineraryService.generateItinerary({
+        destination: form.destination,
+        placesToVisit: [],
+        days: Number(form.days),
+        budget: Math.max(1, Number(form.budget)),
         currency: 'INR',
-        numberOfTravelers: parseInt(sourceData.numberOfTravelers, 10),
-        travelStyle: sourceData.travelStyle,
+        numberOfTravelers: Number(form.travelers),
+        travelStyle: form.travelStyle,
         interests: [],
-        placesToVisit: requestedPlaces,
-        startDate: sourceData.startDate,
-        aiNotes: sourceData.aiNotes,
+        startDate: form.startDate,
+        aiNotes: form.preferences,
       });
-
-      setItinerary(generatedItinerary);
-      setActiveModule('overview');
-      addMessage(
-        'assistant',
-        `Your itinerary is ready. Review the overview and switch modules for timeline, map, and budget.`
-      );
-
-      if (generatedItinerary?.budget?.adjustmentApplied) {
-        addMessage(
-          'assistant',
-          generatedItinerary?.budget?.adjustmentMessage ||
-            'Budget was adjusted to a realistic destination minimum.'
-        );
-      } else if (generatedItinerary?.budget?.status === 'above-premium') {
-        addMessage(
-          'assistant',
-          generatedItinerary?.budget?.adjustmentMessage ||
-            'Your budget is above premium range, so the plan includes luxury options.'
-        );
-      }
-
-      if (!generatedItinerary?.weatherData?.forecast?.length) {
-        addMessage(
-          'assistant',
-          'Live weather data was unavailable right now. Please retry in a moment for a fresh forecast.'
-        );
-      }
+      setItinerary(generated);
+      setActiveNav('Dashboard');
+      setOkText('Itinerary generated successfully.');
     } catch (err) {
-      const errorMessage = [err?.message, err?.error].filter(Boolean).join(' ');
-      addMessage(
-        'assistant',
-        errorMessage || 'Unable to generate the itinerary. Please try again.'
-      );
+      const providerErrors = Array.isArray(err?.providerErrors) ? err.providerErrors.join(' | ') : '';
+      setErrorText([err?.message, err?.error, providerErrors].filter(Boolean).join(' ') || 'Failed to generate itinerary');
     } finally {
-      setIsGenerating(false);
-      setProgressIndex(progressSteps.length);
+      setLoading(false);
     }
   };
 
-  const handleAdvancedCreated = (newItinerary) => {
-    setItinerary(newItinerary);
-    setActiveModule('overview');
-    addMessage('assistant', 'Your itinerary was updated with the advanced details.');
-  };
-
-  useEffect(() => {
-    const handleAgentPrefill = (event) => {
-      const payload = event?.detail || {};
-      const updates = {
-        destination: payload.destination || '',
-        placesToVisit: Array.isArray(payload.placesToVisit)
-          ? payload.placesToVisit.join(', ')
-          : '',
-        days: payload.days || 4,
-        budget: payload.budget || 20000,
-        numberOfTravelers: payload.numberOfTravelers || 1,
-        startDate: payload.startDate || new Date().toISOString().split('T')[0],
-        aiNotes: payload.aiNotes || '',
-      };
-
-      setFormData((prev) => ({ ...prev, ...updates }));
-      setActiveModule('overview');
-      addMessage('assistant', 'Agent prefilled your itinerary details.');
-
-      if (payload.autoGenerate) {
-        setTimeout(() => {
-          handleGenerate(updates);
-        }, 120);
-      }
-    };
-
-    window.addEventListener('agentItineraryPrefill', handleAgentPrefill);
-    return () => window.removeEventListener('agentItineraryPrefill', handleAgentPrefill);
-  }, []);
+  const currency = itinerary?.budget?.currency || 'INR';
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }} className="itinerary-root">
-      <Box className="itinerary-shell">
-        <Box className="itinerary-chat">
-          <Box className="itinerary-chat-header">
-            <Typography variant="h5" sx={{ fontWeight: 800, color: '#0f172a' }}>
-              Itinerary Concierge
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#64748b' }}>
-              Describe the trip you want. I will build the plan in real time.
-            </Typography>
-          </Box>
-
-          <Box className="itinerary-chat-form">
-            <Stack spacing={2}>
-              <TextField
-                label="Destination"
-                placeholder="Paris, Tokyo, Bali"
-                value={formData.destination}
-                onChange={(e) => handleInputChange('destination', e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Places to visit (optional)"
-                placeholder="Triund, Bhagsu Waterfall, Dalai Lama Temple"
-                value={formData.placesToVisit}
-                onChange={(e) => handleInputChange('placesToVisit', e.target.value)}
-                helperText="Comma-separated places. Planner will prioritize these."
-                fullWidth
-              />
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Start date"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => handleInputChange('startDate', e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Days"
-                  type="number"
-                  value={formData.days}
-                  onChange={(e) => handleInputChange('days', e.target.value)}
-                  inputProps={{ min: 1, max: 30 }}
-                  fullWidth
-                />
-              </Stack>
-              <Stack direction="row" spacing={2}>
-                <TextField
-                  label="Travelers"
-                  type="number"
-                  value={formData.numberOfTravelers}
-                  onChange={(e) => handleInputChange('numberOfTravelers', e.target.value)}
-                  inputProps={{ min: 1, max: 20 }}
-                  fullWidth
-                />
-                <TextField
-                  label="Budget (INR)"
-                  type="number"
-                  value={formData.budget}
-                  onChange={(e) => handleInputChange('budget', e.target.value)}
-                  inputProps={{ min: 100, step: 100 }}
-                  fullWidth
-                />
-              </Stack>
-              <FormControl fullWidth>
-                <InputLabel>Travel style</InputLabel>
-                <Select
-                  label="Travel style"
-                  value={formData.travelStyle}
-                  onChange={(e) => handleInputChange('travelStyle', e.target.value)}
-                >
-                  <MenuItem value="solo">Solo traveler</MenuItem>
-                  <MenuItem value="couple">Couple</MenuItem>
-                  <MenuItem value="family">Family</MenuItem>
-                  <MenuItem value="group">Group</MenuItem>
-                  <MenuItem value="adventure">Adventure</MenuItem>
-                  <MenuItem value="relaxation">Relaxation</MenuItem>
-                </Select>
-              </FormControl>
-            </Stack>
-          </Box>
-
-          <Divider />
-
-          <Box className="itinerary-chat-body">
-            {messages.map((message) => (
-              <Box
-                key={message.id}
-                className={`itinerary-bubble ${message.role === 'user' ? 'bubble-user' : 'bubble-assistant'}`}
-              >
-                <Typography variant="body2">{message.content}</Typography>
-              </Box>
+    <div className="ip-app">
+      <div className="ip-wrap">
+        <aside className="ip-sidebar">
+          <nav className="ip-nav">
+            {NAV_ITEMS.map((item) => (
+              <button key={item} className={`ip-nav-item ${activeNav === item ? 'is-active' : ''}`} onClick={() => setActiveNav(item)}>{item}</button>
             ))}
-          </Box>
+          </nav>
+        </aside>
 
-          <Box className="itinerary-chat-compose">
-            <TextField
-              placeholder="Add preferences like pace, food, or accessibility"
-              value={formData.aiNotes}
-              onChange={(e) => handleInputChange('aiNotes', e.target.value)}
-              fullWidth
-              multiline
-              minRows={2}
-            />
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {quickPrompts.map((prompt) => (
-                <Chip
-                  key={prompt}
-                  label={prompt}
-                  size="small"
-                  onClick={() =>
-                    handleInputChange(
-                      'aiNotes',
-                      formData.aiNotes ? `${formData.aiNotes} ${prompt}` : prompt
-                    )
-                  }
-                />
-              ))}
-            </Stack>
-            <Stack direction="row" spacing={1.5}>
-              <Button
-                variant="outlined"
-                startIcon={<AddRoundedIcon />}
-                onClick={() => setOpenAdvanced(true)}
-              >
-                Advanced details
-              </Button>
-              <Button
-                variant="contained"
-                endIcon={<SendRoundedIcon />}
-                onClick={handleGenerate}
-                disabled={isGenerating}
-              >
-                {isGenerating ? 'Generating...' : 'Generate itinerary'}
-              </Button>
-            </Stack>
-          </Box>
-        </Box>
+        <main className="ip-main">
+          <header className="ip-topbar"><div><h1>{activeNav}</h1><p>Practical day-by-day itinerary with route visibility</p></div></header>
+          {okText && <div className="ip-alert ok">{okText}</div>}
+          {errorText && <div className="ip-alert err">{errorText}</div>}
 
-        <Box className="itinerary-output">
-          <Box className="itinerary-output-header">
-            <Box>
-              <Typography variant="overline" sx={{ color: '#94a3b8', fontWeight: 600 }}>
-                Live output
-              </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 800, color: '#0f172a' }}>
-                {summaryText || 'Your itinerary will appear here'}
-              </Typography>
-            </Box>
-            <Chip
-              label={isGenerating ? 'Generating' : itinerary ? 'Ready' : 'Waiting'}
-              color={isGenerating ? 'warning' : itinerary ? 'success' : 'default'}
-              sx={{ fontWeight: 700 }}
-            />
-          </Box>
-
-          {summaryChips.length > 0 && (
-            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
-              {summaryChips.map((chip) => (
-                <Chip key={chip} label={chip} variant="outlined" />
-              ))}
-            </Stack>
+          {(activeNav === 'New Trip' || (!itinerary && activeNav === 'Dashboard')) && (
+            <section className="ip-card">
+              <h2>Create New Trip</h2>
+              <p>Generate real-place itinerary with timing, cost, map pins, and travel notes.</p>
+              <div className="ip-grid">
+                <label className="ip-field"><span>Destination</span><input value={form.destination} onChange={(e) => setForm((p) => ({ ...p, destination: e.target.value }))} placeholder="Goa, Jaipur, Munnar" /></label>
+                <label className="ip-field"><span>Start Date</span><input type="date" min={todayISO()} value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} /></label>
+                <label className="ip-field"><span>Days</span><input type="number" min={1} max={30} value={form.days} onChange={(e) => setForm((p) => ({ ...p, days: Number(e.target.value) || 1 }))} /></label>
+                <label className="ip-field"><span>Travelers</span><input type="number" min={1} max={20} value={form.travelers} onChange={(e) => setForm((p) => ({ ...p, travelers: Number(e.target.value) || 1 }))} /></label>
+                <label className="ip-field"><span>Budget {fmt(form.budget, 'INR')}</span><input type="number" min={1} value={form.budget} onChange={(e) => setForm((p) => ({ ...p, budget: Number(e.target.value) || 1 }))} /></label>
+                <label className="ip-field"><span>Travel Style</span><select value={form.travelStyle} onChange={(e) => setForm((p) => ({ ...p, travelStyle: e.target.value }))}><option value="solo">Solo</option><option value="budget">Budget</option><option value="family">Family</option><option value="group">Group</option><option value="luxury">Luxury</option></select></label>
+                <label className="ip-field ip-span-2"><span>Preferences</span><textarea rows={4} value={form.preferences} onChange={(e) => setForm((p) => ({ ...p, preferences: e.target.value }))} placeholder="Prefer heritage, street food, less walking, child-friendly pace..." /></label>
+              </div>
+              <div className="ip-cta-wrap"><button className="ip-cta" onClick={generate}>Generate Itinerary</button></div>
+            </section>
           )}
 
-          {isGenerating && (
-            <Paper className="itinerary-live-card">
-              <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                Building your plan
-              </Typography>
-              <Stack spacing={1}>
-                {progressSteps.map((step, index) => (
-                  <Box key={step} className={`itinerary-live-step ${index < progressIndex ? 'is-active' : ''}`}>
-                    <Typography variant="body2">{step}</Typography>
-                  </Box>
+          {loading && <section className="ip-card ip-loading"><div className="ip-spinner" /><p>Generating your itinerary...</p></section>}
+
+          {activeNav === 'Dashboard' && itinerary && !loading && (
+            <section className="ip-results">
+              <div className="ip-hero-card">
+                <div>
+                  <h3>{itinerary?.destination?.name}</h3>
+                  <p>{itinerary?.numberOfDays} days for {itinerary?.numberOfTravelers || 1} traveler(s)</p>
+                  <div className="ip-facts">
+                    <div><span>Total Budget</span><strong>{fmt(itinerary?.budget?.totalBudget, currency)}</strong></div>
+                    <div><span>Daily Target</span><strong>{fmt(itinerary?.budget?.suggestedDailyBudget || 0, currency)}</strong></div>
+                    <div><span>Minimum Practical</span><strong>{fmt(itinerary?.budget?.minimumRecommended || 0, currency)}</strong></div>
+                    <div><span>Start</span><strong>{formatDate(itinerary?.startDate)}</strong></div>
+                  </div>
+                  {!!itinerary?.budget?.adjustmentMessage && <div className="ip-note">{itinerary.budget.adjustmentMessage}</div>}
+                  {!!itinerary?.aiPlan?.summary && <div className="ip-summary-text">{cleanText(itinerary.aiPlan.summary)}</div>}
+                </div>
+              </div>
+
+              <div className="ip-results-grid">
+                <div className="ip-day-stack">
+                  {dayGroups.map((d) => {
+                    const coords = d.activities.filter(validCoords).map((a) => [a.location.coordinates[1], a.location.coordinates[0]]);
+                    const mapCenter = coords[0] || [20.5937, 78.9629];
+                    return (
+                      <div key={d.day} className="ip-card ip-day-card">
+                        <h4>Day {d.day} <small>{formatDate(itinerary?.startDate, d.day - 1)}</small></h4>
+                        {coords.length > 0 && (
+                          <div className="ip-mini-map">
+                            <MapContainer center={mapCenter} zoom={12} scrollWheelZoom={false} style={{ height: '220px', width: '100%' }}>
+                              <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                              {d.activities.filter(validCoords).map((a) => (
+                                <Marker key={`m-${a._id}`} position={[a.location.coordinates[1], a.location.coordinates[0]]}>
+                                  <Popup><strong>{a.name}</strong><br />{a.startTime} | {fmt(a.estimatedCost, currency)}</Popup>
+                                </Marker>
+                              ))}
+                              {coords.length > 1 && <Polyline positions={coords} color="#0d9488" />}
+                            </MapContainer>
+                          </div>
+                        )}
+                        {d.activities.length === 0 && <div className="ip-empty">No activities parsed for this day.</div>}
+                        {d.activities.map((a) => (
+                          <div key={a._id} className="ip-activity">
+                            <div className="ip-time">{a.startTime || '--:--'}</div>
+                            <div>
+                              <strong>{a.name}</strong>
+                              <span>{a.category} | {a.duration} min | {fmt(a.estimatedCost, currency)}</span>
+                              {!!extractArrival(a.notes) && <span>Arrival: {extractArrival(a.notes)}</span>}
+                              {Array.isArray(a.reachOptions) && a.reachOptions.length > 0 && <span>How to reach: {a.reachOptions.join(' | ')}</span>}
+                              {!!a.description && <em>{cleanText(a.description)}</em>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="ip-side-cards">
+                  <div className="ip-card">
+                    <h4>Budget Split</h4>
+                    <div className="ip-budget-list">
+                      <div><span>Stay</span><strong>{fmt(itinerary?.budget?.accommodation || 0, currency)}</strong></div>
+                      <div><span>Transport</span><strong>{fmt(itinerary?.budget?.transportation || 0, currency)}</strong></div>
+                      <div><span>Activities</span><strong>{fmt(itinerary?.budget?.activities || 0, currency)}</strong></div>
+                      <div><span>Food</span><strong>{fmt(itinerary?.budget?.food || 0, currency)}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="ip-card">
+                    <h4>Local Tips</h4>
+                    <div className="ip-bullet-list">
+                      {tips.length === 0 && <div className="ip-empty">No tips extracted.</div>}
+                      {tips.map((tip, idx) => <div key={`${idx}-${tip.slice(0, 20)}`} className="ip-bullet-item">{tip}</div>)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {activeNav === 'My Trips' && (
+            <section className="ip-card">
+              <h3>My Trips</h3>
+              <div className="ip-trips">
+                {myTrips.length === 0 && <div className="ip-empty">No trips found.</div>}
+                {myTrips.map((trip) => (
+                  <button key={trip._id} className="ip-trip-item" onClick={() => { setItinerary(trip); setActiveNav('Dashboard'); }}>
+                    <strong>{trip?.destination?.name || trip.title}</strong>
+                    <span>{trip.numberOfDays} days | {fmt(trip?.budget?.totalBudget, trip?.budget?.currency || 'INR')}</span>
+                  </button>
                 ))}
-              </Stack>
-              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <CircularProgress size={18} />
-                <Typography variant="caption" sx={{ color: '#64748b' }}>
-                  Generating real-time results
-                </Typography>
-              </Box>
-            </Paper>
+              </div>
+            </section>
           )}
-
-          {!itinerary && !isGenerating && (
-            <Paper className="itinerary-empty-card">
-              <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                Start with a request
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#64748b' }}>
-                Fill the form on the left and press Generate itinerary. Your modules will unlock here.
-              </Typography>
-            </Paper>
-          )}
-
-          {itinerary && (
-            <>
-              <Tabs
-                value={activeModule}
-                onChange={(event, value) => setActiveModule(value)}
-                variant="scrollable"
-                scrollButtons="auto"
-                className="itinerary-module-tabs"
-              >
-                {moduleTabs.map((tab) => (
-                  <Tab key={tab.id} value={tab.id} icon={tab.icon} iconPosition="start" label={tab.label} />
-                ))}
-              </Tabs>
-              <Box className="itinerary-module-panel">
-                {activeModule === 'overview' && <ItineraryNarrative itinerary={itinerary} />}
-                {activeModule === 'timeline' && (
-                  <TimelineView itinerary={itinerary} onActivityUpdate={updateActivity} />
-                )}
-                {activeModule === 'map' && (
-                  <MapPlanner itinerary={itinerary} onActivityAdd={addActivity} onActivityRemove={removeActivity} />
-                )}
-                {activeModule === 'activities' && (
-                  <ActivityList
-                    itinerary={itinerary}
-                    onActivityAdd={addActivity}
-                    onActivityUpdate={updateActivity}
-                    onActivityRemove={removeActivity}
-                  />
-                )}
-                {activeModule === 'budget' && <BudgetDashboard itinerary={itinerary} />}
-                {activeModule === 'ai' && <AIPlanner itinerary={itinerary} />}
-              </Box>
-            </>
-          )}
-        </Box>
-      </Box>
-
-      <NewItineraryDialog
-        open={openAdvanced}
-        onClose={() => setOpenAdvanced(false)}
-        onItineraryCreated={handleAdvancedCreated}
-      />
-    </Container>
+        </main>
+      </div>
+    </div>
   );
 }
 
 export default ItineraryPlanner;
-
-

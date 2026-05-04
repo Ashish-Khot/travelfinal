@@ -165,6 +165,7 @@ const ItineraryNarrative = ({ itinerary }) => {
   const overview = itinerary?.aiPlan?.summary || itinerary?.description || '';
   const detailedPlan = itinerary?.aiPlan?.detailedPlan || '';
   const weatherForecast = (itinerary?.weatherData?.forecast || []).slice(0, itinerary?.numberOfDays || 7);
+  const currentWeather = itinerary?.weatherData?.current || null;
   const [primaryColor, secondaryColor] = getDestinationPalette(destinationName);
   const budgetMeta = getBudgetStatusMeta(itinerary?.budget?.status);
 
@@ -267,6 +268,19 @@ const ItineraryNarrative = ({ itinerary }) => {
             <Typography variant="h6" sx={{ mb: 1 }} className="story-card-title">
               Weather Outlook
             </Typography>
+            {currentWeather?.condition && (
+              <Paper className="story-weather-card" sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  Current weather at destination
+                </Typography>
+                <Typography variant="body2">
+                  {currentWeather.condition} ({currentWeather.description || 'live'})
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {Math.round(currentWeather.temperature || 0)} deg C, feels like {Math.round(currentWeather.feelsLike || 0)} deg C
+                </Typography>
+              </Paper>
+            )}
             <Grid container spacing={1.5}>
               {weatherForecast.map((day) => (
                 <Grid item xs={12} sm={6} md={4} key={day.date}>
@@ -366,6 +380,11 @@ const ItineraryNarrative = ({ itinerary }) => {
                           {activity.notes && (
                             <Typography variant="body2" sx={{ mt: 0.5 }} color="text.secondary">
                               {activity.notes}
+                            </Typography>
+                          )}
+                          {Array.isArray(activity.reachOptions) && activity.reachOptions.length > 0 && (
+                            <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 600 }}>
+                              Reach options: {activity.reachOptions.join(', ')}
                             </Typography>
                           )}
                           <Box sx={{ mt: 0.5 }}>

@@ -8,17 +8,34 @@ const API_CONFIG = require('../config/apiConfig');
 
 class AIService {
   constructor() {
-    this.openRouterKey = (API_CONFIG.OPENROUTER.API_KEY || '').trim();
-    this.openRouterBaseUrl = API_CONFIG.OPENROUTER.BASE_URL;
-    this.openRouterModel = API_CONFIG.OPENROUTER.MODEL;
+    const itineraryAI = API_CONFIG.ITINERARY_AI || {};
+
+    this.openRouterKey = (
+      itineraryAI.OPENROUTER_API_KEY ||
+      API_CONFIG.OPENROUTER.API_KEY ||
+      ''
+    ).trim();
+    this.openRouterBaseUrl =
+      itineraryAI.OPENROUTER_BASE_URL || API_CONFIG.OPENROUTER.BASE_URL;
+    this.openRouterModel =
+      itineraryAI.OPENROUTER_MODEL || API_CONFIG.OPENROUTER.MODEL;
     this.hasOpenRouterAccess = Boolean(this.openRouterKey);
 
-    this.geminiKey = (API_CONFIG.GEMINI?.API_KEY || '').trim();
+    this.geminiKey = (
+      itineraryAI.GEMINI_API_KEY ||
+      API_CONFIG.GEMINI?.API_KEY ||
+      ''
+    ).trim();
     this.geminiBaseUrl =
-      API_CONFIG.GEMINI?.BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
-    this.geminiModel = API_CONFIG.GEMINI?.MODEL || 'gemini-1.5-flash';
+      itineraryAI.GEMINI_BASE_URL ||
+      API_CONFIG.GEMINI?.BASE_URL ||
+      'https://generativelanguage.googleapis.com/v1beta';
+    this.geminiModel =
+      itineraryAI.GEMINI_MODEL || API_CONFIG.GEMINI?.MODEL || 'gemini-2.5-flash';
     this.geminiVisionModel =
-      API_CONFIG.GEMINI?.VISION_MODEL || this.geminiModel;
+      itineraryAI.GEMINI_VISION_MODEL ||
+      API_CONFIG.GEMINI?.VISION_MODEL ||
+      this.geminiModel;
     this.maxImageMb = API_CONFIG.GEMINI?.MAX_IMAGE_MB || 4;
     this.hasGeminiAccess = Boolean(this.geminiKey);
 
@@ -28,14 +45,44 @@ class AIService {
     this.openaiMaxOutputTokens = Number(API_CONFIG.OPENAI?.MAX_OUTPUT_TOKENS || 7000);
     this.hasOpenAIAccess = Boolean(this.openaiKey);
 
-    this.preferredProvider = (API_CONFIG.AI?.PROVIDER || '').trim().toLowerCase();
+    this.groqKey = (API_CONFIG.GROQ?.API_KEY || '').trim();
+    this.groqBaseUrl = API_CONFIG.GROQ?.BASE_URL || 'https://api.groq.com/openai/v1';
+    this.groqModel = API_CONFIG.GROQ?.MODEL || 'llama-3.1-8b-instant';
+    this.hasGroqAccess = Boolean(this.groqKey);
+
+    this.preferredProvider = (
+      itineraryAI.PROVIDER ||
+      API_CONFIG.AI?.PROVIDER ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
     this.providerSequence = this.parseProviderSequence(
-      API_CONFIG.AI?.PROVIDER_SEQUENCE || 'gemini,openrouter'
+      itineraryAI.PROVIDER_SEQUENCE ||
+      API_CONFIG.AI?.PROVIDER_SEQUENCE ||
+      'gemini,openrouter'
     );
   }
 
   parseProviderSequence(sequence) {
-    const allowedProviders = ['gemini', 'openrouter', 'openai'];
+    const allowedProviders = ['groq', 'gemini', 'openrouter', 'openai'];
+    const raw = String(sequence || '')
+      .split(',')
+      .map((provider) => provider.trim().toLowerCase())
+      .filter(Boolean);
+
+    const deduped = [];
+    raw.forEach((provider) => {
+      if (allowedProviders.includes(provider) && !deduped.includes(provider)) {
+        deduped.push(provider);
+      }
+    });
+
+    return deduped.length ? deduped : ['groq', 'gemini', 'openrouter'];
+  }
+
+  parseItineraryProviderSequence(sequence) {
+    const allowedProviders = ['gemini', 'openrouter'];
     const raw = String(sequence || '')
       .split(',')
       .map((provider) => provider.trim().toLowerCase())
@@ -77,7 +124,7 @@ class AIService {
   getProviderSequence() {
     const providers = this.providerSequence.length
       ? [...this.providerSequence]
-      : ['gemini', 'openrouter'];
+      : ['groq', 'gemini', 'openrouter'];
 
     if (providers.includes(this.preferredProvider)) {
       return [
@@ -86,6 +133,37 @@ class AIService {
       ];
     }
     return providers;
+  }
+
+  getItineraryProviderSequence() {
+    const sequence = this.parseItineraryProviderSequence(
+      API_CONFIG.ITINERARY_AI?.PROVIDER_SEQUENCE || 'gemini,openrouter'
+    );
+    const preferred = String(API_CONFIG.ITINERARY_AI?.PROVIDER || 'gemini')
+      .trim()
+      .toLowerCase();
+    if (sequence.includes(preferred)) {
+      return [preferred, ...sequence.filter((provider) => provider !== preferred)];
+    }
+    return sequence;
+  }
+
+  formatProviderError(error) {
+    const status = error?.response?.status;
+    const responseData = error?.response?.data;
+    const responseString =
+      responseData && typeof responseData === 'object'
+        ? JSON.stringify(responseData)
+        : '';
+    const providerMessage =
+      responseData?.error?.message ||
+      responseData?.message ||
+      responseString ||
+      error?.message ||
+      error?.code ||
+      'Unknown provider error';
+    const codePart = error?.code ? ` [${error.code}]` : '';
+    return status ? `${status}${codePart}: ${providerMessage}` : `${providerMessage}${codePart}`;
   }
 
   extractOpenAIOutputText(responseData) {
@@ -127,6 +205,8 @@ class AIService {
     temperature = 0.7,
     maxOutputTokens = 1200,
     responseMimeType,
+    timeoutMs,
+    includeUsage = false,
   }) {
     if (!this.hasGeminiAccess) {
       throw new Error('Gemini API key is missing');
@@ -162,12 +242,17 @@ class AIService {
     const url = `${this.geminiBaseUrl}/models/${encodeURIComponent(modelName)}:generateContent?key=${this.geminiKey}`;
 
     const response = await axios.post(url, requestBody, {
-      timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
+      timeout: Number(timeoutMs) > 0 ? Number(timeoutMs) : API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
       headers: { 'Content-Type': 'application/json' },
     });
 
     const partsOut = response.data?.candidates?.[0]?.content?.parts || [];
-    return partsOut.map((part) => part.text || '').join('').trim();
+    const text = partsOut.map((part) => part.text || '').join('').trim();
+    if (!includeUsage) return text;
+    return {
+      text,
+      usage: response.data?.usageMetadata || null,
+    };
   }
 
   async callOpenAIResponse({
@@ -229,6 +314,45 @@ class AIService {
     return this.extractOpenAIOutputText(response.data);
   }
 
+  async callGroqChat({
+    prompt,
+    temperature = 0.3,
+    maxTokens = 2200,
+    responseFormat = 'json_object',
+  }) {
+    if (!this.hasGroqAccess) {
+      throw new Error('Groq API key is missing');
+    }
+
+    const requestBody = {
+      model: this.groqModel,
+      messages: [
+        { role: 'system', content: 'You are a travel planner. Return valid JSON only.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    };
+
+    if (responseFormat === 'json_object') {
+      requestBody.response_format = { type: 'json_object' };
+    }
+
+    const response = await axios.post(
+      `${this.groqBaseUrl}/chat/completions`,
+      requestBody,
+      {
+        timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 30000),
+        headers: {
+          Authorization: `Bearer ${this.groqKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    return response.data?.choices?.[0]?.message?.content || '';
+  }
+
   /**
    * Generate a complete itinerary using AI
    * @param {Object} params - Itinerary generation parameters
@@ -241,410 +365,146 @@ class AIService {
    * @returns {Promise<Object>} Generated itinerary structure
    */
   async generateItinerary(params) {
-    try {
-      const {
-        destination,
-        days,
-        budget,
-        interests = [],
-        travelStyle = 'moderate',
-        travelers = 1,
-      } = params;
+    const {
+      destination,
+      days,
+      budget,
+      interests = [],
+      travelStyle = 'moderate',
+      travelers = 1,
+    } = params;
 
-      const prompt = this.buildItineraryPrompt({
-        destination,
-        days,
-        budget,
-        interests,
-        travelStyle,
-        travelers,
-      });
+    const prompt = this.buildItineraryPrompt({
+      destination,
+      days,
+      budget,
+      currency: params.currency || 'INR',
+      interests,
+      travelStyle,
+      travelers,
+      startDate: params.startDate,
+      aiNotes: params.aiNotes,
+      placesToVisit: params.placesToVisit,
+    });
 
-      const providers = this.getProviderSequence();
+    const providers = this.getItineraryProviderSequence();
+    const errors = [];
 
-      for (const provider of providers) {
-        if (provider === 'openai' && this.hasOpenAIAccess) {
-          try {
-            const content = await this.callOpenAIResponse({
-              prompt,
-              maxOutputTokens: this.openaiMaxOutputTokens,
-              responseFormat: 'json_object',
-            });
-            const parsed = this.tryParseItineraryResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenAI itinerary generation error:', error.message);
-          }
+    for (const provider of providers) {
+      if (provider === 'gemini') {
+        if (!this.hasGeminiAccess) {
+          errors.push('gemini: missing API key');
+          continue;
         }
-
-        if (provider === 'gemini' && this.hasGeminiAccess) {
-          try {
-            const content = await this.callGemini({
-              prompt,
-              maxOutputTokens: 2000,
-              responseMimeType: 'application/json',
-            });
-            const parsed = this.tryParseItineraryResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('Gemini itinerary generation error:', error.message);
-          }
-        }
-
-        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
-          try {
-            const response = await axios.post(
-              `${this.openRouterBaseUrl}/chat/completions`,
-              {
-                model: this.openRouterModel,
-                messages: [
-                  {
-                    role: 'user',
-                    content: prompt,
-                  },
-                ],
-                temperature: 0.7,
-                max_tokens: 2000,
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${this.openRouterKey}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-              }
+        try {
+          const geminiResponse = await this.callGemini({
+            prompt,
+            maxOutputTokens: 8000,
+            responseMimeType: 'text/plain',
+            temperature: 0.4,
+            timeoutMs: 75000,
+            includeUsage: true,
+          });
+          const content =
+            typeof geminiResponse === 'string'
+              ? geminiResponse
+              : (geminiResponse?.text || '');
+          const parsed = this.normalizeItineraryFromAnyResponse(content, params);
+          if (parsed) {
+            parsed.meta = {
+              provider: 'gemini',
+              model: this.geminiModel,
+              usage: geminiResponse?.usage || null,
+            };
+            console.log('[ITINERARY][AI] Provider success: gemini');
+            console.log('[ITINERARY][AI] Raw preview:', String(content || '').slice(0, 400));
+            console.log(
+              '[ITINERARY][AI] Parsed day/activity counts:',
+              (parsed.dailyPlan || []).map((d) => `D${d.day}:${(d.activities || []).length}`).join(', ')
             );
-
-            const content = response.data.choices?.[0]?.message?.content;
-            const parsed = this.tryParseItineraryResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenRouter itinerary generation error:', error.message);
+            return parsed;
           }
+          errors.push('gemini: response could not be converted into itinerary');
+        } catch (error) {
+          errors.push(`gemini: ${this.formatProviderError(error)}`);
         }
       }
 
-      return this.generateDefaultItinerary(params);
-    } catch (error) {
-      console.error('AI itinerary generation error:', error.message);
-      return this.generateDefaultItinerary(params);
-    }
-  }
-
-  /**
-   * Generate activity suggestions for a specific day
-   * @param {string} destination - Travel destination
-   * @param {number} dayNumber - Day number
-   * @param {Array<string>} interests - User interests
-   * @param {Array} previousActivities - Activities already planned
-   * @returns {Promise<Array>} Suggested activities
-   */
-  async suggestActivities(destination, dayNumber, interests = [], previousActivities = []) {
-    try {
-      const prompt = `
-        For a trip to ${destination} (Day ${dayNumber}), suggest 4-5 interesting activities.
-        
-        User interests: ${interests.join(', ')}
-        
-        Already planned activities: ${previousActivities.map((a) => a.name).join(', ')}
-        
-        Return a JSON array with activities in this format:
-        [
-          {
-            "name": "Activity name",
-            "category": "sightseeing|food|adventure|culture|shopping|relaxation",
-            "description": "Brief description",
-            "estimatedDuration": 120,
-            "estimatedCost": 50,
-            "importance": "must-do|recommended|optional",
-            "timeSlot": "09:00-11:00"
-          }
-        ]
-        
-        Return ONLY valid JSON, no other text.
-      `;
-
-      const providers = this.getProviderSequence();
-
-      for (const provider of providers) {
-        if (provider === 'openai' && this.hasOpenAIAccess) {
-          try {
-            const content = await this.callOpenAIResponse({
-              prompt,
-              maxOutputTokens: 1000,
-              responseFormat: 'json_object',
-            });
-            const parsed = this.tryParseActivitiesResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenAI activity suggestions error:', error.message);
-          }
+      if (provider === 'openrouter') {
+        if (!this.hasOpenRouterAccess) {
+          errors.push('openrouter: missing API key');
+          continue;
         }
+        try {
+          // Attempt 1: strict JSON mode (works for many providers, fails for some)
+          const requestBody = {
+            model: this.openRouterModel,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.4,
+            max_tokens: 6000,
+            response_format: { type: 'json_object' },
+          };
+          const requestConfig = {
+            headers: {
+              Authorization: `Bearer ${this.openRouterKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'http://localhost:3001',
+              'X-Title': 'travel-itinerary-planner',
+            },
+            timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 75000),
+          };
 
-        if (provider === 'gemini' && this.hasGeminiAccess) {
+          let response;
           try {
-            const content = await this.callGemini({
-              prompt,
-              maxOutputTokens: 1000,
-              responseMimeType: 'application/json',
-            });
-            const parsed = this.tryParseActivitiesResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('Gemini activity suggestions error:', error.message);
-          }
-        }
-
-        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
-          try {
-            const response = await axios.post(
+            response = await axios.post(
+              `${this.openRouterBaseUrl}/chat/completions`,
+              requestBody,
+              requestConfig
+            );
+          } catch (strictError) {
+            // Attempt 2: fallback without response_format for providers rejecting json_object
+            response = await axios.post(
               `${this.openRouterBaseUrl}/chat/completions`,
               {
-                model: this.openRouterModel,
-                messages: [
-                  {
-                    role: 'user',
-                    content: prompt,
-                  },
-                ],
-                temperature: 0.7,
-                max_tokens: 1000,
+                ...requestBody,
+                response_format: undefined,
               },
-              {
-                headers: {
-                  Authorization: `Bearer ${this.openRouterKey}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-              }
+              requestConfig
             );
-
-            const content = response.data.choices?.[0]?.message?.content;
-            const parsed = this.tryParseActivitiesResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenRouter activity suggestions error:', error.message);
           }
+
+          const content = response.data?.choices?.[0]?.message?.content || '';
+          const parsed = this.normalizeItineraryFromAnyResponse(content, params);
+          if (parsed) {
+            parsed.meta = {
+              provider: 'openrouter',
+              model: this.openRouterModel,
+              usage: response.data?.usage || null,
+            };
+            console.log('[ITINERARY][AI] Provider success: openrouter');
+            console.log('[ITINERARY][AI] Raw preview:', String(content || '').slice(0, 400));
+            console.log(
+              '[ITINERARY][AI] Parsed day/activity counts:',
+              (parsed.dailyPlan || []).map((d) => `D${d.day}:${(d.activities || []).length}`).join(', ')
+            );
+            return parsed;
+          }
+          errors.push('openrouter: response could not be converted into itinerary');
+        } catch (error) {
+          errors.push(`openrouter: ${this.formatProviderError(error)}`);
         }
       }
-
-      return this.getDefaultActivitySuggestions(destination, interests);
-    } catch (error) {
-      console.error('Activity suggestions error:', error.message);
-      return this.getDefaultActivitySuggestions(destination, interests);
     }
+
+    const finalError = new Error(
+      `Itinerary generation failed with providers ${providers.join(' -> ')}`
+    );
+    finalError.providerErrors = errors;
+    throw finalError;
   }
-
-  /**
-   * Get AI-powered recommendations based on weather
-   * @param {string} destination - Travel destination
-   * @param {Object} weatherData - Current weather data
-   * @param {Array<string>} interests - User interests
-   * @returns {Promise<Object>} Weather-based recommendations
-   */
-  async getWeatherBasedRecommendations(destination, weatherData, interests = []) {
-    try {
-      const prompt = `
-        Weather in ${destination}: ${weatherData.condition}, ${weatherData.temperature} deg C
-        
-        User interests: ${interests.join(', ')}
-        
-        Based on this weather, what activities and attractions would you recommend?
-        
-        Return a JSON object with:
-        {
-          "suitable_activities": ["activity1", "activity2", ...],
-          "avoid_activities": ["activity1", ...],
-          "warnings": ["warning1", ...],
-          "packing_tips": ["tip1", "tip2", ...]
-        }
-        
-        Return ONLY valid JSON, no other text.
-      `;
-
-      const providers = this.getProviderSequence();
-
-      for (const provider of providers) {
-        if (provider === 'openai' && this.hasOpenAIAccess) {
-          try {
-            const content = await this.callOpenAIResponse({
-              prompt,
-              maxOutputTokens: 800,
-              responseFormat: 'json_object',
-            });
-            const parsed = this.tryParseRecommendationsResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenAI weather recommendations error:', error.message);
-          }
-        }
-
-        if (provider === 'gemini' && this.hasGeminiAccess) {
-          try {
-            const content = await this.callGemini({
-              prompt,
-              maxOutputTokens: 800,
-              responseMimeType: 'application/json',
-            });
-            const parsed = this.tryParseRecommendationsResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('Gemini weather recommendations error:', error.message);
-          }
-        }
-
-        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
-          try {
-            const response = await axios.post(
-              `${this.openRouterBaseUrl}/chat/completions`,
-              {
-                model: this.openRouterModel,
-                messages: [
-                  {
-                    role: 'user',
-                    content: prompt,
-                  },
-                ],
-                temperature: 0.7,
-                max_tokens: 800,
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${this.openRouterKey}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-              }
-            );
-
-            const content = response.data.choices?.[0]?.message?.content;
-            const parsed = this.tryParseRecommendationsResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenRouter weather recommendations error:', error.message);
-          }
-        }
-      }
-
-      return this.getDefaultRecommendations();
-    } catch (error) {
-      console.error('Weather recommendations error:', error.message);
-      return this.getDefaultRecommendations();
-    }
-  }
-
-  /**
-   * Optimize day's schedule based on locations and preferences
-   * @param {Array} activities - Activities with timestamps and locations
-   * @param {Object} constraints - Timing and other constraints
-   * @returns {Promise<Array>} Optimized activity order
-   */
-  async optimizeSchedule(activities, constraints = {}) {
-    try {
-      const activitiesText = activities
-        .map(
-          (a, i) =>
-            `${i + 1}. ${a.name} (${a.location.address || 'Unknown location'}, ${a.estimatedDuration}min, $${a.estimatedCost})`
-        )
-        .join('\n');
-
-      const prompt = `
-        Help optimize this day's itinerary for ${activities.length} activities:
-        
-        ${activitiesText}
-        
-        Constraints:
-        - Start time: ${constraints.startTime || '09:00'}
-        - End time: ${constraints.endTime || '18:00'}
-        - Travel time between locations: 15-30 minutes average
-        - Include 1 hour lunch break
-        
-        Suggest the best order to visit these activities to minimize travel time and maximize experience.
-        
-        Return a JSON object:
-        {
-          "optimized_order": [1, 3, 2, ...],
-          "suggested_times": ["09:00-11:00", "11:30-13:30", ...],
-          "total_travel_time": 45,
-          "notes": "Explanation of optimization"
-        }
-        
-        Return ONLY valid JSON, no other text.
-      `;
-
-      const providers = this.getProviderSequence();
-
-      for (const provider of providers) {
-        if (provider === 'openai' && this.hasOpenAIAccess) {
-          try {
-            const content = await this.callOpenAIResponse({
-              prompt,
-              maxOutputTokens: 1000,
-              responseFormat: 'json_object',
-            });
-            const parsed = this.tryParseScheduleResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenAI schedule optimization error:', error.message);
-          }
-        }
-
-        if (provider === 'gemini' && this.hasGeminiAccess) {
-          try {
-            const content = await this.callGemini({
-              prompt,
-              maxOutputTokens: 1000,
-              responseMimeType: 'application/json',
-            });
-            const parsed = this.tryParseScheduleResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('Gemini schedule optimization error:', error.message);
-          }
-        }
-
-        if (provider === 'openrouter' && this.hasOpenRouterAccess) {
-          try {
-            const response = await axios.post(
-              `${this.openRouterBaseUrl}/chat/completions`,
-              {
-                model: this.openRouterModel,
-                messages: [
-                  {
-                    role: 'user',
-                    content: prompt,
-                  },
-                ],
-                temperature: 0.7,
-                max_tokens: 1000,
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${this.openRouterKey}`,
-                  'Content-Type': 'application/json',
-                },
-                timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
-              }
-            );
-
-            const content = response.data.choices?.[0]?.message?.content;
-            const parsed = this.tryParseScheduleResponse(content);
-            if (parsed) return parsed;
-          } catch (error) {
-            console.error('OpenRouter schedule optimization error:', error.message);
-          }
-        }
-      }
-
-      return this.getDefaultScheduleOptimization(activities);
-    } catch (error) {
-      console.error('Schedule optimization error:', error.message);
-      return this.getDefaultScheduleOptimization(activities);
-    }
-  }
-
   /**
    * Generate itinerary enhancement metadata using Gemini (optional image input)
+
    * @param {Object} params - Itinerary parameters
    * @returns {Promise<Object|null>} Enhancement data or null
    */
@@ -652,11 +512,24 @@ class AIService {
     const prompt = this.buildEnhancementPrompt(params);
     const useVision = Boolean(params?.imageData);
     const providers = this.getProviderSequence();
-    const providerOrder = useVision
-      ? ['gemini', ...providers.filter((provider) => provider !== 'gemini')]
-      : providers;
+    const providerOrder = providers;
 
     for (const provider of providerOrder) {
+      if (provider === 'groq' && this.hasGroqAccess) {
+        try {
+          const content = await this.callGroqChat({
+            prompt,
+            maxTokens: 1400,
+            responseFormat: 'json_object',
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) throw new Error('No JSON returned');
+          return JSON.parse(jsonBlock);
+        } catch (error) {
+          console.error('Groq enhancement error:', error.message);
+        }
+      }
+
       if (provider === 'gemini' && this.hasGeminiAccess) {
         try {
           const content = await this.callGemini({
@@ -729,19 +602,136 @@ class AIService {
     return null;
   }
 
+  async generateLocationBudgetInsights(params) {
+    const prompt = this.buildLocationBudgetPrompt(params);
+    const providers = this.getProviderSequence();
+
+    for (const provider of providers) {
+      if (provider === 'groq' && this.hasGroqAccess) {
+        try {
+          const content = await this.callGroqChat({
+            prompt,
+            temperature: 0.2,
+            maxTokens: 900,
+            responseFormat: 'json_object',
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          const parsed = JSON.parse(jsonBlock);
+          if (parsed && typeof parsed === 'object') return parsed;
+        } catch (error) {
+          console.error('Groq budget insights error:', error.message);
+        }
+      }
+
+      if (provider === 'gemini' && this.hasGeminiAccess) {
+        try {
+          const content = await this.callGemini({
+            prompt,
+            temperature: 0.2,
+            maxOutputTokens: 900,
+            responseMimeType: 'application/json',
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          const parsed = JSON.parse(jsonBlock);
+          if (parsed && typeof parsed === 'object') return parsed;
+        } catch (error) {
+          console.error('Gemini budget insights error:', error.message);
+        }
+      }
+
+      if (provider === 'openai' && this.hasOpenAIAccess) {
+        try {
+          const content = await this.callOpenAIResponse({
+            prompt,
+            maxOutputTokens: 900,
+            responseFormat: 'json_object',
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          const parsed = JSON.parse(jsonBlock);
+          if (parsed && typeof parsed === 'object') return parsed;
+        } catch (error) {
+          console.error('OpenAI budget insights error:', error.message);
+        }
+      }
+
+      if (provider === 'openrouter' && this.hasOpenRouterAccess) {
+        try {
+          const response = await axios.post(
+            `${this.openRouterBaseUrl}/chat/completions`,
+            {
+              model: this.openRouterModel,
+              messages: [{ role: 'user', content: prompt }],
+              temperature: 0.2,
+              max_tokens: 900,
+              response_format: { type: 'json_object' },
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${this.openRouterKey}`,
+                'Content-Type': 'application/json',
+              },
+              timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 30000),
+            }
+          );
+          const content = response.data?.choices?.[0]?.message?.content || '';
+          const jsonBlock = this.extractJsonBlock(content);
+          if (!jsonBlock) continue;
+          const parsed = JSON.parse(jsonBlock);
+          if (parsed && typeof parsed === 'object') return parsed;
+        } catch (error) {
+          console.error('OpenRouter budget insights error:', error.message);
+        }
+      }
+    }
+
+    return null;
+  }
+
   async generateItineraryNarrative(params) {
     const prompt = this.buildNarrativePrompt(params);
     const providers = this.getProviderSequence();
 
     for (const provider of providers) {
+      if (provider === 'groq' && this.hasGroqAccess) {
+        try {
+          const content = await this.callGroqChat({
+            prompt,
+            temperature: 0.45,
+            maxTokens: 2200,
+            responseFormat: null,
+          });
+          const jsonBlock = this.extractJsonBlock(content);
+          if (jsonBlock) {
+            const parsed = JSON.parse(jsonBlock);
+            if (parsed && typeof parsed === 'object') return parsed;
+          }
+          if (content && String(content).trim()) {
+            return { raw_text: String(content).trim() };
+          }
+        } catch (error) {
+          console.error('Groq narrative generation error:', error.message);
+        }
+      }
+
       if (provider === 'gemini' && this.hasGeminiAccess) {
         try {
           const content = await this.callGemini({
             prompt,
             temperature: 0.45,
             maxOutputTokens: 2200,
+            responseMimeType: 'text/plain',
           });
-          if (content) return content.trim();
+          const jsonBlock = this.extractJsonBlock(content);
+          if (jsonBlock) {
+            const parsed = JSON.parse(jsonBlock);
+            if (parsed && typeof parsed === 'object') return parsed;
+          }
+          if (content && String(content).trim()) {
+            return { raw_text: String(content).trim() };
+          }
         } catch (error) {
           console.error('Gemini narrative generation error:', error.message);
         }
@@ -766,7 +756,14 @@ class AIService {
             }
           );
           const content = response.data?.choices?.[0]?.message?.content || '';
-          if (content) return content.trim();
+          const jsonBlock = this.extractJsonBlock(content);
+          if (jsonBlock) {
+            const parsed = JSON.parse(jsonBlock);
+            if (parsed && typeof parsed === 'object') return parsed;
+          }
+          if (content && String(content).trim()) {
+            return { raw_text: String(content).trim() };
+          }
         } catch (error) {
           console.error('OpenRouter narrative generation error:', error.message);
         }
@@ -779,7 +776,14 @@ class AIService {
             maxOutputTokens: 2200,
             responseFormat: null,
           });
-          if (content) return content.trim();
+          const jsonBlock = this.extractJsonBlock(content);
+          if (jsonBlock) {
+            const parsed = JSON.parse(jsonBlock);
+            if (parsed && typeof parsed === 'object') return parsed;
+          }
+          if (content && String(content).trim()) {
+            return { raw_text: String(content).trim() };
+          }
         } catch (error) {
           console.error('OpenAI narrative generation error:', error.message);
         }
@@ -810,7 +814,7 @@ class AIService {
       .join('\n\n');
 
     return `
-You are an expert travel planner. Write a complete, practical itinerary answer in clear markdown.
+You are a professional AI travel planner.
 
 Trip input:
 - Destination: ${params.destination}
@@ -822,20 +826,49 @@ Trip input:
 - Interests: ${(params.interests || []).join(', ') || 'general'}
 - Preferred places: ${(params.placesToVisit || []).join(', ') || 'none'}
 
-Real activities to use (do not invent random generic places):
+Real activities to use:
 ${dayBlocks}
 
-Output format:
-1) Short "Trip Summary" with route and budget range.
-2) "Day-wise Itinerary" with Morning/Afternoon/Evening and named places.
-3) "Budget Breakdown" as a table in INR.
-4) "Must-Try Foods".
-5) "Travel Tips".
-
 Rules:
-- Use the provided real activities as the primary source.
-- Keep tone practical and specific.
-- If any slot has limited data, suggest a nearby real-world type of venue in that same locality.
+- ONLY include real, well-known tourist places for the given destination.
+- DO NOT invent or hallucinate places.
+- DO NOT generate fake latitude/longitude.
+- If coordinates are not known with confidence, use null.
+- Ensure places belong to the destination and day plan is practical.
+- Maximum 3-4 activities per day.
+- Use morning/afternoon/evening timings.
+
+Output format (STRICT JSON):
+{
+  "destination": "${params.destination}",
+  "itinerary": [
+    {
+      "day": 1,
+      "theme": "",
+      "activities": [
+        {
+          "time": "morning|afternoon|evening",
+          "place_name": "",
+          "location": "",
+          "category": "",
+          "description": "",
+          "duration": "",
+          "travel_note": "",
+          "lat": null,
+          "lon": null
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_days": ${Number(params.days) || 1},
+    "pace": "relaxed|moderate|packed",
+    "highlights": [],
+    "tips": []
+  }
+}
+
+Return ONLY JSON.
 `;
   }
 
@@ -859,26 +892,52 @@ Rules:
       })
       .join('\n\n');
 
-    return `## Trip Summary
-${params.days}-day trip to ${params.destination} for ${params.travelers || 1} traveler(s), budget ${params.currency || 'INR'} ${params.budget}.
+    const itinerary = Object.keys(grouped)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((dayKey) => {
+        const activitiesForDay = grouped[dayKey]
+          .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')))
+          .slice(0, 4)
+          .map((activity) => ({
+            time:
+              String(activity.timeBlock || '').toLowerCase() === 'lunch'
+                ? 'afternoon'
+                : (activity.timeBlock || 'morning'),
+            place_name: activity.name || '',
+            location: activity.location?.city || params.destination || '',
+            category: activity.category || 'sightseeing',
+            description: activity.description || '',
+            duration: String(activity.duration || 90),
+            travel_note: activity.notes || '',
+            lat: Number.isFinite(Number(activity.location?.coordinates?.[1]))
+              ? Number(activity.location.coordinates[1])
+              : null,
+            lon: Number.isFinite(Number(activity.location?.coordinates?.[0]))
+              ? Number(activity.location.coordinates[0])
+              : null,
+          }));
 
-## Day-wise Itinerary
-${dayText}
+        return {
+          day: Number(dayKey),
+          theme: `Day ${dayKey} exploration`,
+          activities: activitiesForDay,
+        };
+      });
 
-## Budget Breakdown
-- Accommodation: 35%
-- Transportation: 15%
-- Activities: 25%
-- Food: 20%
-- Misc: 5%
-
-## Must-Try Foods
-- Explore regional specialties and popular local cafes.
-
-## Travel Tips
-- Start early for major attractions.
-- Keep a buffer for local transfers and weather.
-- Use verified local transport options for safety and cost control.`;
+    return {
+      destination: params.destination || '',
+      itinerary,
+      summary: {
+        total_days: Number(params.days) || itinerary.length || 1,
+        pace: 'moderate',
+        highlights: itinerary.flatMap((d) => d.activities.map((a) => a.place_name)).slice(0, 8),
+        tips: [
+          'Visit popular landmarks in the morning for lighter crowds.',
+          'Use local taxi or public transport between clustered attractions.',
+          'Check weather and opening hours before leaving for each stop.',
+        ],
+      },
+    };
   }
 
   /**
@@ -928,53 +987,108 @@ ${dayText}
     `;
   }
 
+  buildLocationBudgetPrompt(params) {
+    return `
+You are a travel budgeting expert. Estimate realistic location-based trip budget.
+
+Trip details:
+- Destination: ${params.destination}
+- Days: ${params.days}
+- Travelers: ${params.travelers || 1}
+- Travel style: ${params.travelStyle || 'solo'}
+- Currency: ${params.currency || 'INR'}
+- User entered budget: ${params.currency || 'INR'} ${params.budget}
+- Interests: ${(params.interests || []).join(', ') || 'general'}
+
+Return ONLY valid JSON:
+{
+  "minimumRecommended": 0,
+  "comfortableEstimate": 0,
+  "premiumEstimate": 0,
+  "suggestedDailyBudget": 0,
+  "adjustedBudget": 0,
+  "budgetStatus": "below-minimum|within-range|above-premium",
+  "adjustmentApplied": true,
+  "adjustmentMessage": "",
+  "destinationCostLevel": "low|medium|high|very-high",
+  "destinationType": "domestic-city|international-city|island|mountain|metro-city|heritage-city"
+}
+
+Rules:
+- Numbers only, no currency symbols.
+- adjustedBudget should be realistic and not less than minimumRecommended.
+- If input budget is too low, set adjustmentApplied true and explain why.
+- Keep budgetStatus aligned with estimates.
+`;
+  }
+
   /**
    * Build itinerary generation prompt
    * @private
    */
   buildItineraryPrompt(params) {
+    const days = Number(params.days) || 3;
+    const destination = params.destination || 'the destination';
+    const startDate = params.startDate || 'N/A';
+    const preferredPlaces = Array.isArray(params.placesToVisit) && params.placesToVisit.length
+      ? params.placesToVisit.join(', ')
+      : 'not specified';
+    const notes = params.aiNotes ? String(params.aiNotes) : 'none';
+    const travelers = Number(params.travelers || 1);
     return `
-      Create a detailed ${params.days}-day travel itinerary for ${params.destination}.
-      
-      Trip Details:
-      - Budget: ${params.currency || 'INR'} ${params.budget} total (${Math.round(params.budget / params.days)}/day)
-      - Travelers: ${params.travelers}
-      - Interests: ${params.interests.join(', ')}
-      - Travel style: ${params.travelStyle}
-      
-      For each day, provide:
-      1. Main activities (2-4 per day)
-      2. Estimated costs
-      3. Time allocations
-      4. Travel tips
-      
-      Return as JSON with this structure:
-      {
-        "itinerary": [
+You are a travel planner.
+
+Create a ${days}-day itinerary for ${destination}.
+
+Inputs:
+Budget: ${params.currency || 'INR'} ${params.budget || 'N/A'}
+Travelers: ${travelers}
+Style: ${params.travelStyle || 'general'}
+Start Date: ${startDate}
+Preferences: ${notes || 'general'}
+Preferred places: ${preferredPlaces}
+
+Rules:
+- Use only real and popular tourist places
+- Keep route logical (nearby places together)
+- Adjust plan based on budget (low/medium/high)
+- No random or irrelevant places
+- Include realistic arrival_time for each place
+- Include how_to_reach from previous place
+- Include travel_time_from_previous in text like "15 minutes"
+
+IMPORTANT:
+For each place include approximate latitude and longitude so it can be shown on OpenStreetMap.
+
+Return ONLY valid JSON:
+{
+  "destination": "${destination}",
+  "summary": "",
+  "days": [
+    {
+      "day": 1,
+      "activities": {
+        "morning": [
           {
-            "day": 1,
-            "theme": "Day theme",
-            "activities": [
-              {
-                "time": "09:00",
-                "name": "Activity name",
-                "category": "sightseeing",
-                "duration": 120,
-                "cost": 50,
-                "description": "What to do",
-                "importance": "must-do"
-              }
-            ],
-            "totalCost": 150,
-            "tips": ["Tip 1", "Tip 2"]
+            "time": "",
+            "arrival_time": "",
+            "place": "",
+            "desc": "",
+            "cost": "",
+            "how_to_reach": "",
+            "travel_time_from_previous": "",
+            "lat": 0,
+            "lng": 0
           }
         ],
-        "highlights": ["Highlight 1", "Highlight 2"],
-        "packingTips": ["Tip 1", "Tip 2"]
+        "afternoon": [],
+        "evening": []
       }
-      
-      Return ONLY valid JSON, no other text.
-    `;
+    }
+  ],
+  "tips": []
+}
+`;
   }
 
   /**
@@ -983,62 +1097,305 @@ ${dayText}
    */
   tryParseItineraryResponse(content) {
     try {
+      if (!content || typeof content !== 'string') return null;
       const jsonBlock = this.extractJsonBlock(content);
       if (!jsonBlock) return null;
       const parsed = JSON.parse(jsonBlock);
-      return parsed.itinerary || null;
+      let dailyPlan = Array.isArray(parsed?.dailyPlan)
+        ? parsed.dailyPlan
+        : (Array.isArray(parsed?.itinerary) ? parsed.itinerary : null);
+      if (!dailyPlan && Array.isArray(parsed?.days)) {
+        dailyPlan = parsed.days.map((dayObj, idx) => {
+          const day = Number(dayObj?.day) || idx + 1;
+          const buckets = dayObj?.activities || {};
+          const slotOrder = ['morning', 'afternoon', 'evening'];
+          const activities = slotOrder.flatMap((slot) => {
+            const entries = Array.isArray(buckets?.[slot]) ? buckets[slot] : [];
+            return entries.map((entry) => ({
+              timeSlot: slot,
+              time: String(entry?.time || '').trim() || (slot === 'morning' ? '09:00' : slot === 'afternoon' ? '13:00' : '18:00'),
+              placeName: String(entry?.place || entry?.name || '').trim(),
+              category: 'sightseeing',
+              description: String(entry?.desc || '').trim(),
+              durationMinutes: 90,
+              estimatedCost: Number(String(entry?.cost || '0').replace(/[^\d.]/g, '')) || 0,
+              location: parsed?.destination || '',
+              lat: Number.isFinite(Number(entry?.lat)) ? Number(entry.lat) : null,
+              lng: Number.isFinite(Number(entry?.lng)) ? Number(entry.lng) : null,
+              arrivalTime: String(entry?.arrival_time || '').trim(),
+              howToReach: String(entry?.how_to_reach || '').trim(),
+              travelTimeFromPrevious: String(entry?.travel_time_from_previous || '').trim(),
+            }));
+          });
+          return { day, theme: `Day ${day}`, activities };
+        });
+      }
+      if (!dailyPlan) return null;
+      return {
+        summary: String(parsed.summary || '').trim(),
+        travelTips: Array.isArray(parsed.travelTips)
+          ? parsed.travelTips
+          : (Array.isArray(parsed.tips) ? parsed.tips : []),
+        dailyPlan,
+        rawText: String(content || '').trim(),
+      };
     } catch {
       return null;
     }
   }
 
-  /**
-   * Try to parse activities response from AI without fallback
-   * @private
-   */
-  tryParseActivitiesResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) return null;
-      const parsed = JSON.parse(jsonBlock);
-      return Array.isArray(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+  normalizeItineraryFromAnyResponse(content, params = {}) {
+    const parsedJson = this.tryParseItineraryResponse(content);
+    if (parsedJson) return parsedJson;
 
-  /**
-   * Try to parse recommendations response from AI without fallback
-   * @private
-   */
-  tryParseRecommendationsResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) return null;
-      const parsed = JSON.parse(jsonBlock);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+    const raw = String(content || '').trim();
+    if (!raw) return null;
 
-  /**
-   * Try to parse schedule response from AI without fallback
-   * @private
-   */
-  tryParseScheduleResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) return null;
-      const parsed = JSON.parse(jsonBlock);
-      return parsed && typeof parsed === 'object' ? parsed : null;
-    } catch {
-      return null;
-    }
-  }
+    const dayCount = Math.max(1, Number(params.days) || 1);
+    const lines = raw
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
 
+    const tipParts = [];
+    for (const line of lines) {
+      const numberedSplit = line
+        .split(/\b\d+\.\s*/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      if (numberedSplit.length > 1) {
+        numberedSplit.slice(1).forEach((t) => {
+          if (t.length > 12) tipParts.push(t.replace(/[;,\s]+$/, ''));
+        });
+        continue;
+      }
+      if (/tip|note|remember|avoid|carry/i.test(line)) {
+        const t = line.replace(/^[-*]\s*/, '').trim();
+        if (t.length > 12) tipParts.push(t);
+      }
+    }
+    const travelTips = tipParts.slice(0, 4);
+
+    const dailyPlan = Array.from({ length: dayCount }, (_, i) => ({
+      day: i + 1,
+      theme: `Day ${i + 1} plan`,
+      activities: [],
+    }));
+
+    let currentDay = 1;
+    let currentSlot = null;
+    let lastCost = null;
+
+    const extractCost = (text) => {
+      const costMatch = String(text || '').match(/INR\s*([\d,]+)(?:\s*-\s*([\d,]+))?/i);
+      if (!costMatch) return null;
+      const low = Number(String(costMatch[1] || '').replace(/,/g, ''));
+      const high = Number(String(costMatch[2] || '').replace(/,/g, ''));
+      if (Number.isFinite(low) && Number.isFinite(high) && high > 0) {
+        return Math.round((low + high) / 2);
+      }
+      return Number.isFinite(low) ? low : null;
+    };
+
+    const normalizePlace = (name) =>
+      String(name || '')
+        .replace(/[*#`_]/g, '')
+        .replace(/^(Activity|Place|Reason)\s*:\s*/i, '')
+        .replace(/^visit\s+/i, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const addActivity = (name, descriptionText) => {
+      const placeName = normalizePlace(name);
+      if (!placeName || placeName.length < 3) return;
+      if (/^(and|visit|activity|place)$/i.test(placeName)) return;
+      if (/estimated cost|cost|reason/i.test(placeName)) return;
+      const slot = currentSlot || 'morning';
+      dailyPlan[currentDay - 1].activities.push({
+        timeSlot: slot,
+        time: slot === 'morning' ? '09:00' : slot === 'afternoon' ? '13:00' : '17:00',
+        placeName: placeName.slice(0, 90),
+        category:
+          /museum|temple|fort|palace|church|gallery|monument/i.test(placeName)
+            ? 'culture'
+            : /cafe|lunch|dinner|food|restaurant/i.test(placeName)
+              ? 'food'
+              : /park|beach|walk|sunset|cruise/i.test(placeName)
+                ? 'relaxation'
+                : 'sightseeing',
+        description: String(descriptionText || placeName).slice(0, 220),
+        durationMinutes: slot === 'evening' ? 90 : 120,
+        estimatedCost: Number.isFinite(lastCost) ? lastCost : (slot === 'afternoon' ? 900 : 1200),
+        location: params.destination || '',
+      });
+    };
+
+    for (const line of lines) {
+      const dayMatch = line.match(/^day\s*(\d+)/i);
+      if (dayMatch) {
+        currentDay = Math.max(1, Math.min(dayCount, Number(dayMatch[1]) || 1));
+        continue;
+      }
+
+      // Parse strict text format:
+      // Morning (09:00) - Rijksmuseum - reason - INR 1200
+      const dashFormat = line.match(
+        /^(Morning|Afternoon|Evening|Night)\s*\(([^)]+)\)\s*-\s*([^-\n]+?)\s*-\s*([^-\n]+?)\s*-\s*(.+)$/i
+      );
+      if (dashFormat) {
+        const slotLabel = dashFormat[1];
+        const timeLabel = String(dashFormat[2] || '').trim();
+        const place = String(dashFormat[3] || '').trim();
+        const reason = String(dashFormat[4] || '').trim();
+        const costText = String(dashFormat[5] || '').trim();
+
+        currentSlot = /afternoon/i.test(slotLabel)
+          ? 'afternoon'
+          : /evening|night/i.test(slotLabel)
+            ? 'evening'
+            : 'morning';
+
+        const parsedCost = extractCost(costText);
+        if (Number.isFinite(parsedCost)) lastCost = parsedCost;
+
+        dailyPlan[currentDay - 1].activities.push({
+          timeSlot: currentSlot,
+          time: /^\d{1,2}:\d{2}/.test(timeLabel)
+            ? String(timeLabel).padStart(5, '0')
+            : (currentSlot === 'morning' ? '09:00' : currentSlot === 'afternoon' ? '13:00' : '17:00'),
+          placeName: normalizePlace(place).slice(0, 90),
+          category:
+            /museum|temple|fort|palace|church|gallery|monument/i.test(place)
+              ? 'culture'
+              : /cafe|lunch|dinner|food|restaurant/i.test(place)
+                ? 'food'
+                : /park|beach|walk|sunset|cruise/i.test(place)
+                  ? 'relaxation'
+                  : 'sightseeing',
+          description: `${reason}${costText ? ` | ${costText}` : ''}`.slice(0, 220),
+          durationMinutes: currentSlot === 'evening' ? 90 : 120,
+          estimatedCost: Number.isFinite(lastCost) ? lastCost : (currentSlot === 'afternoon' ? 900 : 1200),
+          location: params.destination || '',
+        });
+        continue;
+      }
+
+      // Parse format:
+      // Morning (08:00-09:00):Mahalakshmi Temple - reason - cost/notes
+      const colonFormat = line.match(
+        /^(Morning|Afternoon|Evening|Night)\s*\(([^)]+)\)\s*:\s*([^-\n;]+?)\s*-\s*(.+)$/i
+      );
+      if (colonFormat) {
+        const slotLabel = colonFormat[1];
+        const timeRange = String(colonFormat[2] || '').trim();
+        const place = String(colonFormat[3] || '').trim();
+        const reasonAndCost = String(colonFormat[4] || '').trim();
+
+        currentSlot = /afternoon/i.test(slotLabel)
+          ? 'afternoon'
+          : /evening|night/i.test(slotLabel)
+            ? 'evening'
+            : 'morning';
+
+        const timeStartMatch = timeRange.match(/(\d{1,2}:\d{2})/);
+        const parsedCost = extractCost(reasonAndCost);
+        if (Number.isFinite(parsedCost)) lastCost = parsedCost;
+
+        dailyPlan[currentDay - 1].activities.push({
+          timeSlot: currentSlot,
+          time: timeStartMatch
+            ? String(timeStartMatch[1]).padStart(5, '0')
+            : (currentSlot === 'morning' ? '09:00' : currentSlot === 'afternoon' ? '13:00' : '17:00'),
+          placeName: normalizePlace(place).slice(0, 90),
+          category:
+            /museum|temple|fort|palace|church|gallery|monument/i.test(place)
+              ? 'culture'
+              : /cafe|lunch|dinner|food|restaurant/i.test(place)
+                ? 'food'
+                : /park|beach|walk|sunset|cruise|lake/i.test(place)
+                  ? 'relaxation'
+                  : 'sightseeing',
+          description: reasonAndCost.slice(0, 220),
+          durationMinutes: currentSlot === 'evening' ? 90 : 120,
+          estimatedCost: Number.isFinite(lastCost) ? lastCost : (currentSlot === 'afternoon' ? 900 : 1200),
+          location: params.destination || '',
+        });
+        continue;
+      }
+
+      if (/morning/i.test(line)) currentSlot = 'morning';
+      if (/afternoon/i.test(line)) currentSlot = 'afternoon';
+      if (/evening|night/i.test(line)) currentSlot = 'evening';
+
+      const lineCost = extractCost(line);
+      if (Number.isFinite(lineCost)) lastCost = lineCost;
+      if (/estimated cost|total daily cost|cost breakdown/i.test(line)) continue;
+
+      const activityLabelMatch = line.match(/Activity\s*:\s*(.+)$/i);
+      if (activityLabelMatch) {
+        const text = activityLabelMatch[1];
+        const placeMatches = [...line.matchAll(/\*\*([^*]{3,80})\*\*/g)]
+          .map((m) => m[1])
+          .filter((token) => !/activity|reason|estimated cost|cost/i.test(String(token)));
+        if (placeMatches.length) {
+          placeMatches.forEach((place) => addActivity(place, text));
+        } else {
+          const chunks = text
+            .split(/,| and |\\./i)
+            .map((s) => s.replace(/^visit\s+/i, '').trim())
+            .filter((s) => s && s.length > 3);
+          addActivity(chunks[0] || text, text);
+        }
+        continue;
+      }
+
+      const bulletPlaceMatch = line.match(/^\*\s+\*\*Place:\*\*\s*(.+)$/i);
+      if (bulletPlaceMatch) {
+        addActivity(bulletPlaceMatch[1], line);
+        continue;
+      }
+
+      const boldPlaceMatches = [...line.matchAll(/\*\*([^*]{3,80})\*\*/g)].map((m) => m[1]);
+      if (boldPlaceMatches.length && currentSlot) {
+        boldPlaceMatches.forEach((place) => addActivity(place, line));
+        continue;
+      }
+
+      const slotSentenceMatch = line.match(/^(Morning|Afternoon|Evening|Night)\s*[:\-]\s*(.+)$/i);
+      if (slotSentenceMatch) {
+        currentSlot = /afternoon/i.test(slotSentenceMatch[1])
+          ? 'afternoon'
+          : /evening|night/i.test(slotSentenceMatch[1]) ? 'evening' : 'morning';
+        addActivity(slotSentenceMatch[2], line);
+      }
+    }
+
+    for (const day of dailyPlan) {
+      const deduped = [];
+      const seen = new Set();
+      day.activities.forEach((activity) => {
+        const key = `${String(activity.placeName || '').toLowerCase()}|${activity.timeSlot}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(activity);
+        }
+      });
+      day.activities = deduped;
+      day.activities = deduped
+        .sort((a, b) => String(a.time).localeCompare(String(b.time)))
+        .slice(0, 8);
+    }
+
+    return {
+      summary: raw.slice(0, 500),
+      travelTips,
+      dailyPlan,
+      rawText: raw,
+    };
+  }
   /**
    * Parse itinerary response from AI
+
    * @private
    */
   parseItineraryResponse(content, days) {
@@ -1054,202 +1411,82 @@ ${dayText}
   }
 
   /**
-   * Parse activities response from AI
-   * @private
-   */
-  parseActivitiesResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) throw new Error('No JSON found');
-      return JSON.parse(jsonBlock);
-    } catch {
-      return this.getDefaultActivitySuggestions();
-    }
-  }
-
-  /**
-   * Parse recommendations response from AI
-   * @private
-   */
-  parseRecommendationsResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) throw new Error('No JSON found');
-      return JSON.parse(jsonBlock);
-    } catch {
-      return this.getDefaultRecommendations();
-    }
-  }
-
-  /**
-   * Parse schedule optimization response from AI
-   * @private
-   */
-  parseScheduleResponse(content) {
-    try {
-      const jsonBlock = this.extractJsonBlock(content);
-      if (!jsonBlock) throw new Error('No JSON found');
-      return JSON.parse(jsonBlock);
-    } catch {
-      return this.getDefaultScheduleOptimization();
-    }
-  }
-
-  /**
    * Generate default itinerary when AI fails
    * @private
    */
   generateDefaultItinerary(params) {
     const { destination, days, budget, interests } = params;
-    const itinerary = [];
+    const dailyPlan = [];
 
     for (let i = 1; i <= days; i++) {
-      itinerary.push({
+      dailyPlan.push({
         day: i,
         theme: `Day ${i} - ${destination} Exploration`,
         activities: [
           {
+            timeSlot: 'morning',
             time: '09:00',
-            name: 'Local breakfast',
+            placeName: 'Local breakfast',
             category: 'food',
-            duration: 60,
-            cost: 15,
+            durationMinutes: 60,
+            estimatedCost: 300,
             description: 'Start your day with local cuisine',
-            importance: 'recommended',
+            location: destination,
           },
           {
+            timeSlot: 'morning',
             time: '10:30',
-            name: 'Main attraction',
+            placeName: 'Main attraction',
             category: 'sightseeing',
-            duration: 120,
-            cost: 25,
+            durationMinutes: 120,
+            estimatedCost: 600,
             description: 'Visit major landmarks and attractions',
-            importance: 'must-do',
+            location: destination,
           },
           {
+            timeSlot: 'afternoon',
             time: '13:00',
-            name: 'Lunch',
+            placeName: 'Lunch',
             category: 'food',
-            duration: 60,
-            cost: 20,
+            durationMinutes: 60,
+            estimatedCost: 500,
             description: 'Try local restaurants',
-            importance: 'recommended',
+            location: destination,
           },
           {
+            timeSlot: 'afternoon',
             time: '14:30',
-            name: 'Secondary attraction',
+            placeName: 'Secondary attraction',
             category: 'sightseeing',
-            duration: 120,
-            cost: 15,
+            durationMinutes: 120,
+            estimatedCost: 400,
             description: 'Explore cultural sites or nature',
-            importance: 'recommended',
+            location: destination,
           },
           {
+            timeSlot: 'evening',
             time: '17:00',
-            name: 'Dinner & relaxation',
+            placeName: 'Dinner & relaxation',
             category: 'food',
-            duration: 90,
-            cost: 30,
+            durationMinutes: 90,
+            estimatedCost: 700,
             description: 'Evening dining experience',
-            importance: 'recommended',
+            location: destination,
           },
-        ],
-        totalCost: 105,
-        tips: [
-          'Start early to maximize daylight',
-          'Bring water and comfortable shoes',
-          'Book popular attractions in advance',
         ],
       });
     }
 
-    return itinerary;
-  }
-
-  /**
-   * Default activity suggestions
-   * @private
-   */
-  getDefaultActivitySuggestions(destination = 'destination', interests = []) {
-    return [
-      {
-        name: 'Local market exploration',
-        category: 'shopping',
-        description: 'Explore local markets and street food',
-        estimatedDuration: 120,
-        estimatedCost: 30,
-        importance: 'recommended',
-        timeSlot: '09:00-11:00',
-      },
-      {
-        name: 'Historic landmarks tour',
-        category: 'culture',
-        description: 'Visit important historic sites',
-        estimatedDuration: 120,
-        estimatedCost: 25,
-        importance: 'must-do',
-        timeSlot: '11:00-13:00',
-      },
-      {
-        name: 'Local cuisine lunch',
-        category: 'food',
-        description: 'Try authentic local dishes',
-        estimatedDuration: 90,
-        estimatedCost: 35,
-        importance: 'recommended',
-        timeSlot: '13:00-14:30',
-      },
-      {
-        name: 'Scenic viewpoint visit',
-        category: 'sightseeing',
-        description: 'Enjoy panoramic views',
-        estimatedDuration: 60,
-        estimatedCost: 0,
-        importance: 'optional',
-        timeSlot: '16:00-17:00',
-      },
-    ];
-  }
-
-  /**
-   * Default recommendations
-   * @private
-   */
-  getDefaultRecommendations() {
     return {
-      suitable_activities: [
-        'sightseeing',
-        'museums',
-        'indoor shopping',
-        'restaurants',
-        'spas',
+      summary: `AI-generated itinerary for ${destination}`,
+      travelTips: [
+        'Start early to maximize daylight.',
+        'Book popular attractions in advance.',
       ],
-      avoid_activities: ['water sports', 'hiking', 'outdoor activities'],
-      warnings: ['Check weather updates regularly'],
-      packing_tips: [
-        'Bring umbrella',
-        'Wear comfortable shoes',
-        'Pack light layers',
-      ],
-    };
-  }
-
-  /**
-   * Default schedule optimization
-   * @private
-   */
-  getDefaultScheduleOptimization() {
-    return {
-      optimized_order: [1, 2, 3],
-      suggested_times: [
-        '09:00-11:00',
-        '11:30-13:30',
-        '14:00-16:00',
-      ],
-      total_travel_time: 45,
-      notes: 'Default optimization based on activity order',
+      dailyPlan,
     };
   }
 }
 
 module.exports = AIService;
+

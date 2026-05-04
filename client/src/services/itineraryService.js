@@ -25,7 +25,11 @@ const itineraryService = {
         params,
         { headers: getAuthHeader() }
       );
-      return response.data.itinerary;
+      const itinerary = response.data.itinerary;
+      if (itinerary && response.data.metadata) {
+        itinerary._generationMeta = response.data.metadata;
+      }
+      return itinerary;
     } catch (error) {
       throw error.response?.data || error;
     }
@@ -120,46 +124,6 @@ const itineraryService = {
         { headers: getAuthHeader() }
       );
       return response.data.itinerary;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  },
-
-  // AI FEATURES
-  suggestActivities: async (itineraryId, dayNumber) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/${itineraryId}/suggest-activities`,
-        { dayNumber },
-        { headers: getAuthHeader() }
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  },
-
-  getWeatherRecommendations: async (itineraryId) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/${itineraryId}/weather-recommendations`,
-        {},
-        { headers: getAuthHeader() }
-      );
-      return response.data;
-    } catch (error) {
-      throw error.response?.data || error;
-    }
-  },
-
-  optimizeItinerary: async (itineraryId) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/${itineraryId}/optimize`,
-        {},
-        { headers: getAuthHeader() }
-      );
-      return response.data;
     } catch (error) {
       throw error.response?.data || error;
     }

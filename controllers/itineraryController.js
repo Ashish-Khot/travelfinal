@@ -7,25 +7,9 @@ const Itinerary = require('../models/Itinerary');
 const ItineraryTemplate = require('../models/ItineraryTemplate');
 const User = require('../models/User');
 const AIService = require('../services/aiService');
-const PlacesService = require('../services/placesService');
-const WeatherService = require('../services/weatherService');
-const HotelsService = require('../services/hotelsService');
-const WikipediaService = require('../services/wikipediaService');
-const ItineraryGenerator = require('../services/itineraryGenerator');
 const ExportService = require('../services/exportService');
 
 const aiService = new AIService();
-const placesService = new PlacesService();
-const weatherService = new WeatherService();
-const hotelsService = new HotelsService();
-const wikipediaService = new WikipediaService();
-const itineraryGenerator = new ItineraryGenerator({
-  aiService,
-  placesService,
-  hotelsService,
-  weatherService,
-  wikipediaService,
-});
 const exportService = new ExportService();
 
 const DEFAULT_BUDGET_SPLIT = {
@@ -65,6 +49,43 @@ const buildSafeDescription = (summary, destination) => {
   const fallback = `AI-generated itinerary for ${destination}`;
   const raw = String(summary || '').trim() || fallback;
   return raw.length > 900 ? `${raw.slice(0, 897)}...` : raw;
+};
+
+const cleanAiText = (text) =>
+  String(text || '')
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+
+const looksLikeJsonBlob = (text) => {
+  const value = String(text || '').trim();
+  return (
+    (value.startsWith('{') && value.endsWith('}')) ||
+    (value.startsWith('[') && value.endsWith(']')) ||
+    value.includes('"itinerary"') ||
+    value.includes('"dailyPlan"')
+  );
+};
+
+const buildReadableDetailedPlan = (dailyPlan) => {
+  if (!Array.isArray(dailyPlan) || dailyPlan.length === 0) return '';
+  return dailyPlan
+    .map((dayPlan, index) => {
+      const dayNumber = Number(dayPlan?.day) || index + 1;
+      const theme = String(dayPlan?.theme || '').trim();
+      const activities = Array.isArray(dayPlan?.activities) ? dayPlan.activities : [];
+      const activityLines = activities.map((activity) => {
+        const time = String(activity?.time || '').trim() || 'Flexible time';
+        const place = String(activity?.placeName || activity?.name || 'Planned stop').trim();
+        const description = String(activity?.description || '').trim();
+        const cost = Number(activity?.estimatedCost);
+        const costText = Number.isFinite(cost) && cost > 0 ? ` | Est. INR ${cost}` : '';
+        return `- ${time}: ${place}${description ? ` - ${description}` : ''}${costText}`;
+      });
+      return [`Day ${dayNumber}${theme ? ` - ${theme}` : ''}`, ...activityLines].join('\n');
+    })
+    .join('\n\n');
 };
 
 const normalizeBudgetSplit = (split) => {
@@ -113,6 +134,105 @@ const pickEnumValue = (value, allowed, fallback) => {
   return allowed.has(value) ? value : fallback;
 };
 
+const estimateMinimumBudget = ({ days, travelers, travelStyle }) => {
+  const dayCount = Math.max(1, Number(days) || 1);
+  const pax = Math.max(1, Number(travelers) || 1);
+  const style = String(travelStyle || 'solo').toLowerCase();
+  const basePerPersonPerDay =
+    style === 'budget' ? 1800 :
+      style === 'luxury' ? 6500 :
+        style === 'family' ? 2800 :
+          style === 'group' ? 2400 : 2600;
+  return Math.round(basePerPersonPerDay * dayCount * pax);
+};
+
+const normalizeCategory = (category) => {
+  const allowed = new Set([
+    'sightseeing',
+    'adventure',
+    'food',
+    'culture',
+    'nature',
+    'shopping',
+    'entertainment',
+    'relaxation',
+    'accommodation',
+    'transportation',
+  ]);
+  const normalized = String(category || '').trim().toLowerCase();
+  return allowed.has(normalized) ? normalized : 'sightseeing';
+};
+
+const toTimeBlock = (timeSlot, startTime) => {
+  const raw = String(timeSlot || '').trim().toLowerCase();
+  if (['morning', 'afternoon', 'evening', 'lunch', 'night'].includes(raw)) {
+    if (raw === 'lunch') return 'afternoon';
+    if (raw === 'night') return 'evening';
+    return raw;
+  }
+  const hour = Number(String(startTime || '09:00').split(':')[0] || 9);
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+};
+
+const buildEndTime = (startTime, durationMinutes) => {
+  const [hRaw, mRaw] = String(startTime || '09:00').split(':');
+  const h = Math.max(0, Math.min(23, Number(hRaw) || 9));
+  const m = Math.max(0, Math.min(59, Number(mRaw) || 0));
+  const startTotal = h * 60 + m;
+  const endTotal = startTotal + Math.max(30, Number(durationMinutes) || 90);
+  const endH = Math.floor((endTotal % 1440) / 60);
+  const endM = endTotal % 60;
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+};
+
+const mapPromptPlanToActivities = (dailyPlan, destination, currency = 'INR') => {
+  if (!Array.isArray(dailyPlan)) return [];
+  return dailyPlan.flatMap((dayPlan, dayIndex) => {
+    const dayNumber = Number(dayPlan?.day) || dayIndex + 1;
+    const activities = Array.isArray(dayPlan?.activities) ? dayPlan.activities : [];
+    return activities.map((activity, idx) => {
+      const startTime = String(activity?.time || '').match(/^\d{2}:\d{2}$/)
+        ? String(activity.time)
+        : ['09:00', '13:00', '17:00'][idx % 3];
+      const duration = Math.max(30, Number(activity?.durationMinutes) || 90);
+      return {
+        name: String(activity?.placeName || activity?.name || `Activity ${idx + 1}`),
+        description: String(activity?.description || ''),
+        category: normalizeCategory(activity?.category),
+        location: {
+          type: 'Point',
+          coordinates: [
+            Number.isFinite(Number(activity?.lng)) ? Number(activity.lng) : 0,
+            Number.isFinite(Number(activity?.lat)) ? Number(activity.lat) : 0,
+          ],
+          city: String(activity?.location || destination || ''),
+          country: '',
+        },
+        dayNumber,
+        timeBlock: toTimeBlock(activity?.timeSlot, startTime),
+        startTime,
+        endTime: buildEndTime(startTime, duration),
+        duration,
+        estimatedCost: Math.max(0, Number(activity?.estimatedCost) || 0),
+        currency: String(currency || 'INR').toUpperCase(),
+        notes: [
+          dayPlan?.theme ? `Theme: ${dayPlan.theme}` : '',
+          activity?.arrivalTime ? `Arrival: ${activity.arrivalTime}` : '',
+          activity?.travelTimeFromPrevious ? `Travel time: ${activity.travelTimeFromPrevious}` : '',
+        ].filter(Boolean).join(' | '),
+        reachOptions: [
+          activity?.howToReach,
+          activity?.travelTimeFromPrevious ? `Approx ${activity.travelTimeFromPrevious}` : '',
+        ].filter(Boolean),
+        estimatedTravelTime: Number(String(activity?.travelTimeFromPrevious || '').replace(/[^\d]/g, '')) || 0,
+        importance: 'recommended',
+      };
+    });
+  });
+};
+
 class ItineraryController {
   /**
    * CREATE: Generate new itinerary using AI
@@ -136,7 +256,6 @@ class ItineraryController {
         imageMimeType,
       } = req.body;
 
-      // Validate required fields
       if (!destination || !days || !budget) {
         return res.status(400).json({
           message: 'Missing required fields: destination, days, budget',
@@ -144,22 +263,8 @@ class ItineraryController {
       }
 
       const userId = req.user?.userId;
-
-      const normalizedImage = aiService.normalizeImagePayload(
-        imageData,
-        imageMimeType
-      );
-      if (normalizedImage?.data) {
-        const imageBytes = aiService.estimateBase64Bytes(normalizedImage.data);
-        const maxBytes = (aiService.maxImageMb || 4) * 1024 * 1024;
-        if (imageBytes > maxBytes) {
-          return res.status(413).json({
-            message: `Image too large. Max ${aiService.maxImageMb || 4}MB`,
-          });
-        }
-      }
-
-      const generated = await itineraryGenerator.generate({
+      const normalizedImage = aiService.normalizeImagePayload(imageData, imageMimeType);
+      const generated = await aiService.generateItinerary({
         destination,
         days,
         budget,
@@ -167,178 +272,150 @@ class ItineraryController {
         interests,
         placesToVisit,
         travelStyle,
-        numberOfTravelers,
+        travelers: numberOfTravelers,
         startDate,
         aiNotes,
         imageData: normalizedImage?.data,
         imageMimeType: normalizedImage?.mimeType,
       });
 
-      const coord = generated.coordinates || { latitude: 40, longitude: 0 };
-      const weatherForecast = generated.weatherForecast || [];
-      const activities = normalizeGeneratedActivities(generated.activities || []);
-      const aiPlan = generated.aiPlan || null;
-      const budgetInsights = generated.budgetInsights || null;
-      const highlightedFallback = generated.highlights || [];
-
-      // Create itinerary document
-      const tripStartDate = startDate ? new Date(startDate) : new Date();
-      const endDate = new Date(tripStartDate);
-      endDate.setDate(endDate.getDate() + days - 1);
-
-      // DEBUG: Log what was generated
-      console.log('DYNAMIC ITINERARY GENERATED:');
-      console.log(`   Destination: ${destination}`);
-      console.log(`   Days: ${days}, Total Activities: ${activities.length}`);
-
-      const highlightsFromAI = normalizeStringArray(aiPlan?.highlights, 8);
-      const tagsFromAI = normalizeStringArray(aiPlan?.tags, 8);
-      const defaultHighlights = normalizeStringArray(
-        highlightedFallback,
+      const activities = normalizeGeneratedActivities(
+        mapPromptPlanToActivities(generated?.dailyPlan, destination, currency || 'INR')
+      );
+      console.log('[ITINERARY][CTRL] Provider:', generated?.meta?.provider || 'unknown');
+      console.log('[ITINERARY][CTRL] Model:', generated?.meta?.model || 'unknown');
+      console.log('[ITINERARY][CTRL] Days requested:', days, 'Activities mapped:', activities.length);
+      console.log(
+        '[ITINERARY][CTRL] Day split:',
+        activities.reduce((acc, a) => {
+          const k = `D${Number(a.dayNumber || 1)}`;
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {})
+      );
+      const requestedBudgetValue = Number(budget) || 0;
+      const totalBudgetValue = requestedBudgetValue;
+      const minimumRecommended = estimateMinimumBudget({
+        days,
+        travelers: numberOfTravelers || 1,
+        travelStyle,
+      });
+      const budgetTooLow = requestedBudgetValue > 0 && requestedBudgetValue < minimumRecommended;
+      const currencyValue = String(currency || 'INR').toUpperCase();
+      const budgetAllocation = buildBudgetAllocation(totalBudgetValue, null);
+      const highlightedPlaces = normalizeStringArray(
+        activities.map((activity) => activity.name),
         8
       );
-      const highlightedPlaces =
-        highlightsFromAI.length > 0 ? highlightsFromAI : defaultHighlights;
+      const normalizedSummary = cleanAiText(generated?.summary || '');
+      const normalizedRawText = cleanAiText(generated?.rawText || '');
+      const fallbackDetailedPlan = buildReadableDetailedPlan(generated?.dailyPlan);
+      const detailedPlanText = looksLikeJsonBlob(normalizedRawText)
+        ? fallbackDetailedPlan
+        : (normalizedRawText || fallbackDetailedPlan);
+      const aiPlanPayload = {
+        summary: normalizedSummary || `AI-generated itinerary for ${destination}`,
+        detailedPlan: detailedPlanText,
+        highlights: highlightedPlaces,
+        dailyThemes: Array.isArray(generated?.dailyPlan)
+          ? generated.dailyPlan.map((dayPlan, index) => ({
+            day: Number(dayPlan?.day) || index + 1,
+            theme: String(dayPlan?.theme || `Day ${index + 1}`),
+            focus: '',
+            tip: '',
+          }))
+          : [],
+        packingTips: [],
+        localTips: normalizeStringArray(generated?.travelTips || [], 8),
+        budgetSplit: DEFAULT_BUDGET_SPLIT,
+        notes: aiNotes || '',
+        imageBased: Boolean(normalizedImage?.data),
+      };
 
-      const requestedBudgetValue = Number(budget) || 0;
-      const totalBudgetValue =
-        Number(budgetInsights?.adjustedBudget) || requestedBudgetValue;
-      const currencyValue = String(
-        budgetInsights?.currency || currency || 'INR'
-      ).toUpperCase();
-      const budgetAllocation = buildBudgetAllocation(
-        totalBudgetValue,
-        aiPlan?.budgetSplit
-      );
-
-      const difficultyValue = pickEnumValue(
-        aiPlan?.difficulty,
-        ALLOWED_DIFFICULTY,
-        'moderate'
-      );
-      const seasonValue = pickEnumValue(
-        season || aiPlan?.season,
-        ALLOWED_SEASONS,
-        'summer'
-      );
-
-      const aiPlanPayload = aiPlan
-        ? {
-            summary: aiPlan.summary || '',
-            detailedPlan: generated.narrativeText || '',
-            highlights: highlightedPlaces,
-            dailyThemes: Array.isArray(aiPlan.dailyThemes)
-              ? aiPlan.dailyThemes
-              : [],
-            packingTips: normalizeStringArray(aiPlan.packingTips, 8),
-            localTips: normalizeStringArray(aiPlan.localTips, 8),
-            budgetSplit:
-              normalizeBudgetSplit(aiPlan.budgetSplit) || DEFAULT_BUDGET_SPLIT,
-            notes: aiNotes || '',
-            imageBased: Boolean(normalizedImage?.data),
-          }
-        : (generated.narrativeText
-          ? {
-              summary: '',
-              detailedPlan: generated.narrativeText,
-              highlights: highlightedPlaces,
-              dailyThemes: [],
-              packingTips: [],
-              localTips: [],
-              budgetSplit: DEFAULT_BUDGET_SPLIT,
-              notes: aiNotes || '',
-              imageBased: Boolean(normalizedImage?.data),
-            }
-          : null);
-
+      const tripStartDate = startDate ? new Date(startDate) : new Date();
+      const endDate = new Date(tripStartDate);
+      endDate.setDate(endDate.getDate() + Number(days) - 1);
 
       const itinerary = new Itinerary({
         title: `${days}-Day Trip to ${destination}`,
-        description: buildSafeDescription(aiPlan?.summary, destination),
+        description: buildSafeDescription(generated?.summary, destination),
         startDate: tripStartDate,
         endDate,
-        numberOfDays: days,
+        numberOfDays: Number(days),
         destination: {
           name: destination,
-          coordinates: {
-            latitude: coord.latitude,
-            longitude: coord.longitude,
-          },
+          coordinates: { latitude: 0, longitude: 0 },
         },
         tripType: travelStyle || 'solo',
         numberOfTravelers: numberOfTravelers || 1,
         interests: interests || [],
-        difficulty: difficultyValue,
-        season: seasonValue,
+        difficulty: pickEnumValue(null, ALLOWED_DIFFICULTY, 'moderate'),
+        season: pickEnumValue(season, ALLOWED_SEASONS, 'summer'),
         budget: {
           totalBudget: totalBudgetValue,
           requestedBudget: requestedBudgetValue,
           currency: currencyValue,
-          minimumRecommended: Number(budgetInsights?.minimumRecommended) || 0,
-          comfortableEstimate: Number(budgetInsights?.comfortableEstimate) || 0,
-          premiumEstimate: Number(budgetInsights?.premiumEstimate) || 0,
-          suggestedDailyBudget: Number(budgetInsights?.suggestedDailyBudget) || 0,
-          status: budgetInsights?.budgetStatus || 'within-range',
-          adjustmentApplied: Boolean(budgetInsights?.adjustmentApplied),
-          adjustmentMessage: budgetInsights?.adjustmentMessage || '',
-          destinationCostLevel:
-            budgetInsights?.destinationProfile?.costLevel || 'medium',
-          destinationType:
-            budgetInsights?.destinationProfile?.destinationType || 'domestic-city',
+          minimumRecommended,
+          comfortableEstimate: 0,
+          premiumEstimate: 0,
+          suggestedDailyBudget: Math.round(totalBudgetValue / Math.max(1, Number(days) || 1)),
+          status: budgetTooLow ? 'below-minimum' : 'within-range',
+          adjustmentApplied: budgetTooLow,
+          adjustmentMessage: budgetTooLow
+            ? `Entered budget is below minimum recommended ${currencyValue} ${minimumRecommended} for ${numberOfTravelers || 1} traveler(s) and ${days} day(s).`
+            : '',
+          destinationCostLevel: 'medium',
+          destinationType: 'domestic-city',
           ...budgetAllocation,
         },
         weatherData: {
           lastUpdated: new Date(),
-          forecast: weatherForecast,
+          current: undefined,
+          forecast: [],
         },
         userId,
         status: 'draft',
-        activities: activities, // NOW POPULATED WITH ACTIVITIES!
-        tags: tagsFromAI.length > 0 ? tagsFromAI : interests || [],
+        activities,
+        tags: normalizeStringArray(interests || [], 8),
         highlightedPlaces,
-        aiPlan: aiPlanPayload || undefined,
+        aiPlan: aiPlanPayload,
         planningInsights: {
-          averageActivityDurationMinutes:
-            Number(generated.metadata?.averageActivityDurationMinutes) || 0,
-          totalEstimatedTravelMinutes:
-            Number(generated.metadata?.totalEstimatedTravelMinutes) || 0,
-          budgetStatus: budgetInsights?.budgetStatus || 'within-range',
-          destinationProfile: budgetInsights?.destinationProfile || null,
-          weatherStatus: weatherForecast.length > 0 ? 'live' : 'unavailable',
+          averageActivityDurationMinutes: 0,
+          totalEstimatedTravelMinutes: 0,
+          budgetStatus: budgetTooLow ? 'below-minimum' : 'within-range',
+          destinationProfile: null,
+          weatherStatus: 'unavailable',
         },
       });
 
-      // Save initial itinerary with activities
       await itinerary.save();
 
       return res.status(201).json({
         message: 'Itinerary generated successfully',
         itinerary,
         metadata: {
-          ...(generated.metadata || {}),
-          weatherForecastDays: weatherForecast.length,
-          aiPlanUsed: Boolean(aiPlan),
+          provider: generated?.meta?.provider || 'unknown',
+          model: generated?.meta?.model || 'unknown',
+          tokenUsage: generated?.meta?.usage || null,
+          weatherForecastDays: 0,
+          aiPlanUsed: true,
           highlightedPlacesCount: highlightedPlaces.length,
-          budgetStatus: budgetInsights?.budgetStatus || 'within-range',
-          budgetAdjusted: Boolean(budgetInsights?.adjustmentApplied),
-          budgetAdjustmentMessage: budgetInsights?.adjustmentMessage || '',
+          budgetStatus: 'within-range',
+          budgetAdjusted: budgetTooLow,
+          budgetAdjustmentMessage: budgetTooLow
+            ? `Minimum recommended ${currencyValue} ${minimumRecommended}`
+            : '',
         },
       });
     } catch (error) {
       console.error('Generate itinerary error:', error);
-      const message = String(error?.message || '');
-      const isInputOrDataIssue =
-        message.includes('Unable to resolve coordinates for destination') ||
-        message.includes('Could not build enough live, location-based activities');
-
-      res
-        .status(isInputOrDataIssue ? 422 : 500)
-        .json({
-          message: isInputOrDataIssue
-            ? 'Unable to generate fully dynamic itinerary with live location data'
-            : 'Error generating itinerary',
-          error: error.message,
-        });
+      return res.status(500).json({
+        message: 'Error generating itinerary from Gemini/OpenRouter',
+        error: error.message,
+        providerErrors: Array.isArray(error?.providerErrors)
+          ? error.providerErrors
+          : [],
+      });
     }
   }
 
@@ -619,6 +696,93 @@ class ItineraryController {
   }
 
   /**
+   * UPDATE: Edit an existing activity
+   * PATCH /api/itinerary/:id/activity/:activityId
+   */
+  async updateActivity(req, res) {
+    try {
+      const { id, activityId } = req.params;
+      const userId = req.user?.userId;
+      const updates = req.body || {};
+
+      const itinerary = await Itinerary.findById(id);
+      if (!itinerary) {
+        return res.status(404).json({ message: 'Itinerary not found' });
+      }
+
+      if (
+        itinerary.userId.toString() !== userId &&
+        !itinerary.collaborators.some(
+          (c) => c.userId.toString() === userId && c.role === 'editor'
+        )
+      ) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
+
+      const activity = itinerary.activities.id(activityId);
+      if (!activity) {
+        return res.status(404).json({ message: 'Activity not found' });
+      }
+
+      const editableFields = [
+        'name',
+        'description',
+        'category',
+        'dayNumber',
+        'timeBlock',
+        'startTime',
+        'endTime',
+        'duration',
+        'estimatedCost',
+        'notes',
+        'importance',
+        'reachOptions',
+      ];
+
+      editableFields.forEach((field) => {
+        if (updates[field] !== undefined) {
+          activity[field] = updates[field];
+        }
+      });
+
+      if (updates.location) {
+        activity.location = {
+          ...activity.location,
+          ...updates.location,
+          coordinates: Array.isArray(updates.location.coordinates)
+            ? updates.location.coordinates
+            : activity.location.coordinates,
+        };
+      }
+
+      activity.updatedAt = new Date();
+
+      itinerary.budget.activities = itinerary.activities.reduce(
+        (sum, a) => sum + (Number(a.estimatedCost) || 0),
+        0
+      );
+
+      itinerary.version++;
+      itinerary.versionHistory.push({
+        version: itinerary.version,
+        changes: `Updated activity: ${activity.name}`,
+        changedAt: new Date(),
+        changedBy: userId,
+      });
+
+      await itinerary.save();
+
+      res.json({
+        message: 'Activity updated successfully',
+        itinerary,
+      });
+    } catch (error) {
+      console.error('Update activity error:', error);
+      res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  }
+
+  /**
    * DELETE: Delete entire itinerary
    * DELETE /api/itinerary/:id
    */
@@ -644,142 +808,6 @@ class ItineraryController {
     } catch (error) {
       console.error('Delete itinerary error:', error);
       res.status(500).json({ message: 'Server error', error: error.message });
-    }
-  }
-
-  /**
-   * POST: Suggest activities for a day using AI
-   * POST /api/itinerary/:id/suggest-activities
-   */
-  async suggestActivities(req, res) {
-    try {
-      const { id } = req.params;
-      const { dayNumber } = req.body;
-
-      const itinerary = await Itinerary.findById(id);
-
-      if (!itinerary) {
-        return res.status(404).json({ message: 'Itinerary not found' });
-      }
-
-      const previousActivities = itinerary.activities.filter(
-        (a) => a.dayNumber < dayNumber
-      );
-
-      const suggestions = await aiService.suggestActivities(
-        itinerary.destination.name,
-        dayNumber,
-        itinerary.interests,
-        previousActivities
-      );
-
-      res.json({
-        message: 'Activity suggestions generated',
-        suggestions,
-      });
-    } catch (error) {
-      console.error('Suggest activities error:', error);
-      res.status(500).json({
-        message: 'Error generating suggestions',
-        error: error.message,
-      });
-    }
-  }
-
-  /**
-   * POST: Get weather-based recommendations
-   * POST /api/itinerary/:id/weather-recommendations
-   */
-  async getWeatherRecommendations(req, res) {
-    try {
-      const { id } = req.params;
-
-      const itinerary = await Itinerary.findById(id);
-
-      if (!itinerary) {
-        return res.status(404).json({ message: 'Itinerary not found' });
-      }
-
-      const weatherData = itinerary.weatherData?.forecast?.[0] || {
-        condition: 'Clear',
-        temperature: 25,
-      };
-
-      const recommendations = await aiService.getWeatherBasedRecommendations(
-        itinerary.destination.name,
-        weatherData,
-        itinerary.interests
-      );
-
-      res.json({
-        message: 'Weather recommendations generated',
-        recommendations,
-        currentWeather: weatherData,
-      });
-    } catch (error) {
-      console.error('Weather recommendations error:', error);
-      res.status(500).json({
-        message: 'Error generating recommendations',
-        error: error.message,
-      });
-    }
-  }
-
-  /**
-   * POST: Optimize itinerary schedule
-   * POST /api/itinerary/:id/optimize
-   */
-  async optimizeItinerary(req, res) {
-    try {
-      const { id } = req.params;
-
-      const itinerary = await Itinerary.findById(id);
-
-      if (!itinerary) {
-        return res.status(404).json({ message: 'Itinerary not found' });
-      }
-
-      const optimization = await aiService.optimizeSchedule(
-        itinerary.activities,
-        {
-          startTime: '09:00',
-          endTime: '18:00',
-        }
-      );
-
-      // Apply optimized order if valid
-      if (
-        optimization.optimized_order &&
-        Array.isArray(optimization.optimized_order)
-      ) {
-        const reorderedActivities = optimization.optimized_order.map(
-          (idx) => itinerary.activities[idx - 1]
-        );
-        itinerary.activities = reorderedActivities;
-        itinerary.routeOptimized = true;
-
-        itinerary.version++;
-        itinerary.versionHistory.push({
-          version: itinerary.version,
-          changes: 'Optimized itinerary schedule',
-          changedAt: new Date(),
-          changedBy: req.user?.userId,
-        });
-
-        await itinerary.save();
-      }
-
-      res.json({
-        message: 'Itinerary optimized successfully',
-        itinerary,
-        optimization,
-      });
-    } catch (error) {
-      console.error('Optimize itinerary error:', error);
-      res.status(500).json({
-        message: 'Error optimizing itinerary',
-        error: error.message,
-      });
     }
   }
 

@@ -17,6 +17,7 @@ class ExportService {
       try {
         const chunks = [];
         const doc = new PDFDocument({ margin: 40 });
+        const currency = itinerary?.budget?.currency || 'INR';
 
         // Collect data
         doc.on('data', chunk => chunks.push(chunk));
@@ -60,9 +61,12 @@ class ExportService {
               doc.moveDown(0.2);
             }
             
-            const costStr = activity.estimatedCost ? ` | Cost: $${activity.estimatedCost}` : '';
+            const costStr = activity.estimatedCost ? ` | Cost: ${currency} ${activity.estimatedCost}` : '';
             const categoryStr = activity.category ? `Category: ${activity.category}` : '';
             doc.text(`${categoryStr}${costStr}`, { indent: 30 });
+            if (Array.isArray(activity.reachOptions) && activity.reachOptions.length > 0) {
+              doc.fontSize(9).text(`Reach options: ${activity.reachOptions.join(', ')}`, { indent: 30 });
+            }
             doc.moveDown(0.3);
           });
 
@@ -86,14 +90,14 @@ class ExportService {
 
         budgetItems.forEach((item) => {
           if (item.value > 0) {
-            doc.text(`${item.label}: $${item.value.toFixed(2)}`);
+            doc.text(`${item.label}: ${currency} ${item.value.toFixed(2)}`);
           }
         });
 
         doc.moveDown(0.3);
         doc.font('Helvetica-Bold');
         const totalBudget = budget.totalBudget || budgetItems.reduce((sum, item) => sum + item.value, 0);
-        doc.text(`Total Budget: $${totalBudget.toFixed(2)}`);
+        doc.text(`Total Budget: ${currency} ${totalBudget.toFixed(2)}`);
 
         doc.end();
       } catch (error) {
