@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * Activity Schema - Represents a single activity/place to visit
- * Used as a sub-document within Itinerary
+ * Used as a sub-document in travel-related records
  */
 const ActivitySchema = new mongoose.Schema({
   // Activity identification

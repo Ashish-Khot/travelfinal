@@ -53,7 +53,7 @@ class PlacesService {
           limit: 1,
         },
         headers: {
-          'User-Agent': 'travel2-itinerary/1.0 (support@example.com)',
+          'User-Agent': 'travel2-platform/1.0 (support@example.com)',
         },
         timeout: API_CONFIG.DEFAULTS.REQUEST_TIMEOUT,
       });

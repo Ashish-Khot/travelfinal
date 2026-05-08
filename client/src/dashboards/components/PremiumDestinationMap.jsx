@@ -7,6 +7,7 @@ import 'leaflet-markercluster/leaflet.markercluster.js';
 import { MAP_CONFIG } from '../../config/mapConfig';
 import { autocompleteLocation } from '../../services/geocodingService';
 import { getMultimodalSuggestion, getRoute } from '../../services/routingService';
+import { isUnsplashConfigured, searchUnsplashPlacePhotos } from '../../services/unsplashService';
 
 const DEFAULT_CENTER = { lat: 36.3932, lng: 25.4615 };
 const DEFAULT_ZOOM = 2;
@@ -177,6 +178,7 @@ const createPopupMarkup = (place) => {
 };
 
 const hasCoords = (value) => value && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lon));
+const SEARCH_RESULT_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=320&q=80';
 
 const inferCountryFromLabel = (label = '') => {
   const parts = String(label || '')
@@ -186,6 +188,21 @@ const inferCountryFromLabel = (label = '') => {
   if (parts.length < 2) return '';
   return parts[parts.length - 1];
 };
+
+const attachSearchResultImages = (suggestions = [], photos = []) =>
+  suggestions.map((suggestion, index) => {
+    const photo = photos[index];
+    return {
+      ...suggestion,
+      image: photo?.imageUrl || suggestion?.image || SEARCH_RESULT_FALLBACK_IMAGE,
+      imageCredit: photo
+        ? {
+            photographerName: photo.photographerName,
+            photographerLink: photo.photographerLink,
+          }
+        : null,
+    };
+  });
 
 const getDistanceMeters = (from, to) => {
   if (!from || !to) return Number.POSITIVE_INFINITY;
@@ -750,8 +767,12 @@ const PremiumDestinationMap = ({
     setIsSearchingFrom(true);
     fromSearchTimerRef.current = setTimeout(async () => {
       try {
-        const response = await autocompleteLocation(query, { limit: 6 });
-        setFromSearchResults(response?.success ? response.suggestions || [] : []);
+        const [response, photos] = await Promise.all([
+          autocompleteLocation(query, { limit: 6 }),
+          isUnsplashConfigured() ? searchUnsplashPlacePhotos(query, 6) : Promise.resolve([]),
+        ]);
+        const suggestions = response?.success ? response.suggestions || [] : [];
+        setFromSearchResults(attachSearchResultImages(suggestions, photos));
       } catch {
         setFromSearchResults([]);
       } finally {
@@ -782,8 +803,12 @@ const PremiumDestinationMap = ({
     setIsSearchingTo(true);
     toSearchTimerRef.current = setTimeout(async () => {
       try {
-        const response = await autocompleteLocation(query, { limit: 6 });
-        setToSearchResults(response?.success ? response.suggestions || [] : []);
+        const [response, photos] = await Promise.all([
+          autocompleteLocation(query, { limit: 6 }),
+          isUnsplashConfigured() ? searchUnsplashPlacePhotos(query, 6) : Promise.resolve([]),
+        ]);
+        const suggestions = response?.success ? response.suggestions || [] : [];
+        setToSearchResults(attachSearchResultImages(suggestions, photos));
       } catch {
         setToSearchResults([]);
       } finally {
@@ -859,6 +884,8 @@ const PremiumDestinationMap = ({
       lat,
       lon,
       country: inferCountryFromLabel(suggestion?.label),
+      image: suggestion?.image || '',
+      imageCredit: suggestion?.imageCredit || null,
     };
     setFromQuery(selected.name || '');
     setFromSearchResults([]);
@@ -878,6 +905,8 @@ const PremiumDestinationMap = ({
       lat,
       lon,
       country: inferCountryFromLabel(suggestion?.label),
+      image: suggestion?.image || '',
+      imageCredit: suggestion?.imageCredit || null,
     };
     setToQuery(selected.name || '');
     setToSearchResults([]);
@@ -1041,9 +1070,11 @@ const PremiumDestinationMap = ({
         [[origin.lat, origin.lon], [target.lat, target.lon]],
         {
           profile: routeMode,
-          noAlternatives: false,
+          noAlternatives: true,
           color: '#0f766e',
           provider: 'auto',
+          allowEstimatedFallback: false,
+          allowEstimatedFallbackAnyDistance: false,
           routeOptions: { preference: effectivePreference },
           originCountry: origin.country || '',
           destinationCountry: target.country || '',
@@ -1235,9 +1266,11 @@ const PremiumDestinationMap = ({
         .travel-ui-search-state{pointer-events:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);border-radius:999px;padding:3px 9px;font-size:10px;font-weight:700;color:#0f766e;background:rgba(20,184,166,.12)}
         .travel-ui-search-state.is-searching{background:rgba(15,23,42,.13);color:#334155}
         .travel-ui-results{margin-top:10px;max-height:220px;overflow:auto;border-radius:14px;border:1px solid rgba(148,163,184,.36);background:#fff;box-shadow:0 14px 34px rgba(15,23,42,.12)}
-        .travel-ui-result-item{display:flex;width:100%;flex-direction:column;gap:2px;padding:10px 12px;text-align:left;border:0;border-bottom:1px solid rgba(226,232,240,.92);background:#fff;cursor:pointer;transition:background .16s ease}
+        .travel-ui-result-item{display:flex;width:100%;align-items:center;gap:10px;padding:8px 10px;text-align:left;border:0;border-bottom:1px solid rgba(226,232,240,.92);background:#fff;cursor:pointer;transition:background .16s ease}
         .travel-ui-result-item:last-child{border-bottom:0}
         .travel-ui-result-item:hover{background:#f8fafc}
+        .travel-ui-result-thumb{width:54px;height:38px;border-radius:8px;object-fit:cover;display:block;flex-shrink:0;background:#e2e8f0}
+        .travel-ui-result-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
         .travel-ui-result-name{font-size:13px;font-weight:700;color:#0f172a;line-height:1.25}
         .travel-ui-result-label{font-size:11px;color:#64748b;line-height:1.35}
         .travel-ui-results.compact{margin-top:0;max-height:126px}
@@ -1436,8 +1469,21 @@ const PremiumDestinationMap = ({
                       onClick={() => handleFromSelect(item)}
                       className="travel-ui-result-item"
                     >
-                      <span className="travel-ui-result-name">{item.name || 'Location'}</span>
-                      <span className="travel-ui-result-label">{item.label}</span>
+                      <img
+                        src={item.image || SEARCH_RESULT_FALLBACK_IMAGE}
+                        alt={item.name || 'Location'}
+                        className="travel-ui-result-thumb"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = SEARCH_RESULT_FALLBACK_IMAGE;
+                        }}
+                      />
+                      <span className="travel-ui-result-meta">
+                        <span className="travel-ui-result-name">{item.name || 'Location'}</span>
+                        <span className="travel-ui-result-label">{item.label}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1469,8 +1515,21 @@ const PremiumDestinationMap = ({
                       onClick={() => handleToSelect(item)}
                       className="travel-ui-result-item"
                     >
-                      <span className="travel-ui-result-name">{item.name || 'Location'}</span>
-                      <span className="travel-ui-result-label">{item.label}</span>
+                      <img
+                        src={item.image || SEARCH_RESULT_FALLBACK_IMAGE}
+                        alt={item.name || 'Location'}
+                        className="travel-ui-result-thumb"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                          event.currentTarget.onerror = null;
+                          event.currentTarget.src = SEARCH_RESULT_FALLBACK_IMAGE;
+                        }}
+                      />
+                      <span className="travel-ui-result-meta">
+                        <span className="travel-ui-result-name">{item.name || 'Location'}</span>
+                        <span className="travel-ui-result-label">{item.label}</span>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1660,7 +1719,7 @@ const PremiumDestinationMap = ({
             <div className="travel-route-meta">
               <span>{routeSummary.origin?.name || 'Start'} to {routeSummary.destination?.name || 'Destination'}</span>
               <span className="travel-route-pill">
-                Engine: {routeSummary.provider === 'osrm' ? 'OSRM' : 'OpenRouteService'}
+                Engine: {routeSummary.provider === 'osrm' ? 'OSRM' : routeSummary.provider === 'estimated' ? 'Estimated' : 'OpenRouteService'}
               </span>
             </div>
             {routeSummary.lastUpdatedAt && (
@@ -1759,7 +1818,7 @@ const PremiumDestinationMap = ({
                   <button type="button" onClick={() => setPanelOpen(false)} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">Close</button>
                 </div>
                 <div className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700"><span>{selectedPlace.rating.toFixed(1)} / 5.0</span></div>
-                <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">{selectedPlace.description || 'A wonderful destination to add to your travel plan.'}</p>
+                <p className="line-clamp-3 text-sm leading-relaxed text-slate-600">{selectedPlace.description || 'A wonderful destination to explore.'}</p>
                 <div className="mt-auto flex flex-wrap items-center gap-2">
                   <button
                     type="button"

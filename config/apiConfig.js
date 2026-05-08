@@ -10,7 +10,7 @@ module.exports = {
     API_KEY: process.env.OPENTRIPMAP_API_KEY || '',
     BASE_URL: 'https://api.opentripmap.com/0.1/en/places',
     DETAILS_URL: 'https://api.opentripmap.com/0.1/en/places/xid',
-    // Radius endpoint returns stable place data for itinerary generation
+    // Radius endpoint returns stable place data for destination exploration
     AROUND_URL: 'https://api.opentripmap.com/0.1/en/places/radius',
   },
 
@@ -59,29 +59,6 @@ module.exports = {
   AI: {
     PROVIDER: process.env.AI_PROVIDER || '',
     PROVIDER_SEQUENCE: process.env.AI_PROVIDER_SEQUENCE || 'gemini,openrouter',
-  },
-
-  // Itinerary-only AI routing and credentials
-  ITINERARY_AI: {
-    PROVIDER: process.env.ITINERARY_AI_PROVIDER || 'gemini',
-    PROVIDER_SEQUENCE:
-      process.env.ITINERARY_AI_PROVIDER_SEQUENCE || 'gemini,openrouter',
-    GEMINI_API_KEY: process.env.ITINERARY_GEMINI_API_KEY || '',
-    GEMINI_MODEL: process.env.ITINERARY_GEMINI_MODEL || 'gemini-2.5-flash',
-    GEMINI_BASE_URL:
-      process.env.ITINERARY_GEMINI_BASE_URL ||
-      process.env.GEMINI_BASE_URL ||
-      'https://generativelanguage.googleapis.com/v1beta',
-    GEMINI_VISION_MODEL: process.env.ITINERARY_GEMINI_VISION_MODEL || '',
-    OPENROUTER_API_KEY: process.env.ITINERARY_OPENROUTER_API_KEY || '',
-    OPENROUTER_MODEL:
-      process.env.ITINERARY_OPENROUTER_MODEL ||
-      process.env.OPENROUTER_MODEL ||
-      'openrouter/free',
-    OPENROUTER_BASE_URL:
-      process.env.ITINERARY_OPENROUTER_BASE_URL ||
-      process.env.OPENROUTER_BASE_URL ||
-      'https://openrouter.ai/api/v1',
   },
 
   // Virtual Guide AI routing

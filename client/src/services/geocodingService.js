@@ -82,9 +82,6 @@ export const searchLocation = async (query, options = {}) => {
     const response = await axios.get(`${GEOCODING_CONFIG.NOMINATIM_API}${GEOCODING_CONFIG.SEARCH_ENDPOINT}`, {
       params,
       timeout: GEOCODING_CONFIG.REQUEST_OPTIONS.timeout,
-      headers: {
-        'User-Agent': 'TravelApp/1.0 (https://yourapp.com)',
-      },
     });
 
     const results = {
@@ -167,9 +164,6 @@ export const reverseGeocode = async (lat, lng, options = {}) => {
       {
         params,
         timeout: GEOCODING_CONFIG.REQUEST_OPTIONS.timeout,
-        headers: {
-          'User-Agent': 'TravelApp/1.0 (https://yourapp.com)',
-        },
       }
     );
 

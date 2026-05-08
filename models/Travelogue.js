@@ -86,12 +86,6 @@ const TravelogueSchema = new mongoose.Schema({
   },
   season: String, // e.g., 'Spring', 'Summer', 'Fall', 'Winter'
   highlights: [String], // Key attractions
-  itinerary: [{
-    day: Number,
-    title: String,
-    description: String,
-    activities: [String]
-  }],
   
   // Social Features
   views: {

@@ -14,7 +14,7 @@ router.post('/create', verifyToken, upload.array('media', 10), async (req, res) 
     const {
       title, description, destination, location, rating, tags,
       startDate, endDate, duration, travelersCount, estimatedCost,
-      difficulty, season, highlights, itinerary
+      difficulty, season, highlights
     } = req.body;
 
     const images = req.files ? req.files.map(f => f.path.replace('\\', '/')) : [];
@@ -25,11 +25,6 @@ router.post('/create', verifyToken, upload.array('media', 10), async (req, res) 
 
     let parsedHighlights = highlights || [];
     if (typeof parsedHighlights === 'string') parsedHighlights = parsedHighlights.split(',').map(h => h.trim());
-
-    let parsedItinerary = [];
-    if (itinerary) {
-      parsedItinerary = typeof itinerary === 'string' ? JSON.parse(itinerary) : itinerary;
-    }
 
     const travelogue = new Travelogue({
       title,
@@ -49,7 +44,6 @@ router.post('/create', verifyToken, upload.array('media', 10), async (req, res) 
       difficulty: difficulty || 'moderate',
       season,
       highlights: parsedHighlights,
-      itinerary: parsedItinerary,
       status: 'pending',
       publishedAt: new Date()
     });

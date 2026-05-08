@@ -35,11 +35,11 @@ const guideAvatarRouter = require('./routes/guideAvatar');
 const opentripmapRouter = require('./routes/opentripmap');
 const hotelProfileInfoRouter = require('./routes/hotelProfileInfo');
 const voiceAssistantRouter = require('./routes/voiceAssistant');
-const itineraryRouter = require('./routes/itinerary');
 const reviewRouter = require('./routes/review');
 const healthRouter = require('./routes/health');
 const virtualGuideRouter = require('./routes/virtualGuide');
 const touristAgentRouter = require('./routes/touristAgent');
+const itineraryRouter = require('./routes/itinerary');
 
 
 const path = require('path');
@@ -94,10 +94,10 @@ app.use('/api/tourist', touristRouter); // New tourist profile endpoints
 app.use('/api/opentripmap', opentripmapRouter); // OpenTripMap API integration
 app.use('/api/hotelProfileInfo', hotelProfileInfoRouter); // (legacy, for migration)
 app.use('/api/voiceAssistant', voiceAssistantRouter); // Voice assistant endpoints
-app.use('/api/itinerary', itineraryRouter); // Itinerary planner endpoints
 app.use('/api/health', healthRouter); // External API health checks
 app.use('/api/virtual-guide', virtualGuideRouter); // Virtual guide AI chat
 app.use('/api/touristAgent', touristAgentRouter); // Tourist command agent
+app.use('/api/itinerary', itineraryRouter); // Itinerary planner
 
 app.use('/api/room', roomRouter); // Hotel room endpoints
 app.use('/api/review', reviewRouter); // Guide review endpoints

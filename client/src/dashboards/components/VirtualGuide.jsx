@@ -523,7 +523,6 @@ export default function VirtualGuide() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [showTyping, setShowTyping] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [modelInfo, setModelInfo] = useState(null);
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -587,14 +586,6 @@ export default function VirtualGuide() {
         ),
     [messages]
   );
-  const modelStatusLabel = useMemo(() => {
-    if (isStreaming) return 'Model: Auto routing...';
-    if (modelInfo?.provider && modelInfo?.model) {
-      return `Auto: ${String(modelInfo.provider).toUpperCase()} | ${modelInfo.model}`;
-    }
-    return 'Model: Auto (OpenAI -> OpenRouter -> Groq)';
-  }, [isStreaming, modelInfo]);
-
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -872,7 +863,6 @@ export default function VirtualGuide() {
     setDraft('');
     setShowTyping(true);
     setIsStreaming(true);
-    setModelInfo(null);
 
     const now = Date.now();
     const userMessage = { id: `user-${now}`, role: 'user', content: query, createdAt: now };
@@ -920,10 +910,7 @@ export default function VirtualGuide() {
           }
 
           if (event === 'done') {
-            const doneMeta = typeof data === 'string' ? null : data;
-            if (doneMeta) {
-              setModelInfo(doneMeta);
-            }
+            return;
           }
         },
       });
@@ -994,36 +981,6 @@ export default function VirtualGuide() {
               <Typography sx={{ color: palette.textSecondary, fontSize: '0.86rem', fontWeight: 600 }}>
                 AI Live
               </Typography>
-              <Chip
-                size="small"
-                label={modelStatusLabel}
-                sx={{
-                  height: 24,
-                  fontWeight: 700,
-                  borderRadius: '10px',
-                  color: palette.textSecondary,
-                  border: `1px solid ${palette.inputBorder}`,
-                  backgroundColor: isDark ? 'rgba(30,41,59,0.55)' : 'rgba(255,255,255,0.72)',
-                }}
-              />
-              <Chip
-                size="small"
-                label={`Voice: ${selectedVoiceName}`}
-                sx={{
-                  height: 24,
-                  fontWeight: 700,
-                  borderRadius: '10px',
-                  color: palette.textSecondary,
-                  border: `1px solid ${palette.inputBorder}`,
-                  backgroundColor: isDark ? 'rgba(30,41,59,0.55)' : 'rgba(255,255,255,0.72)',
-                  maxWidth: { xs: 170, sm: 220 },
-                  '& .MuiChip-label': {
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  },
-                }}
-              />
             </Stack>
           </Box>
 

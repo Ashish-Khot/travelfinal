@@ -25,9 +25,9 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import MenuIcon from '@mui/icons-material/Menu';
-import EventNoteIcon from '@mui/icons-material/EventNote';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import EventNoteIcon from '@mui/icons-material/EventNote';
 import { alpha, styled } from '@mui/material/styles';
 
 const drawerWidth = 252;
@@ -36,10 +36,10 @@ const collapsedWidth = 72;
 // Icons for each tab
 const iconMap = {
   Dashboard: <DashboardIcon sx={{ color: 'primary.main' }} />,
-  'Itinerary Planner': <EventNoteIcon sx={{ color: 'primary.main' }} />,
   'Explore Destinations': <ExploreIcon sx={{ color: 'primary.main' }} />,
   'Explore Guides': <PeopleAltIcon sx={{ color: 'primary.main' }} />,
   'Virtual Guide': <SupportAgentIcon sx={{ color: 'primary.main' }} />,
+  'Itinerary Planner': <EventNoteIcon sx={{ color: 'primary.main' }} />,
   'Hotel Booking': <HotelIcon sx={{ color: 'primary.main' }} />,
   'My Bookings': <BookingsIcon sx={{ color: 'primary.main' }} />,
   Chat: <ChatIcon sx={{ color: 'primary.main' }} />,

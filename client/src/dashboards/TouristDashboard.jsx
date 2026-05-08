@@ -29,7 +29,7 @@ import AIRecommendations from './components/AIRecommendations';
 import WeatherForecastCard from './components/WeatherForecastCard';
 import WeatherSearch from './components/WeatherSearch';
 import VirtualGuide from './components/VirtualGuide';
-import ItineraryPlanner from '../components/itinerary-planner/ItineraryPlanner';
+import ItineraryPlannerModule from './components/ItineraryPlannerModule';
 import { Tabs, Tab } from '@mui/material';
 
 function TouristDashboard() {
@@ -178,12 +178,6 @@ function TouristDashboard() {
       return;
     }
 
-    if (actionType === 'prefill_itinerary') {
-      setSelectedTab('Itinerary Planner');
-      dispatchAgentEvent('agentItineraryPrefill', payload);
-      return;
-    }
-
     if (actionType === 'prefill_review') {
       setSelectedTab('Reviews');
       dispatchAgentEvent('agentReviewPrefill', payload);
@@ -215,6 +209,7 @@ function TouristDashboard() {
         Dashboard: 'Dashboard',
         VirtualGuide: 'Virtual Guide',
         GuideAI: 'Virtual Guide',
+        ItineraryPlanner: 'Itinerary Planner',
       };
 
       const tabName = navigationMap[section] || section;
@@ -259,10 +254,10 @@ function TouristDashboard() {
   // Sidebar navigation items (Profile and Settings removed - now in top-right profile menu)
   const navItems = [
     { label: 'Dashboard', value: 'Dashboard' },
-    { label: 'Itinerary Planner', value: 'Itinerary Planner' },
     { label: 'Explore Destinations', value: 'Explore Destinations' },
     { label: 'Explore Guides', value: 'Explore Guides' },
     { label: 'Virtual Guide', value: 'Virtual Guide' },
+    { label: 'Itinerary Planner', value: 'Itinerary Planner' },
     { label: 'Hotel Booking', value: 'Hotel Booking' },
     { label: 'My Bookings', value: 'My Bookings' },
     { label: 'Chat', value: 'Chat' },
@@ -341,10 +336,10 @@ function TouristDashboard() {
               </Box>
             </Box>
           )}
-          {selectedTab === 'Itinerary Planner' && <ItineraryPlanner user={user} />}
           {selectedTab === 'Explore Destinations' && <ExploreDestinations />}
           {selectedTab === 'Explore Guides' && <ExploreGuides />}
           {selectedTab === 'Virtual Guide' && <VirtualGuide />}
+          {selectedTab === 'Itinerary Planner' && <ItineraryPlannerModule />}
           {selectedTab === 'Hotel Booking' && (
             <ExploreHotels
               onOpenChat={(target) => {

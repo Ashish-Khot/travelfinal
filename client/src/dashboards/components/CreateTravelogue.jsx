@@ -32,8 +32,7 @@ export default function CreateTravelogue() {
     estimatedCost: '',
     difficulty: 'moderate',
     season: '',
-    highlights: [],
-    itinerary: []
+    highlights: []
   });
 
   const [media, setMedia] = useState([]);
@@ -136,11 +135,7 @@ export default function CreateTravelogue() {
       // Add form data
       Object.keys(formData).forEach(key => {
         if (Array.isArray(formData[key])) {
-          if (key === 'itinerary') {
-            submitData.append(key, JSON.stringify(formData[key]));
-          } else {
-            formData[key].forEach(item => submitData.append(key, item));
-          }
+          formData[key].forEach(item => submitData.append(key, item));
         } else {
           submitData.append(key, formData[key]);
         }
@@ -162,7 +157,7 @@ export default function CreateTravelogue() {
         setFormData({
           title: '', description: '', destination: '', location: '', rating: 0, tags: [],
           startDate: '', endDate: '', duration: '', travelersCount: 1, estimatedCost: '',
-          difficulty: 'moderate', season: '', highlights: [], itinerary: []
+          difficulty: 'moderate', season: '', highlights: []
         });
         setMedia([]);
         setActiveStep(0);

@@ -10,7 +10,6 @@ const LANG_HINTS = ['english', 'hindi', 'marathi', 'french', 'spanish', 'german'
 
 const TAB_KEYWORDS = [
   { tab: 'Dashboard', patterns: ['dashboard', 'home'] },
-  { tab: 'Itinerary Planner', patterns: ['itinerary', 'trip plan', 'travel plan'] },
   { tab: 'Explore Destinations', patterns: ['explore destination', 'destinations', 'discover places'] },
   { tab: 'Explore Guides', patterns: ['explore guides', 'browse guides'] },
   { tab: 'Virtual Guide', patterns: ['virtual guide'] },
@@ -434,7 +433,7 @@ const handleCommand = async ({ command, userId, pendingAction }) => {
 
   const text = lower(safe);
   if (includesAny(text, ['help', 'what can you do'])) {
-    return { success: true, reply: 'Try: "book guide in Goa tomorrow under 3000 per day", "suggest guides in Pune above rating 4", "open pranav", "chat with hotel taj", "make itinerary for Jaipur 3 days budget 25000", "create 5 star review".', action: null, pendingAction: null };
+    return { success: true, reply: 'Try: "book guide in Goa tomorrow under 3000 per day", "suggest guides in Pune above rating 4", "open pranav", "chat with hotel taj", "create 5 star review".', action: null, pendingAction: null };
   }
   if (isPositive(text) || isNegative(text)) {
     return { success: false, reply: 'There is no pending action right now. Tell me what you want to do.', action: null, pendingAction: null };
@@ -447,11 +446,6 @@ const handleCommand = async ({ command, userId, pendingAction }) => {
   if (includesAny(text, ['book guide', 'hire guide', 'find guide', 'guide for', 'book '])) return handleGuide({ command: safe, suggestionOnly: false });
   if (includesAny(text, ['suggest guide', 'recommend guide', 'explore guides', 'show guides'])) return handleGuide({ command: safe, suggestionOnly: true });
   if (includesAny(text, ['review', 'rate', 'rating', 'feedback'])) return handleReview({ command: safe, userId });
-  if (includesAny(text, ['itinerary', 'trip plan', 'travel plan'])) {
-    const destination = parseDestination(safe);
-    return { success: true, reply: `I prepared itinerary details${destination ? ` for ${destination}` : ''} and opened Itinerary Planner.`, action: { type: 'prefill_itinerary', tab: 'Itinerary Planner', payload: { destination, days: parseDays(safe) || 4, budget: parseBudget(safe) || 20000, numberOfTravelers: parseTravelers(safe) || 1, interests: ['culture', 'food'], startDate: parseDate(safe).toISOString().slice(0, 10), aiNotes: safe, autoGenerate: Boolean(destination) } }, pendingAction: null };
-  }
-
   if (includesAny(text, ['open', 'show', 'go to', 'navigate'])) {
     const tab = findTab(safe);
     if (tab) return { success: true, reply: `Opening ${tab}.`, action: { type: 'navigate_tab', tab }, pendingAction: null };
@@ -467,7 +461,7 @@ const handleCommand = async ({ command, userId, pendingAction }) => {
     if (attempt?.success) return attempt;
   }
 
-  return { success: true, reply: 'Try: "book guide in Goa", "open chat", "open pranav", "create review", or "make itinerary".', action: null, pendingAction: null };
+  return { success: true, reply: 'Try: "book guide in Goa", "open chat", "open pranav", or "create review".', action: null, pendingAction: null };
 };
 
 module.exports = {

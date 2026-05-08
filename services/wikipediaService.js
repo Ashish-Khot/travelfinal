@@ -11,7 +11,7 @@ class WikipediaService {
     this.baseUrl = API_CONFIG.WIKIPEDIA.BASE_URL;
     this.summaryBaseUrl = 'https://en.wikipedia.org/api/rest_v1/page/summary';
     this.requestHeaders = {
-      'User-Agent': 'travel2-itinerary/1.0 (support@example.com)',
+      'User-Agent': 'travel2-platform/1.0 (support@example.com)',
       'Accept': 'application/json',
     };
   }

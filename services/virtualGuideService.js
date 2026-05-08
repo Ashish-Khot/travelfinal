@@ -179,32 +179,13 @@ const buildOfflineAnswer = ({ question, destination }) => {
   };
 
   const lower = (question || '').toLowerCase();
-  const wantsItinerary = /itinerary|plan|schedule|day\s*plan/.test(lower);
   const wantsStay = /stay|hotel|accommodation|where should i stay/.test(lower);
   const wantsFood = /food|dining|restaurant|eat|cuisine/.test(lower);
   const wantsBudget = /budget|cost|price|expensive|cheap/.test(lower);
 
-  const dayMatch = lower.match(/(\d+)\s*day/);
-  const days = dayMatch ? Math.min(Math.max(parseInt(dayMatch[1], 10), 2), 5) : 3;
-  const highlights = profile.highlights.length ? profile.highlights : ['Local highlights', 'Cultural walk', 'Sunset viewpoint'];
-  const filler = ['Local market', 'Heritage walk', 'Cafe break', 'Riverside stroll', 'Sunset point'];
-  const highlightPool = [...highlights, ...filler];
-
   const sections = [];
   sections.push(`Overview: ${profile.summary}`);
-
-  if (wantsItinerary) {
-    const planLines = Array.from({ length: days }).map((_, index) => {
-      const first = highlightPool[(index * 2) % highlightPool.length];
-      const second = highlightPool[(index * 2 + 1) % highlightPool.length];
-      return `Day ${index + 1}: ${first} + ${second}.`;
-    });
-    sections.push(`${days}-day plan:\n- ${planLines.join('\n- ')}`);
-  }
-
-  if (wantsStay || !wantsItinerary) {
-    sections.push(`Where to stay: ${profile.stayAreas}`);
-  }
+  sections.push(`Where to stay: ${profile.stayAreas}`);
 
   if (wantsFood) {
     sections.push(`Local flavors: ${profile.food.join(', ')}.`);

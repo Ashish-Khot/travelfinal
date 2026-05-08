@@ -103,7 +103,7 @@ export default function WelcomeSection({ user }) {
               </Typography>
 
               <Stack direction="row" spacing={1.5} flexWrap="wrap" mb={3}>
-                {['Curated guides', 'Live itinerary', 'Hotel-ready chat'].map((label) => (
+                {['Curated guides', 'Live updates', 'Hotel-ready chat'].map((label) => (
                   <Chip
                     key={label}
                     label={label}
@@ -182,7 +182,7 @@ export default function WelcomeSection({ user }) {
               </Typography>
               <Stack spacing={1.2}>
                 {[
-                  { label: 'Planner synced', detail: 'AI itinerary ready in minutes' },
+                  { label: 'Trips synced', detail: 'Destination info ready in minutes' },
                   { label: 'Guides online', detail: 'Chat and book instantly' },
                   { label: 'Hotels verified', detail: 'Premium stays available' },
                 ].map((item) => (

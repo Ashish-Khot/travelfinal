@@ -10,6 +10,7 @@ import { ROUTING_CONFIG, getRouteColor, isRoutingConfigured } from '../config/ma
 // Simple in-memory cache
 const routeCache = new Map();
 const MAX_LOCAL_ESTIMATED_FALLBACK_DISTANCE_METERS = 250000; // 250km for unknown-country local fallback
+const MAX_ORS_ALTERNATIVE_ROUTE_DISTANCE_METERS = 100000; // ORS cloud limit for alternative_routes
 const FLIGHT_CRUISE_SPEED_KMH = 820;
 const FLIGHT_FIXED_OVERHEAD_SECONDS = 90 * 60; // boarding/taxi/security buffer
 
@@ -61,8 +62,14 @@ const clearExpiredCache = () => {
 /**
  * Generate cache key
  */
-const generateCacheKey = (coordinates, profile, avoidPolygons, provider = 'auto') => {
-  return `${coordinates.join(',')}_${profile}_${provider}_${JSON.stringify(avoidPolygons || {})}`;
+const generateCacheKey = (coordinates, profile, avoidPolygons, provider = 'auto', options = {}) => {
+  const behaviorOptions = {
+    noAlternatives: options.noAlternatives === true,
+    allowEstimatedFallback: options.allowEstimatedFallback === true,
+    allowEstimatedFallbackAnyDistance: options.allowEstimatedFallbackAnyDistance === true,
+    routeOptions: options.routeOptions || {},
+  };
+  return `${coordinates.join(',')}_${profile}_${provider}_${JSON.stringify(avoidPolygons || {})}_${JSON.stringify(behaviorOptions)}`;
 };
 
 /**
@@ -506,35 +513,67 @@ const normalizeOSRMData = (response, options, profile, waypoints) => {
 };
 
 const getRouteFromOpenRouteService = async (coordinates, waypoints, profile, options) => {
+  const safeCoordinates = (Array.isArray(coordinates) ? coordinates : [])
+    .filter((coord) => Array.isArray(coord) && coord.length >= 2)
+    .map((coord) => [Number(coord[0]), Number(coord[1])])
+    .filter((coord) => Number.isFinite(coord[0]) && Number.isFinite(coord[1]));
+
+  if (safeCoordinates.length < 2) {
+    throw new Error('Invalid routing coordinates');
+  }
+
   const requestBody = {
-    coordinates,
-    profile,
-    format: 'geojson',
-    locale: 'en',
+    coordinates: safeCoordinates,
     elevation: options.elevation || false,
     instructions: options.instructions !== false,
     ...options.routeOptions,
   };
 
-  if (ROUTING_CONFIG.ALTERNATIVE_ROUTES.enabled && !options.noAlternatives) {
+  const approximateRouteDistance = getWaypointChainDistanceMeters(waypoints);
+  const canRequestAlternativeRoutes = (
+    ROUTING_CONFIG.ALTERNATIVE_ROUTES.enabled
+    && !options.noAlternatives
+    && approximateRouteDistance > 0
+    && approximateRouteDistance <= MAX_ORS_ALTERNATIVE_ROUTE_DISTANCE_METERS
+  );
+
+  if (canRequestAlternativeRoutes) {
     requestBody.alternative_routes = {
       share_factor: ROUTING_CONFIG.ALTERNATIVE_ROUTES.shareFactor,
       target_count: ROUTING_CONFIG.ALTERNATIVE_ROUTES.count,
     };
   }
 
-  const response = await axios.post(
-    `${ROUTING_CONFIG.API_BASE}${ROUTING_CONFIG.DIRECTIONS_ENDPOINT}/${profile}`,
-    requestBody,
-    {
-      headers: {
-        Authorization: `Bearer ${ROUTING_CONFIG.API_KEY}`,
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
+  const requestUrl = `${ROUTING_CONFIG.API_BASE}${ROUTING_CONFIG.DIRECTIONS_ENDPOINT}/${profile}/geojson`;
+  const requestHeaders = {
+    Authorization: `Bearer ${ROUTING_CONFIG.API_KEY}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/geo+json, application/json;q=0.9, */*;q=0.8',
+  };
+
+  let response;
+  try {
+    response = await axios.post(requestUrl, requestBody, {
+      headers: requestHeaders,
       timeout: ROUTING_CONFIG.REQUEST_OPTIONS.timeout,
+    });
+  } catch (error) {
+    // Some optional fields (preference/alternative config) can trigger ORS 400.
+    // Retry once with a minimal valid payload to keep routing resilient.
+    if (error?.response?.status === 400) {
+      const minimalBody = {
+        coordinates: safeCoordinates,
+        elevation: false,
+        instructions: true,
+      };
+      response = await axios.post(requestUrl, minimalBody, {
+        headers: requestHeaders,
+        timeout: ROUTING_CONFIG.REQUEST_OPTIONS.timeout,
+      });
+    } else {
+      throw error;
     }
-  );
+  }
 
   return normalizeOpenRouteServiceData(response, options, profile, waypoints);
 };
@@ -576,7 +615,9 @@ export const getRoute = async (waypoints, options = {}) => {
 
     const profile = options.profile || ROUTING_CONFIG.DEFAULT_PROFILE;
     const provider = options.provider || 'auto';
-    const cacheKey = generateCacheKey(waypoints, profile, options.avoidPolygons, provider);
+    const allowEstimatedFallback = options.allowEstimatedFallback === true;
+    const allowEstimatedFallbackAnyDistance = options.allowEstimatedFallbackAnyDistance === true;
+    const cacheKey = generateCacheKey(waypoints, profile, options.avoidPolygons, provider, options);
 
     const cachedRoute = getCachedRoute(cacheKey);
     if (cachedRoute) return cachedRoute;
@@ -584,11 +625,14 @@ export const getRoute = async (waypoints, options = {}) => {
     const coordinates = formatCoordinates(waypoints);
     let routeData = null;
     let lastError = null;
+    let orsError = null;
+    let osrmError = null;
 
     if ((provider === 'auto' || provider === 'openrouteservice') && isRoutingConfigured()) {
       try {
         routeData = await getRouteFromOpenRouteService(coordinates, waypoints, profile, options);
       } catch (error) {
+        orsError = error;
         lastError = error;
       }
     }
@@ -597,6 +641,7 @@ export const getRoute = async (waypoints, options = {}) => {
       try {
         routeData = await getRouteFromOSRM(coordinates, waypoints, profile, options);
       } catch (error) {
+        osrmError = error;
         lastError = error;
       }
     }
@@ -609,20 +654,35 @@ export const getRoute = async (waypoints, options = {}) => {
           );
         }
 
-        const originCountry = normalizeCountry(options.originCountry);
-        const destinationCountry = normalizeCountry(options.destinationCountry);
-        const sameCountry = Boolean(
-          originCountry
-          && destinationCountry
-          && originCountry === destinationCountry
-        );
-        const straightLineDistance = getWaypointChainDistanceMeters(waypoints);
-        if (sameCountry || straightLineDistance <= MAX_LOCAL_ESTIMATED_FALLBACK_DISTANCE_METERS) {
-          routeData = createEstimatedRouteFallback(waypoints, profile, options);
-        } else {
-          throw new Error(
-            'No direct road route found. This trip likely needs a flight or ferry for part of the journey.'
+        if (allowEstimatedFallback) {
+          const originCountry = normalizeCountry(options.originCountry);
+          const destinationCountry = normalizeCountry(options.destinationCountry);
+          const sameCountry = Boolean(
+            originCountry
+            && destinationCountry
+            && originCountry === destinationCountry
           );
+          const straightLineDistance = getWaypointChainDistanceMeters(waypoints);
+          if (
+            allowEstimatedFallbackAnyDistance
+            || sameCountry
+            || straightLineDistance <= MAX_LOCAL_ESTIMATED_FALLBACK_DISTANCE_METERS
+          ) {
+            routeData = createEstimatedRouteFallback(waypoints, profile, options);
+          } else {
+            throw new Error(
+              'No direct road route found. This trip likely needs a flight or ferry for part of the journey.'
+            );
+          }
+        } else {
+          const preferredError = orsError || osrmError || lastError;
+          const providerMessage = preferredError?.response?.data?.error?.message
+            || preferredError?.response?.data?.message
+            || preferredError?.message;
+          if (providerMessage) {
+            throw new Error(providerMessage);
+          }
+          throw new Error('Unable to fetch road route right now. Please check routing connectivity and try again.');
         }
       } else if (lastError?.message) {
         throw lastError;
@@ -636,6 +696,9 @@ export const getRoute = async (waypoints, options = {}) => {
     return routeData;
   } catch (error) {
     const message = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || 'Routing failed';
+    if (error?.response?.data) {
+      console.error('Routing provider response:', error.response.data);
+    }
     console.error('Routing Error:', message);
     throw {
       success: false,
