@@ -18,6 +18,11 @@ class AIService {
     this.openaiMaxOutputTokens = Number(API_CONFIG.OPENAI?.MAX_OUTPUT_TOKENS || 7000);
     this.hasOpenAIAccess = Boolean(this.openaiKey);
 
+    this.openRouterKey = (API_CONFIG.OPENROUTER?.API_KEY || '').trim();
+    this.openRouterBaseUrl = API_CONFIG.OPENROUTER?.BASE_URL || 'https://openrouter.ai/api/v1';
+    this.openRouterModel = API_CONFIG.OPENROUTER?.MODEL || 'openrouter/free';
+    this.hasOpenRouterAccess = Boolean(this.openRouterKey);
+
     this.groqKey = (API_CONFIG.GROQ?.API_KEY || '').trim();
     this.groqBaseUrl = API_CONFIG.GROQ?.BASE_URL || 'https://api.groq.com/openai/v1';
     this.groqModel = API_CONFIG.GROQ?.MODEL || 'llama-3.1-8b-instant';
@@ -81,6 +86,7 @@ class AIService {
     temperature = 0.7,
     maxOutputTokens = 1200,
     responseMimeType,
+    thinkingBudget,
     timeoutMs,
   }) {
     if (!this.hasGeminiAccess) {
@@ -106,6 +112,11 @@ class AIService {
     };
     if (responseMimeType) {
       generationConfig.responseMimeType = responseMimeType;
+    }
+    if (Number.isFinite(Number(thinkingBudget)) && Number(thinkingBudget) >= 0) {
+      generationConfig.thinkingConfig = {
+        thinkingBudget: Math.floor(Number(thinkingBudget)),
+      };
     }
 
     const requestBody = {
@@ -182,6 +193,48 @@ class AIService {
     );
 
     return this.extractOpenAIOutputText(response.data);
+  }
+
+  async callOpenRouterChat({
+    prompt,
+    model,
+    temperature = 0.3,
+    maxTokens = 2200,
+    responseFormat = 'json_object',
+  }) {
+    if (!this.hasOpenRouterAccess) {
+      throw new Error('OpenRouter API key is missing');
+    }
+
+    const requestBody = {
+      model: model || this.openRouterModel,
+      messages: [
+        { role: 'system', content: 'Respond with valid JSON only.' },
+        { role: 'user', content: prompt },
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    };
+
+    if (responseFormat === 'json_object') {
+      requestBody.response_format = { type: 'json_object' };
+    }
+
+    const response = await axios.post(
+      `${this.openRouterBaseUrl}/chat/completions`,
+      requestBody,
+      {
+        timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 18000),
+        headers: {
+          Authorization: `Bearer ${this.openRouterKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.APP_PUBLIC_URL || 'http://localhost:5173',
+          'X-Title': process.env.APP_NAME || 'Travel Platform',
+        },
+      }
+    );
+
+    return response.data?.choices?.[0]?.message?.content || '';
   }
 
   async callGroqChat({

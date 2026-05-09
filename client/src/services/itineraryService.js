@@ -5,6 +5,36 @@ export const generateItinerary = async (payload) => {
   return response.data;
 };
 
+export const getItineraryPreferences = async () => {
+  const response = await api.get('/itinerary/preferences');
+  return response.data;
+};
+
+export const listSavedItineraries = async () => {
+  const response = await api.get('/itinerary/saved');
+  return response.data;
+};
+
+export const getSavedItineraryById = async (id) => {
+  const response = await api.get(`/itinerary/saved/${id}`);
+  return response.data;
+};
+
+export const saveGeneratedItinerary = async (payload) => {
+  const response = await api.post('/itinerary/saved', payload);
+  return response.data;
+};
+
+export const updateSavedItinerary = async (id, payload) => {
+  const response = await api.put(`/itinerary/saved/${id}`, payload);
+  return response.data;
+};
+
+export const deleteSavedItinerary = async (id) => {
+  const response = await api.delete(`/itinerary/saved/${id}`);
+  return response.data;
+};
+
 export const downloadItineraryPdf = async ({ itinerary, tripRequest }) => {
   const response = await api.post(
     '/itinerary/pdf',

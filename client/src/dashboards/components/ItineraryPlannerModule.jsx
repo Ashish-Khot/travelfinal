@@ -1,1054 +1,1717 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Alert,
-  Avatar,
-  AvatarGroup,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Checkbox,
-  Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  Drawer,
-  IconButton,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Paper,
-  Snackbar,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, CircularProgress, Snackbar } from '@mui/material';
+import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
+import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
+import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import HotelRoundedIcon from '@mui/icons-material/HotelRounded';
+import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
+import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
-import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
-import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
-import AccessTimeRoundedIcon from '@mui/icons-material/AccessTimeRounded';
-import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
-import DirectionsWalkRoundedIcon from '@mui/icons-material/DirectionsWalkRounded';
-import DirectionsCarRoundedIcon from '@mui/icons-material/DirectionsCarRounded';
-import TrainRoundedIcon from '@mui/icons-material/TrainRounded';
-import LocalTaxiRoundedIcon from '@mui/icons-material/LocalTaxiRounded';
-import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
-import CloudRoundedIcon from '@mui/icons-material/CloudRounded';
-import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import ItineraryRouteMap from './ItineraryRouteMap';
-import { jsPDF } from 'jspdf';
+import {
+  deleteSavedItinerary,
+  downloadItineraryPdf,
+  generateItinerary,
+  getItineraryPreferences,
+  getSavedItineraryById,
+  listSavedItineraries,
+  saveGeneratedItinerary,
+  updateSavedItinerary,
+} from '../../services/itineraryService';
+import { isUnsplashConfigured, searchUnsplashPlacePhotos } from '../../services/unsplashService';
+import './ItineraryPlannerModule.css';
 
-const itineraryMock = {
-  tripTitle: 'Tokyo Adventure',
-  city: 'Tokyo, Japan',
-  dateLabel: 'Oct 15 - Oct 22, 2026',
-  travelers: [
-    { name: 'Aarav', avatar: 'https://i.pravatar.cc/120?img=11' },
-    { name: 'Meera', avatar: 'https://i.pravatar.cc/120?img=32' },
-    { name: 'Kaito', avatar: 'https://i.pravatar.cc/120?img=14' },
-  ],
-  weather: {
-    currentTempC: 23,
-    condition: 'Partly Cloudy',
-    minTempC: 19,
-    maxTempC: 26,
-    humidity: 63,
-    rainChance: 25,
-  },
-  budget: {
-    total: 185000,
-    spent: 114200,
-    categories: [
-      { label: 'Stay', amount: 52000, color: '#0f766e' },
-      { label: 'Food', amount: 24600, color: '#f97316' },
-      { label: 'Transport', amount: 18400, color: '#2563eb' },
-      { label: 'Tickets', amount: 19200, color: '#7c3aed' },
-    ],
-  },
-  checklist: [
-    { id: 'passport', label: 'Passport + visa copy' },
-    { id: 'sim', label: 'International SIM / eSIM' },
-    { id: 'insurance', label: 'Travel insurance PDF' },
-    { id: 'cards', label: 'Cards + 30,000 JPY cash' },
-    { id: 'adapter', label: 'Universal adapter + power bank' },
-  ],
-  gallery: [
-    'https://images.unsplash.com/photo-1536098561742-ca998e48cbcc?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1526481280695-3c4691f13b8d?auto=format&fit=crop&w=900&q=80',
-    'https://images.unsplash.com/photo-1549693578-d683be217e58?auto=format&fit=crop&w=900&q=80',
-  ],
-  days: [
-    {
-      id: 'day-1',
-      label: 'Day 1',
-      date: 'Thu, Oct 15',
-      summary: {
-        distanceKm: 15.8,
-        movingTime: '1h 45m',
-        pace: 'Balanced',
-      },
-      stops: [
-        {
-          id: 'sensoji',
-          name: 'Senso-ji Temple',
-          category: 'Attraction',
-          start: '09:00',
-          end: '10:45',
-          duration: '1h 45m',
-          openingHours: '06:00 - 17:00',
-          ticketCost: 0,
-          estimatedSpend: 900,
-          address: '2-3-1 Asakusa, Taito City',
-          description:
-            'Tokyo oldest Buddhist temple with a vibrant shopping street. Ideal for cultural walk, temple rituals, and early photography.',
-          bestFor: ['Culture', 'Photography', 'Souvenirs'],
-          crowdTip: 'Arrive before 09:00 for lighter crowd near main gate.',
-          lat: 35.7148,
-          lon: 139.7967,
-          image: 'https://images.unsplash.com/photo-1532236204992-f5e85c024202?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Walk',
-            time: '0m',
-            distanceKm: 0,
-          },
-        },
-        {
-          id: 'tokyo-skytree',
-          name: 'Tokyo Skytree',
-          category: 'Viewpoint',
-          start: '11:20',
-          end: '13:00',
-          duration: '1h 40m',
-          openingHours: '10:00 - 21:00',
-          ticketCost: 2100,
-          estimatedSpend: 2800,
-          address: '1-1-2 Oshiage, Sumida City',
-          description:
-            'Iconic observation tower with panoramic city views and river skyline. Great slot for midday visibility and lunch nearby.',
-          bestFor: ['City View', 'Family', 'Photography'],
-          crowdTip: 'Use online slot booking to skip queue.',
-          lat: 35.7101,
-          lon: 139.8107,
-          image: 'https://images.unsplash.com/photo-1578469645742-46cae010e5d4?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Metro',
-            time: '18m',
-            distanceKm: 3.2,
-          },
-        },
-        {
-          id: 'akihabara',
-          name: 'Akihabara Electric Town',
-          category: 'Shopping',
-          start: '15:00',
-          end: '18:00',
-          duration: '3h 00m',
-          openingHours: '11:00 - 20:00',
-          ticketCost: 0,
-          estimatedSpend: 6500,
-          address: 'Sotokanda, Chiyoda City',
-          description:
-            'Anime, gaming, electronics, and themed cafes in one compact district. Flexible time block depending on shopping intensity.',
-          bestFor: ['Shopping', 'Pop Culture', 'Food'],
-          crowdTip: 'Weekday late afternoon is less packed than weekends.',
-          lat: 35.6984,
-          lon: 139.773,
-          image: 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Train',
-            time: '14m',
-            distanceKm: 4.8,
-          },
-        },
-      ],
-    },
-    {
-      id: 'day-2',
-      label: 'Day 2',
-      date: 'Fri, Oct 16',
-      summary: {
-        distanceKm: 10.3,
-        movingTime: '1h 15m',
-        pace: 'Relaxed',
-      },
-      stops: [
-        {
-          id: 'meiji',
-          name: 'Meiji Jingu Shrine',
-          category: 'Nature',
-          start: '08:30',
-          end: '10:00',
-          duration: '1h 30m',
-          openingHours: 'Sunrise - Sunset',
-          ticketCost: 0,
-          estimatedSpend: 700,
-          address: '1-1 Yoyogikamizonocho, Shibuya',
-          description:
-            'Forest shrine pathway gives a calm start to a city day. Good for morning reflections and slower walking pace.',
-          bestFor: ['Spiritual', 'Nature', 'Quiet Walk'],
-          crowdTip: 'Enter from South Gate for scenic walk route.',
-          lat: 35.6764,
-          lon: 139.6993,
-          image: 'https://images.unsplash.com/photo-1571055107559-3e67626fa8be?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Taxi',
-            time: '22m',
-            distanceKm: 6.3,
-          },
-        },
-        {
-          id: 'shibuya',
-          name: 'Shibuya Crossing',
-          category: 'City Walk',
-          start: '10:30',
-          end: '12:00',
-          duration: '1h 30m',
-          openingHours: 'Open 24h',
-          ticketCost: 0,
-          estimatedSpend: 1600,
-          address: 'Shibuya Scramble Crossing',
-          description:
-            'One of the busiest pedestrian crossings in the world with food and shopping clusters around every lane.',
-          bestFor: ['Street Life', 'Short Walk', 'Cafe Stops'],
-          crowdTip: 'Use Magnet rooftop for top crossing photo.',
-          lat: 35.6595,
-          lon: 139.7005,
-          image: 'https://images.unsplash.com/photo-1492571350019-22de08371fd3?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Walk',
-            time: '18m',
-            distanceKm: 1.3,
-          },
-        },
-        {
-          id: 'teamlab',
-          name: 'TeamLab Planets',
-          category: 'Experience',
-          start: '14:30',
-          end: '16:30',
-          duration: '2h 00m',
-          openingHours: '09:00 - 21:00',
-          ticketCost: 3800,
-          estimatedSpend: 4700,
-          address: '6 Chome-1-16 Toyosu, Koto City',
-          description:
-            'Immersive digital art museum with interactive sensory zones. Works best with pre-booked entry slots.',
-          bestFor: ['Art', 'Indoor', 'Experience'],
-          crowdTip: 'Carry shorts or quick-dry clothing for water section.',
-          lat: 35.6492,
-          lon: 139.7897,
-          image: 'https://images.unsplash.com/photo-1489667897015-bf7a9e45c284?auto=format&fit=crop&w=900&q=80',
-          transportFromPrev: {
-            mode: 'Metro',
-            time: '25m',
-            distanceKm: 8.4,
-          },
-        },
-      ],
-    },
-  ],
+const plannerSteps = [
+  { id: 'destination', title: 'Destination' },
+  { id: 'dates', title: 'Dates' },
+  { id: 'interests', title: 'Interests' },
+  { id: 'style', title: 'Budget & Style' },
+  { id: 'travelers', title: 'Travelers & Preferences' },
+];
+
+const loadingFlowSteps = [
+  'Finding top attractions for your dates',
+  'Optimizing day-by-day routes',
+  'Estimating realistic budget ranges',
+  'Preparing weather snapshots',
+  'Compiling your final itinerary',
+];
+
+const interestOptions = [
+  'Adventure',
+  'Nature',
+  'Beaches',
+  'Food',
+  'Historical',
+  'Shopping',
+  'Nightlife',
+  'Relaxation',
+  'Trekking',
+  'Photography',
+];
+
+const budgetOptions = [
+  { id: 'low', label: 'Budget', detail: 'Value-focused stays and local experiences' },
+  { id: 'mid', label: 'Mid-range', detail: 'Comfortable travel with balanced spending' },
+  { id: 'high', label: 'Luxury', detail: 'Premium stays and curated experiences' },
+];
+
+const travelStyles = [
+  { id: 'relaxed', label: 'Relaxed', detail: 'Fewer transfers, slower pace' },
+  { id: 'balanced', label: 'Balanced', detail: 'Good mix of activity and free time' },
+  { id: 'packed', label: 'Packed', detail: 'Maximum experiences every day' },
+];
+
+const hotelTypes = ['Boutique', 'Resort', 'Business', 'Homestay', 'Eco Stay'];
+const foodTypes = ['Veg-friendly', 'Street Food', 'Fine Dining', 'Local Cuisine', 'Mixed'];
+const accessibilityOptions = ['Standard', 'Wheelchair Friendly', 'Low Mobility', 'Senior Friendly'];
+const transportOptions = ['walk', 'bike', 'car', 'train', 'metro', 'taxi'];
+
+const budgetCaps = {
+  low: 60000,
+  mid: 130000,
+  high: 260000,
 };
 
-const transportIcons = {
-  Walk: DirectionsWalkRoundedIcon,
-  Metro: TrainRoundedIcon,
-  Train: TrainRoundedIcon,
-  Taxi: LocalTaxiRoundedIcon,
-  Car: DirectionsCarRoundedIcon,
+const tripStyleToPace = {
+  relaxed: 'relaxed',
+  balanced: 'balanced',
+  packed: 'fast',
 };
 
-const currency = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
+const paceToTripStyle = {
+  relaxed: 'relaxed',
+  balanced: 'balanced',
+  fast: 'packed',
+};
 
-const formatINR = (value) => currency.format(value || 0);
+const fallbackGalleryImages = [
+  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&w=800&q=80',
+  'https://images.unsplash.com/photo-1526772662000-3f88f10405ff?auto=format&fit=crop&w=800&q=80',
+];
+
+const trendingDestinations = ['Goa', 'Bali', 'Kyoto', 'Swiss Alps', 'Dubai', 'Singapore', 'Istanbul'];
+
+const weatherCodeLabel = (code) => {
+  const numericCode = Number(code);
+  if (numericCode === 0) return 'Clear';
+  if ([1, 2, 3].includes(numericCode)) return 'Partly Cloudy';
+  if ([45, 48].includes(numericCode)) return 'Foggy';
+  if ([51, 53, 55, 56, 57].includes(numericCode)) return 'Drizzle';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(numericCode)) return 'Rainy';
+  if ([71, 73, 75, 77, 85, 86].includes(numericCode)) return 'Snow';
+  if ([95, 96, 99].includes(numericCode)) return 'Storm';
+  return 'Mild';
+};
+
+const safeCurrency = (code) => {
+  const value = String(code || '').toUpperCase();
+  return /^[A-Z]{3}$/.test(value) ? value : 'INR';
+};
+
+const formatMoney = (value, currencyCode = 'INR') => {
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: safeCurrency(currencyCode),
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+  } catch {
+    return `INR ${Math.round(Number(value || 0))}`;
+  }
+};
+
+const normalizeDate = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDateLabel = (startDate, endDate) => {
+  if (!startDate && !endDate) return 'Dates not selected';
+  const options = { day: '2-digit', month: 'short', year: 'numeric' };
+  const start = startDate ? new Date(startDate) : null;
+  const end = endDate ? new Date(endDate) : null;
+  const startLabel = start && !Number.isNaN(start.getTime()) ? start.toLocaleDateString('en-IN', options) : '-';
+  const endLabel = end && !Number.isNaN(end.getTime()) ? end.toLocaleDateString('en-IN', options) : '-';
+  return `${startLabel} - ${endLabel}`;
+};
+
+const calcTripDays = (startDate, endDate) => {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+};
+
+const normalizeLatLng = (location) => {
+  if (!location || typeof location !== 'object') return { lat: null, lon: null };
+  const latCandidate = Number(location.lat ?? (Array.isArray(location.coordinates) ? location.coordinates[1] : null));
+  const lonCandidate = Number(location.lng ?? location.lon ?? (Array.isArray(location.coordinates) ? location.coordinates[0] : null));
+  return {
+    lat: Number.isFinite(latCandidate) ? latCandidate : null,
+    lon: Number.isFinite(lonCandidate) ? lonCandidate : null,
+  };
+};
+
+const toTimeMinutes = (timeText) => {
+  const match = String(timeText || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hh = Number(match[1]);
+  const mm = Number(match[2]);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return hh * 60 + mm;
+};
+
+const diffDuration = (start, end) => {
+  const startMinutes = toTimeMinutes(start);
+  const endMinutes = toTimeMinutes(end);
+  if (startMinutes == null || endMinutes == null || endMinutes <= startMinutes) return '';
+  const minutes = endMinutes - startMinutes;
+  const hrs = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  if (!hrs) return `${rem}m`;
+  return `${hrs}h ${rem}m`;
+};
+
+const getTimeSegment = (timeValue) => {
+  const minutes = toTimeMinutes(timeValue);
+  if (minutes == null) return 'Daytime';
+  if (minutes < 720) return 'Morning';
+  if (minutes < 1020) return 'Afternoon';
+  if (minutes < 1260) return 'Evening';
+  return 'Night';
+};
+
+const inferStopCost = (stop) => {
+  const explicit = Number(stop?.estimatedCost);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const category = String(stop?.category || '').toLowerCase();
+  if (category.includes('food')) return 1200;
+  if (category.includes('shopping')) return 2500;
+  if (category.includes('nature')) return 800;
+  if (category.includes('culture')) return 1000;
+  return 1500;
+};
+
+const fallbackChecklist = (destination) => {
+  const safeDestination = destination || 'destination';
+  return [
+    { label: `Passport and travel documents for ${safeDestination}`, done: false },
+    { label: 'Accommodation confirmations and tickets', done: false },
+    { label: 'Local transport wallet and backup payment method', done: false },
+    { label: 'Offline map and emergency contacts', done: false },
+    { label: 'Weather-ready packing essentials', done: false },
+  ];
+};
+
+const weatherTipsFromCondition = (weatherCondition = 'Mild') => {
+  const normalized = String(weatherCondition || '').toLowerCase();
+  if (normalized.includes('rain')) {
+    return ['Carry a light rain jacket', 'Keep indoor options for afternoons', 'Use waterproof day bags'];
+  }
+  if (normalized.includes('storm')) {
+    return ['Keep transfer buffer time', 'Monitor local advisories', 'Prefer covered transport'];
+  }
+  if (normalized.includes('clear') || normalized.includes('sun')) {
+    return ['Pack sunscreen and sunglasses', 'Start outdoor plans early', 'Stay hydrated during transfers'];
+  }
+  if (normalized.includes('cloud')) {
+    return ['Carry a light evening layer', 'Great weather for city walks', 'Keep flexible sunset plans'];
+  }
+  return ['Carry versatile layers', 'Use comfortable walking shoes', 'Review daily weather before heading out'];
+};
+
+const buildPayloadFromForm = (form) => {
+  const adults = Number(form.travelers.adults || 0);
+  const children = Number(form.travelers.children || 0);
+  const travelersCount = Math.max(1, adults + children);
+  const detailBlocks = [
+    form.specialRequirements,
+    `Hotel type: ${form.hotelType}`,
+    `Food preference: ${form.foodPreference}`,
+    `Accessibility: ${form.accessibility}`,
+    `Rooms: ${form.travelers.rooms}`,
+  ].filter(Boolean);
+
+  const dailyWindow =
+    form.tripStyle === 'packed'
+      ? { start: '08:00', end: '22:00' }
+      : form.tripStyle === 'relaxed'
+      ? { start: '09:30', end: '20:00' }
+      : { start: '09:00', end: '21:00' };
+
+  return {
+    destination: String(form.destination || '').trim(),
+    startDate: normalizeDate(form.startDate),
+    endDate: normalizeDate(form.endDate),
+    interests: Array.isArray(form.interests) ? form.interests.map((item) => item.toLowerCase()) : [],
+    budget: form.budget,
+    pace: tripStyleToPace[form.tripStyle] || 'balanced',
+    transportMode: form.transportPreference,
+    dailyStartTime: dailyWindow.start,
+    dailyEndTime: dailyWindow.end,
+    travelers: travelersCount,
+    specialRequirements: detailBlocks.join(' | '),
+    currency: String(form.currency || 'INR').trim().toUpperCase(),
+  };
+};
+
+const buildPlanState = ({
+  id = '',
+  title = '',
+  itinerary = {},
+  tripRequest = {},
+  notes = '',
+  checklist = [],
+  saved = false,
+  createdAt = '',
+  updatedAt = '',
+}) => {
+  const destination = String(itinerary?.destination || tripRequest?.destination || 'Untitled destination').trim();
+  const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
+
+  const normalizedDays = days.map((day, dayIndex) => {
+    const dayNumber = Number(day?.day || dayIndex + 1);
+    const stops = Array.isArray(day?.stops) ? day.stops : [];
+
+    let distanceKm = 0;
+    let travelMinutes = 0;
+    let dayBudget = 0;
+
+    const normalizedStops = stops.map((stop, stopIndex) => {
+      const stopId = String(stop?._id || stop?.id || `day-${dayNumber}-stop-${stopIndex + 1}`);
+      const location = normalizeLatLng(stop?.location);
+      const travel = stop?.travelFromPrevious || null;
+      const travelDistance = Number(travel?.distanceKm || 0);
+      const travelTime = Number(travel?.estimatedMinutes || 0);
+      const estimatedSpend = inferStopCost(stop);
+
+      if (Number.isFinite(travelDistance) && travelDistance > 0) distanceKm += travelDistance;
+      if (Number.isFinite(travelTime) && travelTime > 0) travelMinutes += travelTime;
+      dayBudget += estimatedSpend;
+
+      return {
+        id: stopId,
+        name: String(stop?.name || `Stop ${stopIndex + 1}`),
+        category: String(stop?.category || 'sightseeing'),
+        address: String(stop?.address || ''),
+        description: String(stop?.description || ''),
+        start: String(stop?.arrivalTime || stop?.startTime || ''),
+        end: String(stop?.departureTime || stop?.endTime || ''),
+        duration: stop?.durationMinutes
+          ? `${Number(stop.durationMinutes)}m`
+          : diffDuration(stop?.arrivalTime, stop?.departureTime),
+        openingHours: String(stop?.openingHours || ''),
+        estimatedSpend,
+        rating: Number(stop?.rating || 0),
+        image: String(stop?.image || ''),
+        bestFor: Array.isArray(stop?.bestFor) ? stop.bestFor : [],
+        crowdTip: String(stop?.crowdTip || ''),
+        lat: location.lat,
+        lon: location.lon,
+        segment: getTimeSegment(stop?.arrivalTime),
+        transportFromPrev: travel
+          ? {
+              mode: String(travel.mode || tripRequest?.transportMode || 'car'),
+              time: Number.isFinite(Number(travel.estimatedMinutes))
+                ? `${Math.round(Number(travel.estimatedMinutes))}m`
+                : '',
+              distanceKm: Number.isFinite(Number(travel.distanceKm)) ? Number(travel.distanceKm) : 0,
+              estimatedMinutes: Number.isFinite(Number(travel.estimatedMinutes))
+                ? Number(travel.estimatedMinutes)
+                : 0,
+            }
+          : null,
+      };
+    });
+
+    const summaryDistance = Number(day?.summary?.distanceKm ?? distanceKm ?? 0);
+    const summaryMinutes = Number(day?.summary?.movingTimeMinutes ?? travelMinutes ?? 0);
+    const pace = normalizedStops.length >= 5 ? 'Packed' : normalizedStops.length <= 2 ? 'Relaxed' : 'Balanced';
+
+    return {
+      id: `day-${dayNumber}`,
+      dayNumber,
+      label: `Day ${dayNumber}`,
+      date: (() => {
+        const start = tripRequest?.startDate ? new Date(tripRequest.startDate) : null;
+        if (!start || Number.isNaN(start.getTime())) return '';
+        const next = new Date(start);
+        next.setDate(start.getDate() + dayIndex);
+        return next.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
+      })(),
+      title: String(day?.title || `Day ${dayNumber}`),
+      summary: {
+        distanceKm: Number.isFinite(summaryDistance) ? Number(summaryDistance.toFixed(1)) : 0,
+        movingTime: summaryMinutes > 0 ? `${Math.floor(summaryMinutes / 60)}h ${summaryMinutes % 60}m` : '0h 0m',
+        pace,
+        estimatedSpend: dayBudget,
+      },
+      stops: normalizedStops,
+    };
+  });
+
+  return {
+    id,
+    saved,
+    title: title || `${destination} Itinerary`,
+    destination,
+    dateLabel: formatDateLabel(tripRequest?.startDate, tripRequest?.endDate),
+    tripRequest,
+    itineraryRaw: itinerary,
+    notes: String(notes || ''),
+    checklist: Array.isArray(checklist) && checklist.length ? checklist : fallbackChecklist(destination),
+    days: normalizedDays,
+    createdAt,
+    updatedAt,
+    summary: String(itinerary?.summary || '').trim(),
+  };
+};
 
 export default function ItineraryPlannerModule() {
-  const [selectedDayId, setSelectedDayId] = useState(itineraryMock.days[0].id);
-  const [selectedStop, setSelectedStop] = useState(itineraryMock.days[0].stops[0]);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [notes, setNotes] = useState('Book TeamLab slots at least 1 week before travel date.');
-  const [checklistState, setChecklistState] = useState({
-    passport: true,
-    sim: false,
-    insurance: true,
-    cards: false,
-    adapter: false,
+  const [form, setForm] = useState({
+    destination: '',
+    startDate: '',
+    endDate: '',
+    interests: ['Beaches', 'Food'],
+    budget: 'mid',
+    tripStyle: 'balanced',
+    travelers: { adults: 2, children: 0, rooms: 1 },
+    transportPreference: 'car',
+    hotelType: 'Boutique',
+    foodPreference: 'Mixed',
+    accessibility: 'Standard',
+    specialRequirements: '',
+    currency: 'INR',
   });
-  const [notification, setNotification] = useState('');
-  const [showGallery, setShowGallery] = useState(false);
 
-  const selectedDay = useMemo(
-    () => itineraryMock.days.find((day) => day.id === selectedDayId) || itineraryMock.days[0],
-    [selectedDayId]
-  );
+  const [profileInfo, setProfileInfo] = useState({ name: '', country: '', interests: [] });
+  const [recentDestinations, setRecentDestinations] = useState([]);
+  const [savedItems, setSavedItems] = useState([]);
+  const [selectedSavedId, setSelectedSavedId] = useState('');
+  const [currentPlan, setCurrentPlan] = useState(null);
+  const [selectedDayId, setSelectedDayId] = useState('');
+  const [selectedStop, setSelectedStop] = useState(null);
+  const [openDayIds, setOpenDayIds] = useState([]);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [loadingInit, setLoadingInit] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [loadingGenerate, setLoadingGenerate] = useState(false);
+  const [loadingSave, setLoadingSave] = useState(false);
+  const [loadingPhase, setLoadingPhase] = useState(0);
+  const [loadingProgress, setLoadingProgress] = useState(8);
+  const [weather, setWeather] = useState(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [placePhotos, setPlacePhotos] = useState({});
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [notification, setNotification] = useState({ message: '', severity: 'success' });
 
-  const totalChecklist = itineraryMock.checklist.length;
-  const completedChecklist = Object.values(checklistState).filter(Boolean).length;
-  const budgetPct = Math.min(
-    100,
-    Math.round((itineraryMock.budget.spent / itineraryMock.budget.total) * 100)
-  );
+  const selectedDay = useMemo(() => {
+    if (!currentPlan?.days?.length) return null;
+    return currentPlan.days.find((day) => day.id === selectedDayId) || currentPlan.days[0];
+  }, [currentPlan, selectedDayId]);
 
-  const openStopDetails = (stop) => {
-    setSelectedStop(stop);
-    setDetailsOpen(true);
+  const allStops = useMemo(() => {
+    if (!currentPlan?.days?.length) return [];
+    return currentPlan.days.flatMap((day) => (Array.isArray(day.stops) ? day.stops : []));
+  }, [currentPlan]);
+
+  const allStopsWithDay = useMemo(() => {
+    if (!currentPlan?.days?.length) return [];
+    return currentPlan.days.flatMap((day) =>
+      (Array.isArray(day.stops) ? day.stops : []).map((stop) => ({
+        ...stop,
+        dayLabel: day.label,
+      }))
+    );
+  }, [currentPlan]);
+
+  const totalEstimated = useMemo(() => {
+    return allStops.reduce((sum, stop) => sum + Number(stop.estimatedSpend || 0), 0);
+  }, [allStops]);
+
+  const budgetLevel = currentPlan?.tripRequest?.budget || form.budget;
+  const budgetTarget = budgetCaps[budgetLevel] || budgetCaps.mid;
+  const budgetPercent = budgetTarget > 0 ? Math.min(100, Math.round((totalEstimated / budgetTarget) * 100)) : 0;
+
+  const budgetRows = useMemo(() => {
+    const transport = allStops.reduce((sum, stop) => {
+      const distance = Number(stop?.transportFromPrev?.distanceKm || 0);
+      return sum + distance * 35;
+    }, 0);
+    const activities = totalEstimated * 0.4;
+    const stay = totalEstimated * 0.35;
+    const food = totalEstimated * 0.25;
+    return [
+      { name: 'Hotels', value: Math.max(1, Math.round(stay)), colorClass: 'budgetHotels' },
+      { name: 'Food', value: Math.max(1, Math.round(food)), colorClass: 'budgetFood' },
+      { name: 'Transport', value: Math.max(1, Math.round(transport || totalEstimated * 0.15)), colorClass: 'budgetTransport' },
+      { name: 'Activities', value: Math.max(1, Math.round(activities)), colorClass: 'budgetActivities' },
+    ];
+  }, [allStops, totalEstimated]);
+
+  const completedChecklist = currentPlan?.checklist?.filter((item) => item.done).length || 0;
+  const checklistTotal = currentPlan?.checklist?.length || 0;
+
+  const placeHighlights = useMemo(() => {
+    const used = new Set();
+    return allStopsWithDay
+      .filter((stop) => {
+        const key = `${String(stop.name || '').trim().toLowerCase()}|${stop.dayLabel}`;
+        if (!stop.name || used.has(key)) return false;
+        used.add(key);
+        return true;
+      })
+      .slice(0, 12);
+  }, [allStopsWithDay]);
+
+  const weatherTips = useMemo(() => weatherTipsFromCondition(weather?.condition), [weather?.condition]);
+  const tripDays = calcTripDays(form.startDate, form.endDate);
+
+  const notify = (message, severity = 'success') => {
+    setNotification({ message, severity });
   };
 
-  const onMapMarkerClick = (stop) => {
-    setSelectedStop(stop);
-    setDetailsOpen(true);
+  const refreshSavedItems = async (autoSelectId = '') => {
+    const response = await listSavedItineraries();
+    const items = Array.isArray(response?.items) ? response.items : [];
+    setSavedItems(items);
+
+    if (autoSelectId) {
+      setSelectedSavedId(autoSelectId);
+      return autoSelectId;
+    }
+
+    if (!items.length) {
+      setSelectedSavedId('');
+      return '';
+    }
+
+    if (selectedSavedId && items.some((item) => item._id === selectedSavedId)) {
+      return selectedSavedId;
+    }
+
+    setSelectedSavedId(items[0]._id);
+    return items[0]._id;
   };
 
-  const toggleChecklist = (id) => {
-    setChecklistState((prev) => ({ ...prev, [id]: !prev[id] }));
+  const hydrateFormFromTripRequest = (tripRequest = {}) => {
+    const pace = String(tripRequest.pace || 'balanced').toLowerCase();
+    const travelers = Math.max(1, Number(tripRequest.travelers || 1));
+
+    setForm((prev) => ({
+      ...prev,
+      destination: tripRequest.destination || prev.destination,
+      startDate: normalizeDate(tripRequest.startDate) || prev.startDate,
+      endDate: normalizeDate(tripRequest.endDate) || prev.endDate,
+      interests: Array.isArray(tripRequest.interests) && tripRequest.interests.length
+        ? tripRequest.interests.map((item) => String(item).replace(/^\w/, (char) => char.toUpperCase()))
+        : prev.interests,
+      budget: tripRequest.budget || prev.budget,
+      tripStyle: paceToTripStyle[pace] || pace || prev.tripStyle,
+      transportPreference: tripRequest.transportMode || prev.transportPreference,
+      travelers: {
+        adults: travelers,
+        children: 0,
+        rooms: Math.max(1, Math.ceil(travelers / 2)),
+      },
+      currency: tripRequest.currency || prev.currency,
+    }));
+  };
+
+  const loadSavedDetail = async (id) => {
+    if (!id) return;
+    setLoadingDetail(true);
+    try {
+      const response = await getSavedItineraryById(id);
+      const record = response?.itinerary;
+      if (!record) return;
+
+      const nextPlan = buildPlanState({
+        id: record._id,
+        title: record.title,
+        itinerary: record.itinerary || {},
+        tripRequest: record.tripRequest || {},
+        notes: record.notes,
+        checklist: record.checklist,
+        saved: true,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      });
+
+      setCurrentPlan(nextPlan);
+      setSelectedSavedId(id);
+      setSelectedDayId(nextPlan.days[0]?.id || '');
+      setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
+      setOpenDayIds(nextPlan.days[0] ? [nextPlan.days[0].id] : []);
+      hydrateFormFromTripRequest(nextPlan.tripRequest || {});
+      notify('Saved itinerary loaded.');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Unable to load itinerary details.', 'error');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      setLoadingInit(true);
+      try {
+        const pref = await getItineraryPreferences();
+        const interests = Array.isArray(pref?.profile?.interests) ? pref.profile.interests : [];
+        const recent = Array.isArray(pref?.suggestions?.recentDestinations)
+          ? pref.suggestions.recentDestinations
+          : [];
+
+        setProfileInfo({
+          name: pref?.profile?.name || '',
+          country: pref?.profile?.country || '',
+          interests,
+        });
+        setRecentDestinations(recent);
+
+        setForm((prev) => ({
+          ...prev,
+          destination: prev.destination || recent[0] || '',
+          interests: prev.interests.length
+            ? prev.interests
+            : interests.slice(0, 3).map((item) => String(item).replace(/^\w/, (char) => char.toUpperCase())),
+        }));
+
+        await refreshSavedItems();
+      } catch (error) {
+        notify(error?.response?.data?.message || 'Unable to initialize itinerary planner.', 'error');
+      } finally {
+        setLoadingInit(false);
+      }
+    };
+
+    loadInitialData();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!loadingGenerate) {
+      setLoadingPhase(0);
+      setLoadingProgress(8);
+      return;
+    }
+
+    const phaseTimer = setInterval(() => {
+      setLoadingPhase((prev) => (prev < loadingFlowSteps.length - 1 ? prev + 1 : prev));
+    }, 1700);
+
+    const progressTimer = setInterval(() => {
+      setLoadingProgress((prev) => Math.min(95, prev + 3));
+    }, 230);
+
+    return () => {
+      clearInterval(phaseTimer);
+      clearInterval(progressTimer);
+    };
+  }, [loadingGenerate]);
+
+  useEffect(() => {
+    const leadStop = selectedDay?.stops?.find(
+      (stop) => Number.isFinite(Number(stop.lat)) && Number.isFinite(Number(stop.lon))
+    );
+    if (!leadStop?.lat || !leadStop?.lon) {
+      setWeather(null);
+      return;
+    }
+
+    const fetchWeather = async () => {
+      setWeatherLoading(true);
+      try {
+        const forecastDays = Math.max(1, Math.min(7, currentPlan?.days?.length || 3));
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${leadStop.lat}&longitude=${leadStop.lon}&current=temperature_2m,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=${forecastDays}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        const dailyList = Array.from({ length: forecastDays }).map((_, index) => ({
+          date: data?.daily?.time?.[index] || '',
+          max: Math.round(Number(data?.daily?.temperature_2m_max?.[index] || 0)),
+          min: Math.round(Number(data?.daily?.temperature_2m_min?.[index] || 0)),
+          rainChance: Math.round(Number(data?.daily?.precipitation_probability_max?.[index] || 0)),
+          condition: weatherCodeLabel(data?.daily?.weather_code?.[index]),
+        }));
+
+        setWeather({
+          temp: Math.round(Number(data?.current?.temperature_2m || 0)),
+          humidity: Math.round(Number(data?.current?.relative_humidity_2m || 0)),
+          condition: weatherCodeLabel(data?.current?.weather_code),
+          rainChance: dailyList[0]?.rainChance || 0,
+          daily: dailyList,
+        });
+      } catch {
+        setWeather(null);
+      } finally {
+        setWeatherLoading(false);
+      }
+    };
+
+    fetchWeather();
+  }, [selectedDay?.id, selectedDay?.stops, currentPlan?.days?.length]);
+
+  useEffect(() => {
+    if (!currentPlan || !allStops.length) {
+      setPlacePhotos({});
+      return;
+    }
+
+    if (!isUnsplashConfigured()) {
+      return;
+    }
+
+    let active = true;
+    const uniqueQueries = [...new Set(allStops.map((stop) => String(stop.name || '').trim()).filter(Boolean))].slice(0, 10);
+    if (!uniqueQueries.length) return;
+
+    const fetchPlacePhotos = async () => {
+      setPhotosLoading(true);
+      try {
+        const photoResults = await Promise.all(
+          uniqueQueries.map(async (query) => {
+            const photos = await searchUnsplashPlacePhotos(`${query} ${currentPlan.destination}`, 1);
+            return [query, photos[0]?.imageUrl || ''];
+          })
+        );
+        if (!active) return;
+        const photoMap = photoResults.reduce((acc, [query, imageUrl]) => {
+          if (imageUrl) acc[query] = imageUrl;
+          return acc;
+        }, {});
+        setPlacePhotos(photoMap);
+      } finally {
+        if (active) {
+          setPhotosLoading(false);
+        }
+      }
+    };
+
+    fetchPlacePhotos();
+    return () => {
+      active = false;
+    };
+  }, [allStops, currentPlan]);
+
+  const updateField = (key, value) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const adjustTraveler = (key, delta) => {
+    setForm((prev) => {
+      const current = Number(prev.travelers[key] || 0);
+      const nextValue = key === 'rooms' ? Math.max(1, current + delta) : Math.max(0, current + delta);
+      return {
+        ...prev,
+        travelers: {
+          ...prev.travelers,
+          [key]: nextValue,
+        },
+      };
+    });
+  };
+
+  const toggleInterest = (interest) => {
+    setForm((prev) => {
+      const has = prev.interests.includes(interest);
+      if (has) {
+        return {
+          ...prev,
+          interests: prev.interests.filter((item) => item !== interest),
+        };
+      }
+      return {
+        ...prev,
+        interests: [...prev.interests, interest],
+      };
+    });
+  };
+
+  const goStep = (index) => {
+    if (index < 0 || index > plannerSteps.length - 1) return;
+    setCurrentStep(index);
+  };
+
+  const handleGenerate = async () => {
+    const payload = buildPayloadFromForm(form);
+    if (!payload.destination) {
+      notify('Please enter a destination before generating.', 'error');
+      setCurrentStep(0);
+      return;
+    }
+
+    if (!payload.startDate || !payload.endDate) {
+      notify('Please choose your trip start and end dates.', 'error');
+      setCurrentStep(1);
+      return;
+    }
+
+    if (new Date(payload.endDate) < new Date(payload.startDate)) {
+      notify('End date must be after start date.', 'error');
+      setCurrentStep(1);
+      return;
+    }
+
+    setLoadingGenerate(true);
+    try {
+      const response = await generateItinerary(payload);
+      setLoadingProgress(100);
+
+      const nextPlan = buildPlanState({
+        id: '',
+        title: `${payload.destination} Itinerary`,
+        itinerary: response?.itinerary || {},
+        tripRequest: response?.tripRequest || payload,
+        notes: '',
+        checklist: Array.isArray(response?.checklist) ? response.checklist : [],
+        saved: false,
+      });
+
+      setCurrentPlan(nextPlan);
+      setSelectedSavedId('');
+      setSelectedDayId(nextPlan.days[0]?.id || '');
+      setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
+      setOpenDayIds(nextPlan.days[0] ? [nextPlan.days[0].id] : []);
+      notify('Your itinerary is ready.');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Failed to generate itinerary.', 'error');
+    } finally {
+      setLoadingGenerate(false);
+    }
+  };
+
+  const handleSaveCurrent = async () => {
+    if (!currentPlan) return;
+    setLoadingSave(true);
+    try {
+      const response = await saveGeneratedItinerary({
+        title: currentPlan.title,
+        itinerary: currentPlan.itineraryRaw,
+        tripRequest: currentPlan.tripRequest,
+        notes: currentPlan.notes || '',
+        checklist: currentPlan.checklist || [],
+      });
+
+      const savedRecord = response?.itinerary;
+      const savedPlan = buildPlanState({
+        id: savedRecord?._id || '',
+        title: savedRecord?.title,
+        itinerary: savedRecord?.itinerary || currentPlan.itineraryRaw,
+        tripRequest: savedRecord?.tripRequest || currentPlan.tripRequest,
+        notes: savedRecord?.notes || currentPlan.notes,
+        checklist: savedRecord?.checklist || currentPlan.checklist,
+        saved: true,
+        createdAt: savedRecord?.createdAt,
+        updatedAt: savedRecord?.updatedAt,
+      });
+
+      setCurrentPlan(savedPlan);
+      setSelectedSavedId(savedPlan.id);
+      await refreshSavedItems(savedPlan.id);
+      notify('Itinerary saved successfully.');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Unable to save itinerary.', 'error');
+    } finally {
+      setLoadingSave(false);
+    }
+  };
+
+  const handlePersistPlanChanges = async () => {
+    if (!currentPlan?.id) {
+      notify('Save this itinerary first, then update notes/checklist.', 'error');
+      return;
+    }
+
+    setLoadingSave(true);
+    try {
+      const response = await updateSavedItinerary(currentPlan.id, {
+        title: currentPlan.title,
+        notes: currentPlan.notes,
+        checklist: currentPlan.checklist,
+      });
+      const record = response?.itinerary;
+      const nextPlan = buildPlanState({
+        id: record?._id || currentPlan.id,
+        title: record?.title || currentPlan.title,
+        itinerary: record?.itinerary || currentPlan.itineraryRaw,
+        tripRequest: record?.tripRequest || currentPlan.tripRequest,
+        notes: record?.notes || currentPlan.notes,
+        checklist: record?.checklist || currentPlan.checklist,
+        saved: true,
+        createdAt: record?.createdAt || currentPlan.createdAt,
+        updatedAt: record?.updatedAt || currentPlan.updatedAt,
+      });
+
+      setCurrentPlan(nextPlan);
+      await refreshSavedItems(nextPlan.id);
+      notify('Saved itinerary updates.');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Unable to update itinerary.', 'error');
+    } finally {
+      setLoadingSave(false);
+    }
+  };
+
+  const handleDeleteCurrent = async () => {
+    if (!currentPlan?.id) {
+      setCurrentPlan(null);
+      setSelectedSavedId('');
+      setSelectedDayId('');
+      setSelectedStop(null);
+      return;
+    }
+
+    setLoadingSave(true);
+    try {
+      await deleteSavedItinerary(currentPlan.id);
+      notify('Itinerary deleted.');
+      const nextId = await refreshSavedItems();
+      if (nextId) {
+        await loadSavedDetail(nextId);
+      } else {
+        setCurrentPlan(null);
+        setSelectedSavedId('');
+        setSelectedDayId('');
+        setSelectedStop(null);
+      }
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Unable to delete itinerary.', 'error');
+    } finally {
+      setLoadingSave(false);
+    }
   };
 
   const handleShare = async () => {
-    const shareText = `${itineraryMock.tripTitle} | ${itineraryMock.city} | ${itineraryMock.dateLabel}`;
+    if (!currentPlan) return;
+    const text = `${currentPlan.title} | ${currentPlan.destination} | ${currentPlan.dateLabel}`;
 
     if (navigator.share) {
       try {
         await navigator.share({
-          title: itineraryMock.tripTitle,
-          text: shareText,
+          title: currentPlan.title,
+          text,
           url: window.location.href,
         });
-        setNotification('Trip shared successfully.');
+        notify('Itinerary shared successfully.');
         return;
-      } catch (error) {
-        // Ignore cancellation and fall back to copy below.
+      } catch {
+        // Fallback clipboard flow.
       }
     }
 
     try {
-      await navigator.clipboard.writeText(`${shareText} | ${window.location.href}`);
-      setNotification('Share link copied to clipboard.');
-    } catch (error) {
-      setNotification('Unable to copy link. Please copy manually.');
+      await navigator.clipboard.writeText(`${text} | ${window.location.href}`);
+      notify('Share link copied to clipboard.');
+    } catch {
+      notify('Unable to copy share link.', 'error');
     }
   };
 
-  const handleCopyDayPlan = async () => {
-    const summary = [
-      `${selectedDay.label} - ${selectedDay.date}`,
-      ...selectedDay.stops.map(
-        (stop) => `${stop.start}-${stop.end} | ${stop.name} | ${stop.category}`
-      ),
-    ].join('\n');
-
+  const handlePdfDownload = async () => {
+    if (!currentPlan) return;
     try {
-      await navigator.clipboard.writeText(summary);
-      setNotification('Day plan copied to clipboard.');
-    } catch (error) {
-      setNotification('Unable to copy plan right now.');
-    }
-  };
-
-  const handleDownloadPdf = () => {
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-    const marginX = 42;
-    let cursorY = 52;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.text(itineraryMock.tripTitle, marginX, cursorY);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(11);
-    cursorY += 18;
-    doc.text(`${itineraryMock.city} | ${itineraryMock.dateLabel}`, marginX, cursorY);
-
-    cursorY += 22;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
-    doc.text('Trip Snapshot', marginX, cursorY);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    cursorY += 16;
-    doc.text(`Weather: ${itineraryMock.weather.currentTempC} C, ${itineraryMock.weather.condition}`, marginX, cursorY);
-    cursorY += 14;
-    doc.text(`Budget: ${formatINR(itineraryMock.budget.spent)} used of ${formatINR(itineraryMock.budget.total)}`, marginX, cursorY);
-
-    itineraryMock.days.forEach((day) => {
-      cursorY += 24;
-      if (cursorY > 760) {
-        doc.addPage();
-        cursorY = 52;
-      }
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12);
-      doc.text(`${day.label} - ${day.date}`, marginX, cursorY);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      day.stops.forEach((stop) => {
-        cursorY += 14;
-        if (cursorY > 780) {
-          doc.addPage();
-          cursorY = 52;
-        }
-        const line = `${stop.start}-${stop.end} | ${stop.name} | ${stop.category} | Est. ${formatINR(stop.estimatedSpend)}`;
-        doc.text(line, marginX + 8, cursorY);
+      await downloadItineraryPdf({
+        itinerary: currentPlan.itineraryRaw,
+        tripRequest: currentPlan.tripRequest,
       });
-    });
-
-    doc.save(`${itineraryMock.tripTitle.replace(/\s+/g, '-').toLowerCase()}-plan.pdf`);
-    setNotification('PDF downloaded.');
+      notify('Itinerary PDF downloaded.');
+    } catch (error) {
+      notify(error?.response?.data?.message || 'Unable to download PDF.', 'error');
+    }
   };
 
-  const weatherIcon = itineraryMock.weather.condition.toLowerCase().includes('cloud')
-    ? CloudRoundedIcon
-    : WbSunnyRoundedIcon;
-  const WeatherConditionIcon = weatherIcon;
+  const toggleChecklistItem = (index) => {
+    setCurrentPlan((prev) => {
+      if (!prev) return prev;
+      const nextChecklist = prev.checklist.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, done: !item.done } : item
+      );
+      return { ...prev, checklist: nextChecklist };
+    });
+  };
+
+  const toggleDayOpen = (dayId) => {
+    setOpenDayIds((prev) => (prev.includes(dayId) ? prev.filter((id) => id !== dayId) : [...prev, dayId]));
+    setSelectedDayId(dayId);
+    const day = currentPlan?.days?.find((item) => item.id === dayId);
+    setSelectedStop(day?.stops?.[0] || null);
+  };
+
+  const renderStepContent = () => {
+    const step = plannerSteps[currentStep]?.id;
+
+    if (step === 'destination') {
+      return (
+        <div className="stepBlock">
+          <h3>Where do you want to go?</h3>
+          <p>Start with destination. You can also load an old saved trip if needed.</p>
+
+          <label htmlFor="trip-destination" className="fieldLabel">Destination</label>
+          <input
+            id="trip-destination"
+            type="text"
+            value={form.destination}
+            onChange={(event) => updateField('destination', event.target.value)}
+            placeholder="Search city, state, or country"
+            className="textField"
+          />
+
+          <div className="chipRow">
+            {[...recentDestinations.slice(0, 4), ...trendingDestinations]
+              .filter((name, index, arr) => arr.indexOf(name) === index)
+              .slice(0, 8)
+              .map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className={`pillButton ${form.destination === name ? 'active' : ''}`}
+                  onClick={() => updateField('destination', name)}
+                >
+                  {name}
+                </button>
+              ))}
+          </div>
+
+          <div className="loadSavedBox">
+            <div>
+              <p className="loadSavedTitle">Load Saved Itinerary</p>
+              <p className="loadSavedText">Pick a previous plan only when you want to view/edit it.</p>
+            </div>
+            <div className="loadSavedActions">
+              <select
+                value={selectedSavedId}
+                onChange={(event) => setSelectedSavedId(event.target.value)}
+                className="selectField"
+              >
+                <option value="">Select saved trip</option>
+                {savedItems.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.destination} ({item.daysCount} days)
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => loadSavedDetail(selectedSavedId)}
+                disabled={!selectedSavedId || loadingDetail}
+                className="outlineButton"
+              >
+                {loadingDetail ? 'Loading...' : 'Load'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (step === 'dates') {
+      return (
+        <div className="stepBlock">
+          <h3>When are you travelling?</h3>
+          <p>Add exact dates so the itinerary, weather, and pacing are realistic.</p>
+
+          <div className="fieldGridTwo">
+            <div>
+              <label htmlFor="trip-start-date" className="fieldLabel">Start Date</label>
+              <input
+                id="trip-start-date"
+                type="date"
+                value={form.startDate}
+                onChange={(event) => updateField('startDate', event.target.value)}
+                className="textField"
+              />
+            </div>
+            <div>
+              <label htmlFor="trip-end-date" className="fieldLabel">End Date</label>
+              <input
+                id="trip-end-date"
+                type="date"
+                min={form.startDate || undefined}
+                value={form.endDate}
+                onChange={(event) => updateField('endDate', event.target.value)}
+                className="textField"
+              />
+            </div>
+          </div>
+
+          <div className="compactInfo">
+            <span>{formatDateLabel(form.startDate, form.endDate)}</span>
+            <span>{tripDays ? `${tripDays} day${tripDays > 1 ? 's' : ''}` : 'Select both dates'}</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (step === 'interests') {
+      return (
+        <div className="stepBlock">
+          <h3>What kind of trip do you want?</h3>
+          <p>Select interests so attractions and route suggestions match your travel style.</p>
+
+          <div className="interestGrid">
+            {interestOptions.map((interest) => {
+              const active = form.interests.includes(interest);
+              return (
+                <button
+                  key={interest}
+                  type="button"
+                  className={`interestCard ${active ? 'active' : ''}`}
+                  onClick={() => toggleInterest(interest)}
+                >
+                  {interest}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    if (step === 'style') {
+      return (
+        <div className="stepBlock">
+          <h3>Choose budget and trip pace</h3>
+          <p>This controls recommended hotels, transfer choices, and day intensity.</p>
+
+          <label className="fieldLabel">Budget</label>
+          <div className="optionGrid">
+            {budgetOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`optionCard ${form.budget === option.id ? 'active' : ''}`}
+                onClick={() => updateField('budget', option.id)}
+              >
+                <strong>{option.label}</strong>
+                <span>{option.detail}</span>
+              </button>
+            ))}
+          </div>
+
+          <label className="fieldLabel">Travel Style</label>
+          <div className="optionGrid">
+            {travelStyles.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`optionCard ${form.tripStyle === option.id ? 'active' : ''}`}
+                onClick={() => updateField('tripStyle', option.id)}
+              >
+                <strong>{option.label}</strong>
+                <span>{option.detail}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="stepBlock">
+        <h3>Travelers and preferences</h3>
+        <p>Finalize trip details before you generate the itinerary.</p>
+
+        <div className="travelerGrid">
+          <div className="travelerCounter">
+            <span>Adults</span>
+            <div>
+              <button type="button" onClick={() => adjustTraveler('adults', -1)}>-</button>
+              <strong>{form.travelers.adults}</strong>
+              <button type="button" onClick={() => adjustTraveler('adults', 1)}>+</button>
+            </div>
+          </div>
+          <div className="travelerCounter">
+            <span>Children</span>
+            <div>
+              <button type="button" onClick={() => adjustTraveler('children', -1)}>-</button>
+              <strong>{form.travelers.children}</strong>
+              <button type="button" onClick={() => adjustTraveler('children', 1)}>+</button>
+            </div>
+          </div>
+          <div className="travelerCounter">
+            <span>Rooms</span>
+            <div>
+              <button type="button" onClick={() => adjustTraveler('rooms', -1)}>-</button>
+              <strong>{form.travelers.rooms}</strong>
+              <button type="button" onClick={() => adjustTraveler('rooms', 1)}>+</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="fieldGridTwo">
+          <div>
+            <label className="fieldLabel">Transport Preference</label>
+            <select
+              value={form.transportPreference}
+              onChange={(event) => updateField('transportPreference', event.target.value)}
+              className="selectField"
+            >
+              {transportOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="fieldLabel">Currency</label>
+            <input
+              type="text"
+              maxLength={3}
+              value={form.currency}
+              onChange={(event) => updateField('currency', event.target.value.toUpperCase())}
+              className="textField"
+            />
+          </div>
+          <div>
+            <label className="fieldLabel">Hotel Type</label>
+            <select
+              value={form.hotelType}
+              onChange={(event) => updateField('hotelType', event.target.value)}
+              className="selectField"
+            >
+              {hotelTypes.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="fieldLabel">Food Preference</label>
+            <select
+              value={form.foodPreference}
+              onChange={(event) => updateField('foodPreference', event.target.value)}
+              className="selectField"
+            >
+              {foodTypes.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="fieldLabel">Accessibility</label>
+          <select
+            value={form.accessibility}
+            onChange={(event) => updateField('accessibility', event.target.value)}
+            className="selectField"
+          >
+            {accessibilityOptions.map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="fieldLabel">Special Requirements</label>
+          <textarea
+            value={form.specialRequirements}
+            onChange={(event) => updateField('specialRequirements', event.target.value)}
+            rows={4}
+            className="textareaField"
+            placeholder="Any accessibility, dietary, or timing preferences..."
+          />
+        </div>
+      </div>
+    );
+  };
+
+  if (loadingInit) {
+    return (
+      <div className="tripPlannerRoot">
+        <section className="loadingBootCard">
+          <CircularProgress size={22} />
+          <p>Preparing your trip planner...</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
-    <Box>
-      <Card
-        sx={{
-          borderRadius: '24px',
-          background:
-            'radial-gradient(circle at 20% 30%, rgba(56,189,248,0.22), transparent 42%), radial-gradient(circle at 80% 0%, rgba(79,70,229,0.22), transparent 38%), linear-gradient(135deg, #0f172a 0%, #164e63 55%, #0f766e 100%)',
-          color: '#e2e8f0',
-          mb: 2.5,
-          border: '1px solid rgba(255,255,255,0.14)',
-          overflow: 'hidden',
-        }}
-      >
-        <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Stack spacing={1.1}>
-              <Typography
-                variant="h4"
-                sx={{ fontSize: { xs: '1.6rem', md: '2rem' }, fontWeight: 800, color: '#ffffff' }}
-              >
-                {itineraryMock.tripTitle}
-              </Typography>
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                <Chip
-                  icon={<PlaceRoundedIcon />}
-                  label={itineraryMock.city}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.16)', color: '#f8fafc' }}
-                />
-                <Chip
-                  icon={<CalendarMonthRoundedIcon />}
-                  label={itineraryMock.dateLabel}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.16)', color: '#f8fafc' }}
-                />
-                <Chip
-                  icon={<RouteRoundedIcon />}
-                  label={`${itineraryMock.days.length} planned days`}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.16)', color: '#f8fafc' }}
-                />
-              </Stack>
-            </Stack>
+    <div className="tripPlannerRoot">
+      <div className="plannerBackdropLayer" />
+      <section className="plannerHeader">
+        <div>
+          <p className="plannerEyebrow">AI Planner</p>
+          <h1>Plan Your Trip Step by Step</h1>
+          <p>
+            Start with inputs only. After you generate, we will show itinerary, map, weather, and place images.
+          </p>
+          {profileInfo?.name && (
+            <p className="plannerProfileHint">
+              Planning for {profileInfo.name}
+              {profileInfo.country ? ` from ${profileInfo.country}` : ''}
+            </p>
+          )}
+        </div>
+        <div className="plannerHeaderStats">
+          <div>
+            <strong>{savedItems.length}</strong>
+            <span>Saved Trips</span>
+          </div>
+          <div>
+            <strong>{form.interests.length}</strong>
+            <span>Interests</span>
+          </div>
+          <div>
+            <strong>{tripDays || '-'}</strong>
+            <span>Trip Days</span>
+          </div>
+        </div>
+      </section>
 
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              alignItems={{ xs: 'flex-start', md: 'center' }}
+      {!currentPlan && (
+        <section className="plannerFormCard">
+          <div className="plannerStepTabs">
+            {plannerSteps.map((step, index) => (
+              <button
+                key={step.id}
+                type="button"
+                className={`stepTab ${currentStep === index ? 'active' : ''}`}
+                onClick={() => goStep(index)}
+              >
+                <span>{index + 1}</span>
+                {step.title}
+              </button>
+            ))}
+          </div>
+
+          <div className="plannerStepBody">
+            {renderStepContent()}
+          </div>
+
+          <div className="plannerFooterActions">
+            <button
+              type="button"
+              onClick={() => goStep(currentStep - 1)}
+              disabled={currentStep === 0}
+              className="outlineButton"
             >
-              <AvatarGroup max={4}>
-                {itineraryMock.travelers.map((person) => (
-                  <Tooltip key={person.name} title={person.name}>
-                    <Avatar src={person.avatar} alt={person.name} />
-                  </Tooltip>
-                ))}
-              </AvatarGroup>
-              <Button
-                variant="contained"
-                onClick={handleShare}
-                startIcon={<ShareRoundedIcon />}
-                sx={{
-                  bgcolor: '#ffffff',
-                  color: '#0f172a',
-                  '&:hover': { bgcolor: '#dbeafe' },
-                }}
-              >
-                Share
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={handleDownloadPdf}
-                startIcon={<DownloadRoundedIcon />}
-                sx={{
-                  borderColor: 'rgba(255,255,255,0.34)',
-                  color: '#ffffff',
-                  '&:hover': { borderColor: '#ffffff', bgcolor: 'rgba(255,255,255,0.1)' },
-                }}
-              >
-                Download
-              </Button>
-            </Stack>
-          </Stack>
-        </CardContent>
-      </Card>
+              Previous
+            </button>
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', xl: '1.1fr 1.35fr 0.9fr' },
-          gap: 2,
-          alignItems: 'start',
-        }}
-      >
-        <Stack spacing={2}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-            }}
-          >
-            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-              <Typography variant="h6" fontWeight={800}>
-                Day Plan
-              </Typography>
-              <Button
-                size="small"
-                variant="text"
-                onClick={handleCopyDayPlan}
-                startIcon={<ContentCopyRoundedIcon fontSize="small" />}
-              >
-                Copy
-              </Button>
-            </Stack>
-
-            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" mb={1.5}>
-              {itineraryMock.days.map((day) => (
-                <Chip
-                  key={day.id}
-                  label={`${day.label} | ${day.date}`}
-                  clickable
-                  onClick={() => {
-                    setSelectedDayId(day.id);
-                    setSelectedStop(day.stops[0]);
-                  }}
-                  sx={{
-                    fontWeight: 700,
-                    bgcolor:
-                      selectedDay.id === day.id ? 'rgba(15,118,110,0.15)' : 'rgba(15,23,42,0.06)',
-                    color: selectedDay.id === day.id ? '#115e59' : '#334155',
-                  }}
-                />
-              ))}
-            </Stack>
-
-            <Stack spacing={1.2}>
-              {selectedDay.stops.map((stop, index) => {
-                const mode = stop.transportFromPrev?.mode || 'Walk';
-                const TransportIcon = transportIcons[mode] || DirectionsWalkRoundedIcon;
-
-                return (
-                  <Paper
-                    key={stop.id}
-                    elevation={0}
-                    onClick={() => openStopDetails(stop)}
-                    sx={{
-                      p: 1.4,
-                      borderRadius: '14px',
-                      border: '1px solid rgba(148,163,184,0.25)',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        borderColor: 'rgba(15,118,110,0.35)',
-                        boxShadow: '0 10px 28px rgba(15,23,42,0.08)',
-                        transform: 'translateY(-2px)',
-                      },
-                    }}
-                  >
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight={800}>
-                          {stop.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {stop.address}
-                        </Typography>
-                      </Box>
-                      <Chip
-                        size="small"
-                        label={stop.category}
-                        sx={{ bgcolor: 'rgba(15,118,110,0.12)', color: '#0f766e', fontWeight: 700 }}
-                      />
-                    </Stack>
-
-                    <Stack direction="row" spacing={1.3} flexWrap="wrap" useFlexGap mt={1.1}>
-                      <Chip
-                        size="small"
-                        icon={<AccessTimeRoundedIcon />}
-                        label={`${stop.start} - ${stop.end}`}
-                        sx={{ bgcolor: 'rgba(59,130,246,0.1)', color: '#1d4ed8' }}
-                      />
-                      <Chip
-                        size="small"
-                        icon={<TransportIcon />}
-                        label={`${mode} ${stop.transportFromPrev?.time || ''}`}
-                        sx={{ bgcolor: 'rgba(15,23,42,0.06)', color: '#0f172a' }}
-                      />
-                      <Chip
-                        size="small"
-                        label={`Est. ${formatINR(stop.estimatedSpend)}`}
-                        sx={{ bgcolor: 'rgba(245,158,11,0.12)', color: '#b45309' }}
-                      />
-                    </Stack>
-
-                    {index < selectedDay.stops.length - 1 && (
-                      <Typography variant="caption" sx={{ color: '#64748b', mt: 0.8, display: 'block' }}>
-                        Next stop in {selectedDay.stops[index + 1].transportFromPrev?.time || '15m'}
-                      </Typography>
-                    )}
-                  </Paper>
-                );
-              })}
-            </Stack>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              background: '#ffffff',
-            }}
-          >
-            <Typography variant="h6" fontWeight={800} mb={1.4}>
-              Notes
-            </Typography>
-            <TextField
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              multiline
-              minRows={4}
-              fullWidth
-              placeholder="Add reminders, booking notes, emergency contacts..."
-            />
-          </Paper>
-        </Stack>
-
-        <Stack spacing={2}>
-          <Paper
-            elevation={0}
-            sx={{
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              overflow: 'hidden',
-            }}
-          >
-            <Box
-              sx={{
-                px: 2,
-                py: 1.4,
-                borderBottom: '1px solid rgba(15,23,42,0.08)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background:
-                  'linear-gradient(90deg, rgba(15,118,110,0.06) 0%, rgba(14,165,233,0.08) 100%)',
-              }}
-            >
-              <Box>
-                <Typography fontWeight={800}>Route Map</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Click any marker to open place details
-                </Typography>
-              </Box>
-              <Chip
-                size="small"
-                icon={<RouteRoundedIcon />}
-                label={`${selectedDay.summary.distanceKm} km | ${selectedDay.summary.movingTime}`}
-              />
-            </Box>
-
-            <ItineraryRouteMap
-              stops={selectedDay.stops}
-              selectedStopId={selectedStop?.id}
-              onStopClick={onMapMarkerClick}
-              height={640}
-            />
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              background: '#ffffff',
-            }}
-          >
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.2}>
-              <Typography variant="h6" fontWeight={800}>
-                Transport Snapshot
-              </Typography>
-              <Chip label={selectedDay.summary.pace} size="small" />
-            </Stack>
-
-            <Stack spacing={1.1}>
-              {selectedDay.stops.slice(1).map((stop) => {
-                const leg = stop.transportFromPrev;
-                const TransportIcon = transportIcons[leg.mode] || DirectionsWalkRoundedIcon;
-                return (
-                  <Box
-                    key={`${stop.id}-leg`}
-                    sx={{
-                      p: 1.2,
-                      borderRadius: '12px',
-                      border: '1px dashed rgba(148,163,184,0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <Stack direction="row" spacing={1.2} alignItems="center">
-                      <Box
-                        sx={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: '10px',
-                          display: 'grid',
-                          placeItems: 'center',
-                          bgcolor: 'rgba(14,116,144,0.12)',
-                          color: '#0c4a6e',
-                        }}
-                      >
-                        <TransportIcon fontSize="small" />
-                      </Box>
-                      <Box>
-                        <Typography variant="body2" fontWeight={700}>
-                          {leg.mode} to {stop.name}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {leg.distanceKm} km
-                        </Typography>
-                      </Box>
-                    </Stack>
-                    <Typography variant="body2" fontWeight={800} color="#0f766e">
-                      {leg.time}
-                    </Typography>
-                  </Box>
-                );
-              })}
-            </Stack>
-          </Paper>
-        </Stack>
-
-        <Stack spacing={2}>
-          <Card
-            sx={{
-              borderRadius: '22px',
-              color: '#ffffff',
-              background:
-                'radial-gradient(circle at 80% 20%, rgba(249,115,22,0.35), transparent 36%), linear-gradient(145deg, #1d4ed8 0%, #4338ca 60%, #312e81 100%)',
-              border: '1px solid rgba(255,255,255,0.22)',
-              overflow: 'hidden',
-            }}
-          >
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                <Box>
-                  <Typography variant="h6" fontWeight={800}>
-                    Weather
-                  </Typography>
-                  <Typography variant="body2" sx={{ opacity: 0.88 }}>
-                    {itineraryMock.city}
-                  </Typography>
-                </Box>
-                <WeatherConditionIcon sx={{ fontSize: 34 }} />
-              </Stack>
-
-              <Typography variant="h2" sx={{ mt: 1, mb: 0.6, fontSize: '2.5rem', color: '#ffffff' }}>
-                {itineraryMock.weather.currentTempC} C
-              </Typography>
-              <Typography sx={{ opacity: 0.9 }}>
-                {itineraryMock.weather.condition}
-              </Typography>
-
-              <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" mt={2}>
-                <Chip
-                  size="small"
-                  icon={<WbSunnyRoundedIcon />}
-                  label={`H ${itineraryMock.weather.maxTempC} C`}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
-                />
-                <Chip
-                  size="small"
-                  icon={<CloudRoundedIcon />}
-                  label={`L ${itineraryMock.weather.minTempC} C`}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
-                />
-                <Chip
-                  size="small"
-                  icon={<WaterDropRoundedIcon />}
-                  label={`${itineraryMock.weather.rainChance}% rain`}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#ffffff' }}
-                />
-              </Stack>
-            </CardContent>
-          </Card>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              background: '#ffffff',
-            }}
-          >
-            <Typography variant="h6" fontWeight={800} mb={1.2}>
-              Budget Tracker
-            </Typography>
-
-            <Stack spacing={0.4} mb={1}>
-              <Typography variant="body2" color="text.secondary">
-                {formatINR(itineraryMock.budget.spent)} used of {formatINR(itineraryMock.budget.total)}
-              </Typography>
-              <Typography variant="body2" fontWeight={700} color="#0f766e">
-                {budgetPct}% utilized
-              </Typography>
-            </Stack>
-
-            <LinearProgress
-              variant="determinate"
-              value={budgetPct}
-              sx={{
-                height: 9,
-                borderRadius: 999,
-                mb: 1.5,
-                bgcolor: 'rgba(148,163,184,0.24)',
-                '& .MuiLinearProgress-bar': {
-                  borderRadius: 999,
-                  background: 'linear-gradient(90deg, #0f766e 0%, #0ea5e9 100%)',
-                },
-              }}
-            />
-
-            <Stack spacing={1}>
-              {itineraryMock.budget.categories.map((item) => (
-                <Box key={item.label} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: item.color }} />
-                    <Typography variant="body2">{item.label}</Typography>
-                  </Stack>
-                  <Typography variant="body2" fontWeight={700}>
-                    {formatINR(item.amount)}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              p: 2,
-              borderRadius: '20px',
-              border: '1px solid rgba(15,23,42,0.08)',
-              background: '#ffffff',
-            }}
-          >
-            <Typography variant="h6" fontWeight={800} mb={1}>
-              Trip Checklist
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {completedChecklist} / {totalChecklist} completed
-            </Typography>
-
-            <List dense sx={{ mt: 0.6 }}>
-              {itineraryMock.checklist.map((item) => (
-                <ListItem
-                  key={item.id}
-                  secondaryAction={
-                    <Checkbox
-                      edge="end"
-                      checked={Boolean(checklistState[item.id])}
-                      onChange={() => toggleChecklist(item.id)}
-                    />
-                  }
-                  disablePadding
-                  sx={{ py: 0.2 }}
+            <div className="plannerFooterRight">
+              {currentStep < plannerSteps.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => goStep(currentStep + 1)}
+                  className="outlineButton"
                 >
-                  <ListItemIcon sx={{ minWidth: 30 }}>
-                    <Checkbox
-                      checked={Boolean(checklistState[item.id])}
-                      onChange={() => toggleChecklist(item.id)}
-                    />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{
-                      variant: 'body2',
-                      sx: {
-                        textDecoration: checklistState[item.id] ? 'line-through' : 'none',
-                        color: checklistState[item.id] ? 'text.secondary' : 'text.primary',
-                      },
+                  Next
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={loadingGenerate}
+                className="primaryButton"
+              >
+                {loadingGenerate ? 'Generating...' : 'Generate Itinerary'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {loadingGenerate && (
+        <section className="generatingCard">
+          <div className="generatingHead">
+            <AutoAwesomeRoundedIcon />
+            <div>
+              <h3>Crafting Your Itinerary</h3>
+              <p>We are building routes, budget, weather, and activity flow in real time.</p>
+            </div>
+            <span>{loadingProgress}%</span>
+          </div>
+          <div className="progressTrack">
+            <div className="progressFill" style={{ width: `${loadingProgress}%` }} />
+          </div>
+          <div className="loadingSteps">
+            {loadingFlowSteps.map((item, index) => (
+              <div key={item} className={`loadingStep ${index <= loadingPhase ? 'done' : ''}`}>
+                <span>{index + 1}</span>
+                <p>{item}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {currentPlan && !loadingGenerate && (
+        <>
+          <section className="resultActionBar">
+            <div>
+              <h2>{currentPlan.title}</h2>
+              <p>{currentPlan.dateLabel}</p>
+            </div>
+
+            <div className="resultActionButtons">
+              <button
+                type="button"
+                className="outlineButton"
+                onClick={() => {
+                  setCurrentPlan(null);
+                  setSelectedDayId('');
+                  setSelectedStop(null);
+                }}
+              >
+                Plan New Trip
+              </button>
+              <button
+                type="button"
+                className="outlineButton"
+                onClick={handleSaveCurrent}
+                disabled={loadingSave}
+              >
+                <SaveRoundedIcon fontSize="small" />
+                {currentPlan.saved ? 'Saved' : 'Save'}
+              </button>
+              <button
+                type="button"
+                className="outlineButton"
+                onClick={handlePdfDownload}
+              >
+                <DownloadRoundedIcon fontSize="small" />
+                PDF
+              </button>
+              <button
+                type="button"
+                className="outlineButton"
+                onClick={handleShare}
+              >
+                <ShareRoundedIcon fontSize="small" />
+                Share
+              </button>
+              <button
+                type="button"
+                className="dangerButton"
+                onClick={handleDeleteCurrent}
+                disabled={loadingSave}
+              >
+                <DeleteOutlineRoundedIcon fontSize="small" />
+                Delete
+              </button>
+            </div>
+          </section>
+
+          <section className="resultOverviewGrid">
+            <article className="resultPanel">
+              <header>
+                <h3><PlaceRoundedIcon /> Trip Summary</h3>
+              </header>
+              <div className="summaryStats">
+                <div>
+                  <span>Destination</span>
+                  <strong>{currentPlan.destination || '-'}</strong>
+                </div>
+                <div>
+                  <span>Total Days</span>
+                  <strong>{currentPlan.days.length}</strong>
+                </div>
+                <div>
+                  <span>Estimated Budget</span>
+                  <strong>{formatMoney(totalEstimated || budgetTarget, currentPlan.tripRequest.currency || form.currency)}</strong>
+                </div>
+                <div>
+                  <span>Budget Usage</span>
+                  <strong>{budgetPercent}%</strong>
+                </div>
+              </div>
+              <p className="summaryText">
+                {currentPlan.summary || 'Your itinerary is generated. Review each day, map routes, and weather before booking.'}
+              </p>
+              <div className="interestTags">
+                {(currentPlan.tripRequest.interests || []).slice(0, 8).map((interest) => (
+                  <span key={interest}>{interest}</span>
+                ))}
+              </div>
+            </article>
+
+            <article className="resultPanel">
+              <header>
+                <h3><CalendarMonthRoundedIcon /> Budget Breakdown</h3>
+              </header>
+              <div className="budgetList">
+                {budgetRows.map((row) => {
+                  const width = totalEstimated > 0 ? Math.max(8, Math.round((row.value / totalEstimated) * 100)) : 0;
+                  return (
+                    <div key={row.name} className="budgetRow">
+                      <div className="budgetTop">
+                        <span>{row.name}</span>
+                        <strong>{formatMoney(row.value, currentPlan.tripRequest.currency || form.currency)}</strong>
+                      </div>
+                      <div className="budgetTrack">
+                        <i className={row.colorClass} style={{ width: `${width}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+          </section>
+
+          <section className="resultMapWeatherGrid">
+            <article className="resultPanel mapPanel">
+              <header className="panelHeaderSplit">
+                <h3><RouteRoundedIcon /> Trip Map</h3>
+                <select
+                  className="selectField compactSelect"
+                  value={selectedDay?.id || ''}
+                  onChange={(event) => {
+                    setSelectedDayId(event.target.value);
+                    const day = currentPlan.days.find((item) => item.id === event.target.value);
+                    setSelectedStop(day?.stops?.[0] || null);
+                  }}
+                >
+                  {currentPlan.days.map((day) => (
+                    <option key={day.id} value={day.id}>
+                      {day.label}
+                    </option>
+                  ))}
+                </select>
+              </header>
+              <div className="dayChipsRow">
+                {currentPlan.days.map((day) => (
+                  <button
+                    key={day.id}
+                    type="button"
+                    className={`pillButton ${selectedDay?.id === day.id ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedDayId(day.id);
+                      setSelectedStop(day.stops[0] || null);
                     }}
-                  />
-                </ListItem>
-              ))}
-            </List>
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mapHolder">
+                <ItineraryRouteMap
+                  stops={selectedDay?.stops || []}
+                  selectedStopId={selectedStop?.id || ''}
+                  onStopClick={(stop) => setSelectedStop(stop)}
+                  height={420}
+                />
+              </div>
+            </article>
 
-            <Divider sx={{ my: 1 }} />
+            <article className="resultPanel weatherPanel">
+              <header>
+                <h3><WbSunnyRoundedIcon /> Weather</h3>
+              </header>
+              {weatherLoading ? (
+                <div className="inlineLoader">
+                  <CircularProgress size={18} />
+                  <span>Checking weather...</span>
+                </div>
+              ) : weather ? (
+                <>
+                  <div className="weatherStats">
+                    <div>
+                      <span>Current</span>
+                      <strong>{weather.temp} C</strong>
+                    </div>
+                    <div>
+                      <span>Condition</span>
+                      <strong>{weather.condition}</strong>
+                    </div>
+                    <div>
+                      <span>Humidity</span>
+                      <strong>{weather.humidity}%</strong>
+                    </div>
+                    <div>
+                      <span>Rain Chance</span>
+                      <strong>{weather.rainChance}%</strong>
+                    </div>
+                  </div>
+                  <div className="weatherDays">
+                    {(weather.daily || []).map((entry, index) => (
+                      <div key={`${entry.date}-${index}`}>
+                        <span>{entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short' }) : `Day ${index + 1}`}</span>
+                        <strong>{entry.max} / {entry.min} C</strong>
+                        <small>{entry.condition}</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="tipsList">
+                    {weatherTips.map((tip) => (
+                      <p key={tip}>{tip}</p>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="emptyText">Weather appears once map coordinates are available in selected day stops.</p>
+              )}
+            </article>
+          </section>
 
-            <Stack direction="row" spacing={1}>
-              <Button fullWidth variant="outlined" onClick={() => setShowGallery(true)}>
-                Gallery
-              </Button>
-              <Button fullWidth variant="contained" onClick={handleShare}>
-                Share Plan
-              </Button>
-            </Stack>
-          </Paper>
-        </Stack>
-      </Box>
+          <section className="resultTimelineGalleryGrid">
+            <article className="resultPanel">
+              <header className="panelHeaderSplit">
+                <h3><AutoAwesomeRoundedIcon /> Day-wise Itinerary</h3>
+                <span className="smallText">{currentPlan.days.length} days</span>
+              </header>
+              {!currentPlan.days.length ? (
+                <p className="emptyText">No generated day plan available.</p>
+              ) : (
+                <div className="dayTimeline">
+                  {currentPlan.days.map((day) => {
+                    const isOpen = openDayIds.includes(day.id);
+                    return (
+                      <div key={day.id} className="dayCard">
+                        <button
+                          type="button"
+                          className="dayCardHead"
+                          onClick={() => toggleDayOpen(day.id)}
+                        >
+                          <div>
+                            <strong>{day.label}</strong>
+                            <span>{day.title}</span>
+                            <small>{day.date || 'Date not available'}</small>
+                          </div>
+                          <div className="dayMeta">
+                            <span>{day.summary.distanceKm} km</span>
+                            <span>{day.summary.movingTime}</span>
+                            <span>{day.summary.pace}</span>
+                          </div>
+                        </button>
+                        {isOpen && (
+                          <div className="dayStops">
+                            {day.stops.map((stop, index) => (
+                              <button
+                                type="button"
+                                key={stop.id}
+                                className={`stopRow ${selectedStop?.id === stop.id ? 'active' : ''}`}
+                                onClick={() => {
+                                  setSelectedStop(stop);
+                                  setSelectedDayId(day.id);
+                                }}
+                              >
+                                <div>
+                                  <strong>{index + 1}. {stop.name}</strong>
+                                  <span>{stop.category} • {stop.segment}</span>
+                                  <small>{stop.address || 'Address unavailable'}</small>
+                                </div>
+                                <div className="stopTiming">
+                                  <span>{stop.start || '--'} to {stop.end || '--'}</span>
+                                  <small>{formatMoney(stop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</small>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </article>
 
-      <Drawer
-        anchor="right"
-        open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
-        PaperProps={{
-          sx: {
-            width: { xs: '100%', sm: 420 },
-            p: 0,
-            borderTopLeftRadius: { sm: 18 },
-            borderBottomLeftRadius: { sm: 18 },
-          },
-        }}
-      >
-        <Box
-          sx={{
-            position: 'relative',
-            height: 230,
-            backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.1) 0%, rgba(15,23,42,0.6) 100%), url(${selectedStop?.image || ''})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            display: 'flex',
-            alignItems: 'flex-end',
-            p: 2,
-            color: '#ffffff',
-          }}
-        >
-          <IconButton
-            onClick={() => setDetailsOpen(false)}
-            sx={{
-              position: 'absolute',
-              right: 10,
-              top: 10,
-              bgcolor: 'rgba(255,255,255,0.85)',
-              '&:hover': { bgcolor: '#ffffff' },
-            }}
-          >
-            <CloseRoundedIcon />
-          </IconButton>
+            <article className="resultPanel">
+              <header className="panelHeaderSplit">
+                <h3><HotelRoundedIcon /> Places & Images</h3>
+                {photosLoading && <span className="smallText">Loading images...</span>}
+              </header>
+              {!placeHighlights.length ? (
+                <p className="emptyText">No place highlights available yet.</p>
+              ) : (
+                <div className="placeGallery">
+                  {placeHighlights.map((stop, index) => (
+                    <div key={`${stop.id}-${index}`} className="placeCard">
+                      <img
+                        src={stop.image || placePhotos[stop.name] || fallbackGalleryImages[index % fallbackGalleryImages.length]}
+                        alt={stop.name}
+                      />
+                      <div>
+                        <strong>{stop.name}</strong>
+                        <span>{stop.dayLabel}</span>
+                        <small>{stop.category}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
-          <Box>
-            <Typography variant="h6" fontWeight={800}>
-              {selectedStop?.name}
-            </Typography>
-            <Typography variant="body2" sx={{ opacity: 0.9 }}>
-              {selectedStop?.address}
-            </Typography>
-          </Box>
-        </Box>
+              <div className="restaurantHint">
+                <RestaurantRoundedIcon fontSize="small" />
+                <span>Food and stay recommendations are embedded in day stops and budget estimation.</span>
+              </div>
+            </article>
+          </section>
 
-        <Box sx={{ p: 2 }}>
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" mb={1.5}>
-            <Chip
-              icon={<AccessTimeRoundedIcon />}
-              label={`${selectedStop?.start || '--'} - ${selectedStop?.end || '--'}`}
-            />
-            <Chip
-              icon={<CalendarMonthRoundedIcon />}
-              label={selectedDay.date}
-            />
-            <Chip label={`Ticket ${formatINR(selectedStop?.ticketCost || 0)}`} />
-          </Stack>
+          <section className="resultChecklistGrid">
+            <article className="resultPanel">
+              <header className="panelHeaderSplit">
+                <h3>Checklist</h3>
+                <span className="smallText">{completedChecklist}/{checklistTotal} done</span>
+              </header>
+              <div className="checklistList">
+                {(currentPlan.checklist || []).map((item, index) => (
+                  <button
+                    key={`${item.label}-${index}`}
+                    type="button"
+                    onClick={() => toggleChecklistItem(index)}
+                    className={`checkItem ${item.done ? 'done' : ''}`}
+                  >
+                    <span>{item.done ? 'Done' : 'Todo'}</span>
+                    <p>{item.label}</p>
+                  </button>
+                ))}
+              </div>
+            </article>
 
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
-            {selectedStop?.description}
-          </Typography>
-
-          <Divider sx={{ my: 1.5 }} />
-
-          <Typography variant="subtitle2" fontWeight={700} mb={0.8}>
-            Practical Info
-          </Typography>
-          <Stack spacing={0.6}>
-            <Typography variant="body2">Opening hours: {selectedStop?.openingHours}</Typography>
-            <Typography variant="body2">Planned duration: {selectedStop?.duration}</Typography>
-            <Typography variant="body2">Estimated spend: {formatINR(selectedStop?.estimatedSpend || 0)}</Typography>
-            <Typography variant="body2">
-              Travel from previous stop: {selectedStop?.transportFromPrev?.mode || 'Walk'} ({selectedStop?.transportFromPrev?.time || '0m'})
-            </Typography>
-            <Typography variant="body2">
-              Crowd tip: {selectedStop?.crowdTip}
-            </Typography>
-          </Stack>
-
-          <Divider sx={{ my: 1.5 }} />
-          <Typography variant="subtitle2" fontWeight={700} mb={0.8}>
-            Best For
-          </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            {(selectedStop?.bestFor || []).map((tag) => (
-              <Chip key={tag} size="small" label={tag} />
-            ))}
-          </Stack>
-        </Box>
-      </Drawer>
-
-      <Dialog open={showGallery} onClose={() => setShowGallery(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Trip Gallery</DialogTitle>
-        <DialogContent>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' },
-              gap: 1.2,
-            }}
-          >
-            {itineraryMock.gallery.map((src) => (
-              <Box
-                key={src}
-                component="img"
-                src={src}
-                alt="Trip visual"
-                sx={{ width: '100%', borderRadius: '12px', minHeight: 170, objectFit: 'cover' }}
+            <article className="resultPanel">
+              <header>
+                <h3>Planner Notes</h3>
+              </header>
+              <textarea
+                value={currentPlan.notes || ''}
+                onChange={(event) =>
+                  setCurrentPlan((prev) => (prev ? { ...prev, notes: event.target.value } : prev))
+                }
+                rows={10}
+                className="textareaField"
+                placeholder="Booking references, emergency contacts, or personal reminders..."
               />
-            ))}
-          </Box>
-        </DialogContent>
-      </Dialog>
+              <button
+                type="button"
+                onClick={handlePersistPlanChanges}
+                disabled={!currentPlan || loadingSave}
+                className="primaryButton fullWidth"
+              >
+                {loadingSave ? 'Saving...' : 'Save Notes & Checklist'}
+              </button>
+            </article>
+          </section>
+        </>
+      )}
 
       <Snackbar
-        open={Boolean(notification)}
-        autoHideDuration={2600}
-        onClose={() => setNotification('')}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        open={Boolean(notification.message)}
+        autoHideDuration={3500}
+        onClose={() => setNotification({ message: '', severity: 'success' })}
       >
-        <Alert severity="success" variant="filled" onClose={() => setNotification('')}>
-          {notification}
+        <Alert
+          onClose={() => setNotification({ message: '', severity: 'success' })}
+          severity={notification.severity}
+          variant="filled"
+        >
+          {notification.message}
         </Alert>
       </Snackbar>
-    </Box>
+    </div>
   );
 }
