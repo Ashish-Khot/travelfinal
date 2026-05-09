@@ -789,7 +789,10 @@ export default function ItineraryPlannerModule() {
       setOpenDayIds(nextPlan.days[0] ? [nextPlan.days[0].id] : []);
       notify('Your itinerary is ready.');
     } catch (error) {
-      notify(error?.response?.data?.message || 'Failed to generate itinerary.', 'error');
+      notify(
+        error?.response?.data?.message || 'Unable to generate itinerary right now. Please try again later.',
+        'error'
+      );
     } finally {
       setLoadingGenerate(false);
     }

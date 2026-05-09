@@ -2,30 +2,35 @@ const axios = require('axios');
 const API_CONFIG = require('../config/apiConfig');
 
 class AIService {
-  constructor() {
-    this.geminiKey = (API_CONFIG.GEMINI?.API_KEY || '').trim();
+  constructor(overrides = {}) {
+    const geminiConfig = overrides.gemini || API_CONFIG.GEMINI || {};
+    const openAIConfig = overrides.openai || API_CONFIG.OPENAI || {};
+    const openRouterConfig = overrides.openrouter || API_CONFIG.OPENROUTER || {};
+    const groqConfig = overrides.groq || API_CONFIG.GROQ || {};
+
+    this.geminiKey = (geminiConfig.API_KEY || '').trim();
     this.geminiBaseUrl =
-      API_CONFIG.GEMINI?.BASE_URL ||
+      geminiConfig.BASE_URL ||
       'https://generativelanguage.googleapis.com/v1beta';
-    this.geminiModel = API_CONFIG.GEMINI?.MODEL || 'gemini-2.5-flash';
+    this.geminiModel = geminiConfig.MODEL || 'gemini-2.5-flash';
     this.geminiVisionModel =
-      API_CONFIG.GEMINI?.VISION_MODEL || this.geminiModel;
+      geminiConfig.VISION_MODEL || this.geminiModel;
     this.hasGeminiAccess = Boolean(this.geminiKey);
 
-    this.openaiKey = (API_CONFIG.OPENAI?.API_KEY || '').trim();
-    this.openaiBaseUrl = API_CONFIG.OPENAI?.BASE_URL || 'https://api.openai.com/v1';
-    this.openaiModel = API_CONFIG.OPENAI?.MODEL || 'gpt-oss-120b';
-    this.openaiMaxOutputTokens = Number(API_CONFIG.OPENAI?.MAX_OUTPUT_TOKENS || 7000);
+    this.openaiKey = (openAIConfig.API_KEY || '').trim();
+    this.openaiBaseUrl = openAIConfig.BASE_URL || 'https://api.openai.com/v1';
+    this.openaiModel = openAIConfig.MODEL || 'gpt-oss-120b';
+    this.openaiMaxOutputTokens = Number(openAIConfig.MAX_OUTPUT_TOKENS || 7000);
     this.hasOpenAIAccess = Boolean(this.openaiKey);
 
-    this.openRouterKey = (API_CONFIG.OPENROUTER?.API_KEY || '').trim();
-    this.openRouterBaseUrl = API_CONFIG.OPENROUTER?.BASE_URL || 'https://openrouter.ai/api/v1';
-    this.openRouterModel = API_CONFIG.OPENROUTER?.MODEL || 'openrouter/free';
+    this.openRouterKey = (openRouterConfig.API_KEY || '').trim();
+    this.openRouterBaseUrl = openRouterConfig.BASE_URL || 'https://openrouter.ai/api/v1';
+    this.openRouterModel = openRouterConfig.MODEL || 'openrouter/free';
     this.hasOpenRouterAccess = Boolean(this.openRouterKey);
 
-    this.groqKey = (API_CONFIG.GROQ?.API_KEY || '').trim();
-    this.groqBaseUrl = API_CONFIG.GROQ?.BASE_URL || 'https://api.groq.com/openai/v1';
-    this.groqModel = API_CONFIG.GROQ?.MODEL || 'llama-3.1-8b-instant';
+    this.groqKey = (groqConfig.API_KEY || '').trim();
+    this.groqBaseUrl = groqConfig.BASE_URL || 'https://api.groq.com/openai/v1';
+    this.groqModel = groqConfig.MODEL || 'llama-3.1-8b-instant';
     this.hasGroqAccess = Boolean(this.groqKey);
   }
 
@@ -220,21 +225,41 @@ class AIService {
       requestBody.response_format = { type: 'json_object' };
     }
 
+    const requestConfig = {
+      timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 18000),
+      headers: {
+        Authorization: `Bearer ${this.openRouterKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.APP_PUBLIC_URL || 'http://localhost:5173',
+        'X-Title': process.env.APP_NAME || 'Travel Platform',
+      },
+    };
+
     const response = await axios.post(
       `${this.openRouterBaseUrl}/chat/completions`,
       requestBody,
-      {
-        timeout: Math.max(API_CONFIG.DEFAULTS.REQUEST_TIMEOUT, 18000),
-        headers: {
-          Authorization: `Bearer ${this.openRouterKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.APP_PUBLIC_URL || 'http://localhost:5173',
-          'X-Title': process.env.APP_NAME || 'Travel Platform',
-        },
-      }
+      requestConfig
     );
 
-    return response.data?.choices?.[0]?.message?.content || '';
+    let content = response.data?.choices?.[0]?.message?.content || '';
+    if (String(content || '').trim()) {
+      return content;
+    }
+
+    // Some models return empty content with strict response_format.
+    // Retry once without response_format before failing.
+    if (responseFormat === 'json_object') {
+      const relaxedBody = { ...requestBody };
+      delete relaxedBody.response_format;
+      const relaxedResponse = await axios.post(
+        `${this.openRouterBaseUrl}/chat/completions`,
+        relaxedBody,
+        requestConfig
+      );
+      content = relaxedResponse.data?.choices?.[0]?.message?.content || '';
+    }
+
+    return content;
   }
 
   async callGroqChat({

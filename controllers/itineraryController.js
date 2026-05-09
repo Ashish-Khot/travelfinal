@@ -108,7 +108,7 @@ const generate = async (req, res) => {
     });
   } catch (error) {
     console.error('[Itinerary] generate error:', error.message);
-    return res.status(500).json({ message: 'Unable to generate itinerary right now.' });
+    return res.status(500).json({ message: 'Unable to generate itinerary right now. Please try again later.' });
   }
 };
 
