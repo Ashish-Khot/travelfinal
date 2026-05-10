@@ -73,9 +73,9 @@ const PremiumBookingCard = ({
 
   // Get currency symbol and rate type info
   const getCurrencyInfo = () => {
-    const currency = booking.guideId?.currency || 'INR';
     const rateType = booking.guideId?.rateType || 'daily';
-    const symbol = currency === 'INR' ? '₹' : '$';
+    const currency = 'INR';
+    const symbol = '₹';
     const rateTypeLabel = rateType === 'hourly' ? '/hour' : '/day';
     return { symbol, rateTypeLabel, currency, rateType };
   };

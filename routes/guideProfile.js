@@ -1,17 +1,61 @@
 const express = require('express');
 const Guide = require('../models/Guide');
+const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
 
 const router = express.Router();
+
+const USER_PROFILE_FIELDS = 'name email phone country interests avatar role';
+
+function toGuidePayload(guide) {
+  const payload = guide.toObject();
+  const user = payload.userId && typeof payload.userId === 'object' ? payload.userId : {};
+
+  payload.name = user.name || payload.name || '';
+  payload.email = user.email || payload.email || '';
+  payload.phone = payload.phone || user.phone || '';
+  payload.country = user.country || payload.country || '';
+  payload.interests = user.interests || payload.interests || '';
+  payload.avatar = user.avatar || payload.avatar || '';
+  payload.currency = 'INR';
+
+  return payload;
+}
+
+function normalizeLanguages(languages) {
+  const rawLanguages = Array.isArray(languages)
+    ? languages
+    : String(languages || '')
+        .split(/[\n,]+/)
+        .map((language) => language.trim())
+        .filter(Boolean);
+
+  return rawLanguages
+    .map((language) => {
+      if (typeof language === 'string') {
+        const name = language.trim();
+        return name ? { name, level: 'Fluent' } : null;
+      }
+      if (language && typeof language === 'object') {
+        const name = String(language.name || '').trim();
+        if (!name) return null;
+        return { name, level: language.level || 'Fluent' };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
 
 // View guide profile
 router.get('/', verifyToken, authorizeRoles('guide'), async (req, res) => {
   try {
     const guide = await Guide.findOne({ userId: req.user.userId })
+      .populate('userId', USER_PROFILE_FIELDS)
       .populate('travelogues')
       .populate('bookings');
     if (!guide) return res.status(404).json({ message: 'Guide profile not found' });
-    res.json({ guide });
+    const payload = toGuidePayload(guide);
+    res.json({ guide: payload, user: payload.userId });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
@@ -20,33 +64,76 @@ router.get('/', verifyToken, authorizeRoles('guide'), async (req, res) => {
 // Update guide profile
 router.put('/', verifyToken, authorizeRoles('guide'), async (req, res) => {
   try {
-    const { bio, languages, experienceYears, earnings, ratings, phone, price, currency, rateType } = req.body;
+    const {
+      name,
+      bio,
+      languages,
+      experienceYears,
+      earnings,
+      ratings,
+      phone,
+      country,
+      interests,
+      price,
+      rateType
+    } = req.body;
     const guide = await Guide.findOne({ userId: req.user.userId });
     if (!guide) return res.status(404).json({ message: 'Guide profile not found' });
+
+    const user = await User.findById(req.user.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (name !== undefined) {
+      const trimmedName = String(name).trim();
+      if (!trimmedName) return res.status(400).json({ message: 'Full name is required' });
+      user.name = trimmedName;
+    }
+
+    if (phone !== undefined) {
+      const trimmedPhone = String(phone).trim();
+      if (!trimmedPhone) return res.status(400).json({ message: 'Phone number is required' });
+      user.phone = trimmedPhone;
+      guide.phone = trimmedPhone;
+    }
+
+    if (country !== undefined) {
+      const trimmedCountry = String(country).trim();
+      if (!trimmedCountry) return res.status(400).json({ message: 'Country is required' });
+      user.country = trimmedCountry;
+    }
+
+    if (interests !== undefined) {
+      user.interests = String(interests || '').trim();
+    }
     
     if (bio !== undefined) guide.bio = bio;
     
-    // Handle languages - convert string array to object array if needed
     if (languages !== undefined) {
-      if (Array.isArray(languages)) {
-        guide.languages = languages.map(lang => 
-          typeof lang === 'string' 
-            ? { name: lang, level: 'Fluent' }
-            : lang
-        );
+      const normalizedLanguages = normalizeLanguages(languages);
+      if (!normalizedLanguages.length) {
+        return res.status(400).json({ message: 'Please enter at least one language' });
       }
+      guide.languages = normalizedLanguages;
     }
     
-    if (experienceYears !== undefined) guide.experienceYears = experienceYears;
+    if (experienceYears !== undefined) {
+      const experienceNumber = Number(experienceYears);
+      if (!Number.isFinite(experienceNumber) || experienceNumber < 0) {
+        return res.status(400).json({ message: 'Enter valid years of experience' });
+      }
+      guide.experienceYears = experienceNumber;
+    }
     if (earnings !== undefined) guide.earnings = earnings;
     if (ratings !== undefined) guide.ratings = ratings;
-    if (phone !== undefined) guide.phone = phone;
     if (price !== undefined) guide.price = Number(price);
-    if (currency !== undefined) guide.currency = currency;
+    guide.currency = 'INR';
     if (rateType !== undefined) guide.rateType = rateType;
     
+    await user.save();
     await guide.save();
-    res.json({ message: 'Profile updated', guide });
+    await guide.populate('userId', USER_PROFILE_FIELDS);
+    const payload = toGuidePayload(guide);
+    res.json({ message: 'Profile updated', guide: payload, user: payload.userId });
   } catch (err) {
     console.error('Error updating guide profile:', err);
     res.status(500).json({ message: 'Server error', error: err.message });

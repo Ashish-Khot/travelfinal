@@ -2,7 +2,7 @@ const express = require('express');
 const Travelogue = require('../models/Travelogue');
 const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -18,18 +18,6 @@ router.get('/', verifyToken, authorizeRoles('admin'), async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
-// Helper: send email notification
-async function sendEmail(to, subject, text) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-  await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
-}
 
 // Admin approves or rejects travelogue
 router.post('/action/:id', verifyToken, authorizeRoles('admin'), async (req, res) => {
@@ -58,7 +46,7 @@ router.post('/action/:id', verifyToken, authorizeRoles('admin'), async (req, res
     // Notify guide (do not block response on email failure)
     const guide = await User.findById(travelogue.guideId);
     if (guide && guide.email) {
-      sendEmail(guide.email, emailSubject, emailText)
+      sendEmail(guide.email, emailSubject, emailText, { context: 'Travelogue review' })
         .catch(e => console.error('Email send failed:', e.message));
     }
     res.json({ message: statusUpdate, travelogue });

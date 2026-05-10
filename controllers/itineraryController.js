@@ -251,7 +251,6 @@ class ItineraryController {
         startDate,
         season,
         aiNotes,
-        currency,
         imageData,
         imageMimeType,
       } = req.body;
@@ -263,6 +262,7 @@ class ItineraryController {
       }
 
       const userId = req.user?.userId;
+      const currency = 'INR';
       const normalizedImage = aiService.normalizeImagePayload(imageData, imageMimeType);
       const generated = await aiService.generateItinerary({
         destination,
@@ -280,7 +280,7 @@ class ItineraryController {
       });
 
       const activities = normalizeGeneratedActivities(
-        mapPromptPlanToActivities(generated?.dailyPlan, destination, currency || 'INR')
+        mapPromptPlanToActivities(generated?.dailyPlan, destination, 'INR')
       );
       console.log('[ITINERARY][CTRL] Provider:', generated?.meta?.provider || 'unknown');
       console.log('[ITINERARY][CTRL] Model:', generated?.meta?.model || 'unknown');
@@ -301,7 +301,7 @@ class ItineraryController {
         travelStyle,
       });
       const budgetTooLow = requestedBudgetValue > 0 && requestedBudgetValue < minimumRecommended;
-      const currencyValue = String(currency || 'INR').toUpperCase();
+      const currencyValue = 'INR';
       const budgetAllocation = buildBudgetAllocation(totalBudgetValue, null);
       const highlightedPlaces = normalizeStringArray(
         activities.map((activity) => activity.name),
@@ -530,7 +530,7 @@ class ItineraryController {
         endTime: activityData.endTime,
         duration: activityData.duration || 120,
         estimatedCost: activityData.estimatedCost || 0,
-        currency: activityData.currency || itinerary?.budget?.currency || 'INR',
+        currency: 'INR',
         notes: activityData.notes || '',
         importance: activityData.importance || 'recommended',
         imageUrl: activityData.imageUrl || null,

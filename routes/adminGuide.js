@@ -2,22 +2,9 @@ const express = require('express');
 const Guide = require('../models/Guide');
 const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../services/emailService');
 
 const router = express.Router();
-
-// Helper: send email notification
-async function sendEmail(to, subject, text) {
-  // Configure your email transport here
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-  await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
-}
 
 // List pending guides
 router.get('/pending', verifyToken, authorizeRoles('admin'), async (req, res) => {
@@ -38,9 +25,16 @@ router.post('/action/:id', verifyToken, authorizeRoles('admin'), async (req, res
     if (!guide) return res.status(404).json({ message: 'Guide not found' });
     if (action === 'approve') {
       guide.approved = true;
+      guide.verifiedID = Boolean(guide.identityProof);
+      guide.currency = 'INR';
       await guide.save();
       try {
-        await sendEmail(guide.userId.email, 'Guide Application Approved', 'Congratulations! Your guide application has been approved.');
+        await sendEmail(
+          guide.userId.email,
+          'Guide Application Approved',
+          'Congratulations! Your guide application has been approved.',
+          { context: 'Guide approval' }
+        );
       } catch (emailErr) {
         console.error('Failed to send approval email:', emailErr.message);
         // Optionally, you can log this or notify admin, but don't fail the request
@@ -48,12 +42,18 @@ router.post('/action/:id', verifyToken, authorizeRoles('admin'), async (req, res
       res.json({ message: 'Guide approved', guide });
     } else if (action === 'reject') {
       try {
-        await sendEmail(guide.userId.email, 'Guide Application Rejected', 'Sorry, your guide application has been rejected.');
+        await sendEmail(
+          guide.userId.email,
+          'Guide Application Rejected',
+          'Sorry, your guide application has been rejected.',
+          { context: 'Guide rejection' }
+        );
       } catch (emailErr) {
         console.error('Failed to send rejection email:', emailErr.message);
       }
       guide.rejected = true;
       guide.approved = false;
+      guide.currency = 'INR';
       await guide.save();
       res.json({ message: 'Guide rejected', guide });
     } else {

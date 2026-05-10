@@ -358,7 +358,7 @@ class AIService {
    * @param {Object} params - Itinerary generation parameters
    * @param {string} params.destination - Travel destination
    * @param {number} params.days - Number of days for the trip
-   * @param {number} params.budget - Total budget in USD
+   * @param {number} params.budget - Total budget in INR
    * @param {Array<string>} params.interests - User interests (food, culture, adventure, etc.)
    * @param {string} params.travelStyle - Travel style (luxury, budget, adventure, relaxed)
    * @param {number} params.travelers - Number of travelers
@@ -378,7 +378,7 @@ class AIService {
       destination,
       days,
       budget,
-      currency: params.currency || 'INR',
+      currency: 'INR',
       interests,
       travelStyle,
       travelers,
@@ -819,7 +819,7 @@ You are a professional AI travel planner.
 Trip input:
 - Destination: ${params.destination}
 - Days: ${params.days}
-- Budget: ${params.currency || 'INR'} ${params.budget}
+- Budget: INR ${params.budget}
 - Travelers: ${params.travelers || 1}
 - Travel style: ${params.travelStyle || 'solo'}
 - Start date: ${params.startDate || 'N/A'}
@@ -955,7 +955,7 @@ Return ONLY JSON.
       Trip details:
       - Destination: ${params.destination}
       - Days: ${params.days}
-      - Budget: ${params.currency || 'INR'} ${params.budget}
+      - Budget: INR ${params.budget}
       - Travelers: ${params.travelers || params.numberOfTravelers || 1}
       - Interests: ${(params.interests || []).join(', ')}
       ${preferredPlaces}
@@ -996,8 +996,8 @@ Trip details:
 - Days: ${params.days}
 - Travelers: ${params.travelers || 1}
 - Travel style: ${params.travelStyle || 'solo'}
-- Currency: ${params.currency || 'INR'}
-- User entered budget: ${params.currency || 'INR'} ${params.budget}
+- Currency: INR
+- User entered budget: INR ${params.budget}
 - Interests: ${(params.interests || []).join(', ') || 'general'}
 
 Return ONLY valid JSON:
@@ -1041,7 +1041,7 @@ You are a travel planner.
 Create a ${days}-day itinerary for ${destination}.
 
 Inputs:
-Budget: ${params.currency || 'INR'} ${params.budget || 'N/A'}
+Budget: INR ${params.budget || 'N/A'}
 Travelers: ${travelers}
 Style: ${params.travelStyle || 'general'}
 Start Date: ${startDate}

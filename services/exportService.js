@@ -17,7 +17,7 @@ class ExportService {
       try {
         const chunks = [];
         const doc = new PDFDocument({ margin: 40 });
-        const currency = itinerary?.budget?.currency || 'INR';
+        const currency = 'INR';
 
         // Collect data
         doc.on('data', chunk => chunks.push(chunk));
@@ -265,7 +265,7 @@ class ExportService {
               </div>
               <div class="meta-item">
                 <div class="label">Budget</div>
-                <div class="value">$${itinerary.budget.totalBudget}</div>
+                <div class="value">₹${itinerary.budget.totalBudget}</div>
               </div>
             </div>
             <div class="content">
@@ -300,7 +300,7 @@ class ExportService {
                 <div class="activity-meta">
                   <span class="badge">📌 ${activity.category}</span>
                   <span class="badge">⏱️ ${activity.duration} min</span>
-                  <span class="badge">💵 $${activity.estimatedCost}</span>
+                  <span class="badge">💵 ₹${activity.estimatedCost}</span>
                   <span class="badge">⭐ ${activity.importance}</span>
                 </div>
               </div>
@@ -311,7 +311,7 @@ class ExportService {
 
         html += `
               <div class="day-summary">
-                👥 Total Activities: ${activities.length} | ⏱️ Total Duration: ${dayDuration} min | 💰 Day Total: $${dayTotal}
+                👥 Total Activities: ${activities.length} | ⏱️ Total Duration: ${dayDuration} min | 💰 Day Total: ₹${dayTotal}
               </div>
             </div>
           </div>
@@ -324,27 +324,27 @@ class ExportService {
               <div class="budget-title">💰 Budget Breakdown</div>
               <div class="budget-item">
                 <span>Accommodation</span>
-                <span>$${(itinerary.budget.accommodation || 0).toFixed(2)}</span>
+                <span>₹${(itinerary.budget.accommodation || 0).toFixed(2)}</span>
               </div>
               <div class="budget-item">
                 <span>Transportation</span>
-                <span>$${(itinerary.budget.transportation || 0).toFixed(2)}</span>
+                <span>₹${(itinerary.budget.transportation || 0).toFixed(2)}</span>
               </div>
               <div class="budget-item">
                 <span>Activities</span>
-                <span>$${(itinerary.budget.activities || 0).toFixed(2)}</span>
+                <span>₹${(itinerary.budget.activities || 0).toFixed(2)}</span>
               </div>
               <div class="budget-item">
                 <span>Food</span>
-                <span>$${(itinerary.budget.food || 0).toFixed(2)}</span>
+                <span>₹${(itinerary.budget.food || 0).toFixed(2)}</span>
               </div>
               <div class="budget-item">
                 <span>Miscellaneous</span>
-                <span>$${(itinerary.budget.misc || 0).toFixed(2)}</span>
+                <span>₹${(itinerary.budget.misc || 0).toFixed(2)}</span>
               </div>
               <div class="budget-item total">
                 <span>TOTAL</span>
-                <span>$${itinerary.budget.totalBudget.toFixed(2)}</span>
+                <span>₹${itinerary.budget.totalBudget.toFixed(2)}</span>
               </div>
             </div>
           </div>

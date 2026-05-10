@@ -51,6 +51,12 @@ const cardSx = {
   boxShadow: '0 16px 32px rgba(15,23,42,0.05)',
 };
 
+const getUploadUrl = (path = '') => {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return `http://localhost:3001${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -228,12 +234,12 @@ export default function UserManagement() {
             <Table sx={{ width: '100%', tableLayout: 'fixed' }}>
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ width: 140, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ width: 240, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Email</TableCell>
-                  <TableCell sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Role</TableCell>
-                  <TableCell sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ width: 120, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Location</TableCell>
-                  <TableCell align="right" sx={{ width: 100, fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Actions</TableCell>
+                  <TableCell sx={{ width: '15%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Name</TableCell>
+                  <TableCell sx={{ width: '27%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Email</TableCell>
+                  <TableCell sx={{ width: '11%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Role</TableCell>
+                  <TableCell sx={{ width: '11%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ width: '18%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>ID Proof</TableCell>
+                  <TableCell sx={{ width: '18%', fontSize: '12px', color: '#64748b', fontWeight: 600 }}>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -245,16 +251,38 @@ export default function UserManagement() {
                   filteredUsers.map((user, idx) => {
                     const roleColor = roleColors[user.role] || { bg: '#f3f4f6', fg: '#374151' };
                     const statusColor = statusColors[user.status] || { bg: '#f3f4f6', fg: '#374151' };
+                    const proofUrl = getUploadUrl(user.guideIdentityProof);
                     return (
                       <TableRow key={user._id || idx} hover sx={{ '& td': { py: 1.4, fontSize: '13px' } }}>
                         <TableCell sx={{ fontWeight: 600 }}>{user.name}</TableCell>
                         <TableCell sx={{ color: '#334155' }}>{user.email}</TableCell>
                         <TableCell><Chip label={user.role} size="small" sx={{ bgcolor: roleColor.bg, color: roleColor.fg, borderRadius: '8px', fontWeight: 600, fontSize: '0.72rem' }} /></TableCell>
                         <TableCell><Chip label={user.status} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.fg, borderRadius: '8px', fontWeight: 600, fontSize: '0.72rem' }} /></TableCell>
-                        <TableCell>{user.location || '-'}</TableCell>
-                        <TableCell align="right">
-                          <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}><EditIcon fontSize="small" /></IconButton>
-                          <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}><DeleteIcon fontSize="small" /></IconButton>
+                        <TableCell>
+                          {user.role === 'guide' ? (
+                            proofUrl ? (
+                              <Button
+                                href={proofUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                size="small"
+                                variant="outlined"
+                                sx={{ textTransform: 'none', borderRadius: '8px', fontSize: '0.72rem', py: 0.25 }}
+                              >
+                                View proof
+                              </Button>
+                            ) : (
+                              <Chip label="Missing" size="small" color="warning" variant="outlined" sx={{ borderRadius: '8px', fontWeight: 600 }} />
+                            )
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" spacing={0.5} alignItems="center">
+                            <IconButton size="small" color="primary" onClick={() => handleEditUser(user)}><EditIcon fontSize="small" /></IconButton>
+                            <IconButton size="small" color="error" onClick={() => handleDeleteUser(user)}><DeleteIcon fontSize="small" /></IconButton>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     );
@@ -275,6 +303,7 @@ export default function UserManagement() {
               {filteredUsers.map((user, idx) => {
                 const roleColor = roleColors[user.role] || { bg: '#f3f4f6', fg: '#374151' };
                 const statusColor = statusColors[user.status] || { bg: '#f3f4f6', fg: '#374151' };
+                const proofUrl = getUploadUrl(user.guideIdentityProof);
                 return (
                   <Paper key={user._id || idx} elevation={0} sx={{ border: '1px solid #e2e8f0', borderRadius: '10px', p: 1.35 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
@@ -290,7 +319,24 @@ export default function UserManagement() {
                     <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                       <Chip label={user.role} size="small" sx={{ bgcolor: roleColor.bg, color: roleColor.fg, borderRadius: '8px', fontWeight: 600 }} />
                       <Chip label={user.status} size="small" sx={{ bgcolor: statusColor.bg, color: statusColor.fg, borderRadius: '8px', fontWeight: 600 }} />
-                      <Chip label={user.location || 'No location'} size="small" variant="outlined" sx={{ borderRadius: '8px' }} />
+                      {user.role === 'guide' && (
+                        proofUrl ? (
+                          <Chip
+                            component="a"
+                            href={proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            clickable
+                            label="View ID proof"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                            sx={{ borderRadius: '8px', fontWeight: 600 }}
+                          />
+                        ) : (
+                          <Chip label="ID proof missing" size="small" color="warning" variant="outlined" sx={{ borderRadius: '8px', fontWeight: 600 }} />
+                        )
+                      )}
                     </Stack>
                   </Paper>
                 );

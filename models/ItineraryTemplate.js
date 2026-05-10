@@ -56,7 +56,7 @@ const ItineraryTemplateSchema = new mongoose.Schema(
       max: Number,
       currency: {
         type: String,
-        default: 'USD',
+        default: 'INR',
       },
     },
 

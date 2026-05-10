@@ -93,6 +93,9 @@ export default function NotificationPanel({ onActionComplete, chatNotifications 
         console.log('[NotificationPanel] Calling onActionComplete callback');
         onActionComplete();
       }
+      if (selectedNotif.action === 'accept') {
+        window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: 'Reviews' } }));
+      }
     } catch (err) {
       console.error('[NotificationPanel] Failed to send reply:', err);
       setSnackbar({ 

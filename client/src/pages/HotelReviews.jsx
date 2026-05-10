@@ -29,9 +29,6 @@ const negativeWords = [
   "problem",
 ];
 
-const praiseKeywords = ["service", "staff", "clean", "location", "amenities", "view", "bed", "breakfast"];
-const complaintKeywords = ["wifi", "noise", "ac", "air", "bathroom", "dirty", "service", "slow"];
-
 const cardStyle = {
   p: { xs: 2, md: 2.5 },
   borderRadius: 3,
@@ -97,26 +94,12 @@ export default function HotelReviews({ showHeader = true }) {
     let positive = 0;
     let negative = 0;
     let neutral = 0;
-    const praiseCounts = {};
-    const complaintCounts = {};
 
     normalizedReviews.forEach((review) => {
       const score = getSentimentScore(review.text);
       if (score > 0) positive += 1;
       else if (score < 0) negative += 1;
       else neutral += 1;
-
-      const text = review.text.toLowerCase();
-      praiseKeywords.forEach((keyword) => {
-        if (text.includes(keyword)) {
-          praiseCounts[keyword] = (praiseCounts[keyword] || 0) + 1;
-        }
-      });
-      complaintKeywords.forEach((keyword) => {
-        if (text.includes(keyword)) {
-          complaintCounts[keyword] = (complaintCounts[keyword] || 0) + 1;
-        }
-      });
     });
 
     const total = normalizedReviews.length;
@@ -127,21 +110,13 @@ export default function HotelReviews({ showHeader = true }) {
       ? normalizedReviews.reduce((sum, review) => sum + review.rating, 0) / total
       : 0;
 
-    const getTopKeyword = (counts) => {
-      const entries = Object.entries(counts);
-      if (entries.length === 0) return t("hotelReviews.fallback.noSignal");
-      return entries.sort((a, b) => b[1] - a[1])[0][0];
-    };
-
     return {
       positivePct,
       negativePct,
       neutralPct,
       ratingAvg: Number(ratingAvg.toFixed(1)),
-      praise: getTopKeyword(praiseCounts),
-      complaint: getTopKeyword(complaintCounts),
     };
-  }, [normalizedReviews, t]);
+  }, [normalizedReviews]);
 
   const ratingDistribution = useMemo(() => {
     const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -280,33 +255,6 @@ export default function HotelReviews({ showHeader = true }) {
                 </Stack>
               </Stack>
             </Stack>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ ...cardStyle, bgcolor: "#f8fafc" }}>
-            <Typography fontWeight={700} mb={1}>
-              {t("hotelReviews.cards.mostPraise")}
-            </Typography>
-            <Typography variant="h5" fontWeight={800} sx={{ color: "#0f172a" }}>
-              {loading ? t("hotelReviews.fallback.loading") : sentimentStats.praise}
-            </Typography>
-            <Typography color="text.secondary">{t("hotelReviews.cards.mostPraiseSubtitle")}</Typography>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ ...cardStyle, bgcolor: "#f8fafc" }}>
-            <Typography fontWeight={700} mb={1}>
-              {t("hotelReviews.cards.mostComplaint")}
-            </Typography>
-            <Typography variant="h5" fontWeight={800} sx={{ color: "#0f172a" }}>
-              {loading ? t("hotelReviews.fallback.loading") : sentimentStats.complaint}
-            </Typography>
-            <Typography color="text.secondary">
-              {t("hotelReviews.cards.mostComplaintSubtitle")}
-            </Typography>
           </Paper>
         </Grid>
       </Grid>

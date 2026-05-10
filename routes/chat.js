@@ -3,6 +3,7 @@ const moment = require('moment');
 const Chat = require('../models/Chat');
 const Message = require('../models/Message');
 const Booking = require('../models/Booking');
+const HotelBooking = require('../models/HotelBooking');
 const User = require('../models/User');
 const Tourist = require('../models/Tourist');
 const mongoose = require('mongoose');
@@ -404,16 +405,132 @@ router.get('/:bookingId/messages', verifyToken, async (req, res) => {
 // GET /api/chat/guide/:guideId/tourists
 router.get('/guide/:guideId/tourists', verifyToken, async (req, res) => {
     try {
-        // Find all bookings for this guide
-        const bookings = await Booking.find({ guideId: req.params.guideId }).populate('touristId', 'name email avatar');
-        // Use a Map to ensure uniqueness by touristId
-        const uniqueTourists = new Map();
-        bookings.forEach(booking => {
-            if (booking.touristId && !uniqueTourists.has(booking.touristId._id.toString())) {
-                uniqueTourists.set(booking.touristId._id.toString(), booking.touristId);
-            }
+        const { guideId } = req.params;
+        const includeAll = req.query.includeAll === 'true';
+
+        if (req.user.userId !== guideId && req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
+        const bookings = await Booking.find({ guideId })
+            .populate('touristId', 'name email avatar country')
+            .sort({ updatedAt: -1, createdAt: -1 });
+
+        const bookedTouristIds = new Set();
+        bookings.forEach((booking) => {
+            const touristId = booking.touristId?._id?.toString();
+            if (touristId) bookedTouristIds.add(touristId);
         });
-        res.json({ tourists: Array.from(uniqueTourists.values()) });
+
+        const chats = await Chat.find(
+            includeAll
+                ? { guideId }
+                : { guideId, touristId: { $in: Array.from(bookedTouristIds) } }
+        )
+            .populate('touristId', 'name email avatar country')
+            .sort({ updatedAt: -1 });
+
+        const touristIds = new Set(bookedTouristIds);
+        chats.forEach((chat) => {
+            const touristId = chat.touristId?._id?.toString();
+            if (touristId) touristIds.add(touristId);
+        });
+
+        const profiles = touristIds.size > 0
+            ? await Tourist.find({ userId: { $in: Array.from(touristIds) } }).select('userId fullName avatar nationality')
+            : [];
+        const profileMap = new Map(
+            profiles.map((profile) => [profile.userId.toString(), profile])
+        );
+
+        const contacts = new Map();
+
+        const buildTouristPayload = (tourist) => {
+            const id = tourist?._id?.toString();
+            if (!id) return null;
+
+            const profile = profileMap.get(id);
+            return {
+                _id: tourist._id,
+                name: profile?.fullName || tourist.name || tourist.email || 'Tourist',
+                email: tourist.email || '',
+                avatar: profile?.avatar || tourist.avatar || '',
+                country: tourist.country || profile?.nationality || ''
+            };
+        };
+
+        const upsertContact = ({ tourist, chat = null, booking = null, lastMessage = null, unreadCount = 0 }) => {
+            const touristId = tourist?._id?.toString();
+            if (!touristId) return;
+
+            const payload = buildTouristPayload(tourist);
+            if (!payload) return;
+
+            const existing = contacts.get(touristId) || {};
+            contacts.set(touristId, {
+                ...payload,
+                chatId: chat?._id || existing.chatId || null,
+                bookingId: existing.bookingId || booking?._id || chat?.bookingId || null,
+                bookingStatus: existing.bookingStatus || booking?.status || '',
+                lastMessage: lastMessage || existing.lastMessage || null,
+                unreadCount: unreadCount || existing.unreadCount || 0
+            });
+        };
+
+        bookings.forEach((booking) => {
+            upsertContact({ tourist: booking.touristId, booking });
+        });
+
+        await Promise.all(
+            chats.map(async (chat) => {
+                const [lastMessage, unreadCount] = await Promise.all([
+                    Message.findOne({
+                        chatId: chat._id,
+                        deletedFor: { $ne: req.user.userId }
+                    }).sort({ createdAt: -1 }),
+                    Message.countDocuments({
+                        chatId: chat._id,
+                        isRead: false,
+                        senderId: { $ne: req.user.userId },
+                        deletedFor: { $ne: req.user.userId }
+                    })
+                ]);
+
+                upsertContact({
+                    tourist: chat.touristId,
+                    chat,
+                    lastMessage,
+                    unreadCount
+                });
+            })
+        );
+
+        if (includeAll) {
+            const allTourists = await User.find({ role: 'tourist' }).select('name email avatar country');
+            const missingIds = allTourists
+                .map((tourist) => tourist._id.toString())
+                .filter((id) => !touristIds.has(id));
+
+            if (missingIds.length > 0) {
+                const missingProfiles = await Tourist.find({ userId: { $in: missingIds } }).select('userId fullName avatar nationality');
+                missingProfiles.forEach((profile) => {
+                    profileMap.set(profile.userId.toString(), profile);
+                });
+            }
+
+            allTourists.forEach((tourist) => {
+                upsertContact({ tourist });
+            });
+        }
+
+        const tourists = Array.from(contacts.values()).sort((a, b) => {
+            const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+            const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            if (aTime !== bTime) return bTime - aTime;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+
+        res.json({ tourists });
     } catch (err) {
         res.status(500).json({ message: 'Server error', error: err.message });
     }
@@ -429,44 +546,86 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
             return res.status(403).json({ message: 'Access denied' });
         }
 
-        const chats = await Chat.find({ guideId: hotelId }).populate('touristId', 'name email avatar');
-        const touristIds = chats
-            .map(chat => chat.touristId?._id?.toString())
-            .filter(Boolean);
+        const [chats, hotelBookings] = await Promise.all([
+            Chat.find({ guideId: hotelId }).populate('touristId', 'name email avatar country').sort({ updatedAt: -1 }),
+            HotelBooking.find({ hotelOwnerId: hotelId, status: { $ne: 'cancelled' } })
+                .populate('touristId', 'name email avatar country')
+                .sort({ createdAt: -1 })
+        ]);
+
+        const touristIds = Array.from(new Set([
+            ...chats.map(chat => chat.touristId?._id?.toString()).filter(Boolean),
+            ...hotelBookings.map(booking => booking.touristId?._id?.toString()).filter(Boolean)
+        ]));
         const touristProfiles = await Tourist.find({ userId: { $in: touristIds } })
             .select('userId fullName avatar');
         const profileMap = new Map(
             touristProfiles.map(profile => [profile.userId.toString(), profile])
         );
-        const results = [];
+        const contacts = new Map();
         const existingTourists = new Set();
+
+        const buildTouristPayload = (tourist, extra = {}) => {
+            const touristId = tourist?._id?.toString();
+            if (!touristId) return null;
+            const profile = profileMap.get(touristId);
+            const payload = {
+                _id: tourist._id,
+                name: profile?.fullName || tourist.name || tourist.email || '',
+                email: tourist.email || '',
+                avatar: profile?.avatar || tourist.avatar || '',
+                country: tourist.country || '',
+                ...extra
+            };
+            if (!payload.name && payload.email) payload.name = payload.email;
+            return payload.name ? payload : null;
+        };
+
+        const upsertContact = (touristId, update) => {
+            if (!touristId) return;
+            existingTourists.add(touristId);
+            const existing = contacts.get(touristId) || {};
+            contacts.set(touristId, {
+                ...existing,
+                ...update,
+                tourist: {
+                    ...(existing.tourist || {}),
+                    ...(update.tourist || {})
+                },
+                lastMessage: update.lastMessage || existing.lastMessage || null,
+                unreadCount: update.unreadCount ?? existing.unreadCount ?? 0
+            });
+        };
+
+        hotelBookings.forEach((booking) => {
+            const touristId = booking.touristId?._id?.toString();
+            const roomLabel = booking.roomType
+                ? `${booking.roomType}${Number(booking.roomCount) > 1 ? ` (${booking.roomCount} rooms)` : ''}`
+                : 'Booked room';
+            const touristPayload = buildTouristPayload(booking.touristId, {
+                roomNumber: roomLabel
+            });
+            if (!touristPayload) return;
+            upsertContact(touristId, {
+                tourist: touristPayload,
+                hotelBookingId: booking._id,
+                room: roomLabel,
+                bookingStatus: booking.status,
+                hotelBookingCreatedAt: booking.createdAt
+            });
+        });
 
         for (const chat of chats) {
             const lastMessage = await Message.findOne({
                 chatId: chat._id,
                 deletedFor: { $ne: req.user.userId }
             }).sort({ createdAt: -1 });
-            if (!lastMessage && !includeAll) continue;
             const touristId = chat.touristId?._id?.toString();
-            if (touristId) {
-                existingTourists.add(touristId);
-            }
-            const profile = touristId ? profileMap.get(touristId) : null;
-            const touristPayload = chat.touristId ? {
-                _id: chat.touristId._id,
-                name: profile?.fullName || chat.touristId.name || '',
-                email: chat.touristId.email,
-                avatar: profile?.avatar || chat.touristId.avatar
-            } : null;
-            if (!touristPayload) {
-                continue;
-            }
-            if (!touristPayload.name && touristPayload.email) {
-                touristPayload.name = touristPayload.email;
-            }
-            if (!touristPayload.name) {
-                continue;
-            }
+            const hasBookingContact = touristId ? contacts.has(touristId) : false;
+            if (!lastMessage && !includeAll && !hasBookingContact) continue;
+            const touristPayload = buildTouristPayload(chat.touristId);
+            if (!touristPayload) continue;
+
             const unreadCount = await Message.countDocuments({
                 chatId: chat._id,
                 isRead: false,
@@ -474,7 +633,7 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
                 deletedFor: { $ne: req.user.userId }
             });
 
-            results.push({
+            upsertContact(touristId, {
                 chatId: chat._id,
                 bookingId: chat.bookingId,
                 tourist: touristPayload,
@@ -482,6 +641,8 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
                 unreadCount
             });
         }
+
+        const results = Array.from(contacts.values());
 
         if (includeAll) {
             const tourists = await Tourist.find({}).select('userId fullName avatar');
@@ -492,6 +653,8 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
                     results.push({
                         chatId: null,
                         bookingId: null,
+                        hotelBookingId: null,
+                        room: '',
                         tourist: {
                             _id: touristProfile.userId,
                             name: touristProfile.fullName,
@@ -502,12 +665,14 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
                     });
                 });
             } else {
-                const touristsFallback = await User.find({ role: 'tourist' }).select('name email avatar');
+                const touristsFallback = await User.find({ role: 'tourist' }).select('name email avatar country');
                 touristsFallback.forEach((tourist) => {
                     if (!existingTourists.has(tourist._id.toString())) {
                         results.push({
                             chatId: null,
                             bookingId: null,
+                            hotelBookingId: null,
+                            room: '',
                             tourist,
                             lastMessage: null,
                             unreadCount: 0
@@ -518,8 +683,12 @@ router.get('/hotel/:hotelId/tourists', verifyToken, async (req, res) => {
         }
 
         results.sort((a, b) => {
-            const aTime = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
-            const bTime = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            const aTime = a.lastMessage?.createdAt
+                ? new Date(a.lastMessage.createdAt).getTime()
+                : (a.hotelBookingCreatedAt ? new Date(a.hotelBookingCreatedAt).getTime() : 0);
+            const bTime = b.lastMessage?.createdAt
+                ? new Date(b.lastMessage.createdAt).getTime()
+                : (b.hotelBookingCreatedAt ? new Date(b.hotelBookingCreatedAt).getTime() : 0);
             return bTime - aTime;
         });
 

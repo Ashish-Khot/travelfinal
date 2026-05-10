@@ -597,7 +597,7 @@ export default function TravelogueDetailView({ travelogueId, travelogue: initial
                 <Card elevation={0} sx={{ p: 2, textAlign: 'center', border: '1px solid rgba(79,138,139,0.1)', borderRadius: '12px' }}>
                   <MonetizationOnIcon sx={{ fontSize: 28, color: '#4F8A8B', mb: 1 }} />
                   <Typography variant="body2" fontWeight={700} color="#6B7280">
-                    ${travelogue.estimatedCost}
+                    ₹{travelogue.estimatedCost}
                   </Typography>
                 </Card>
               </Grid>

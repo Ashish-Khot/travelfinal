@@ -19,7 +19,6 @@ import PersonIcon from "@mui/icons-material/Person";
 import RoomIcon from "@mui/icons-material/Room";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HotelIcon from "@mui/icons-material/Hotel";
-import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
@@ -42,20 +41,19 @@ const roles = [
     icon: <HotelIcon fontSize="small" />,
   },
   {
-    value: "hospital",
-    label: "Hospital",
-    icon: <LocalHospitalIcon fontSize="small" />,
-  },
-  {
     value: "admin",
     label: "Admin",
     icon: <AdminPanelSettingsIcon fontSize="small" />,
   },
 ];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PASSWORD_MIN_LENGTH = 6;
+
 export default function Login() {
   const [selectedRole, setSelectedRole] = useState(roles[0].value);
   const [form, setForm] = useState({ email: "", password: "" });
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({
@@ -69,7 +67,11 @@ export default function Login() {
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: "" });
+    }
   };
 
   const showToast = (severity, message) => {
@@ -80,16 +82,39 @@ export default function Login() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     localStorage.removeItem("userId");
+    localStorage.removeItem("role");
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+    const email = form.email.trim();
+
+    if (!email) {
+      nextErrors.email = "Email address is required.";
+    } else if (!EMAIL_REGEX.test(email)) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+
+    if (!form.password) {
+      nextErrors.password = "Password is required.";
+    } else if (form.password.length < PASSWORD_MIN_LENGTH) {
+      nextErrors.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
+    if (!validateForm()) return;
     setLoading(true);
 
     try {
       const res = await api.post("/login", {
         ...form,
+        email: form.email.trim(),
         role: selectedRole,
       });
 
@@ -109,6 +134,7 @@ export default function Login() {
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
       localStorage.setItem("userId", res.data.user._id);
+      localStorage.setItem("role", userRole);
 
       if (userRole === "guide") {
         const guideRes = await api.get(`/guide/profile/${res.data.user._id}`);
@@ -134,7 +160,6 @@ export default function Login() {
         admin: "/admin-dashboard",
         tourist: "/tourist-dashboard",
         hotel: "/hotel-dashboard",
-        hospital: "/",
       };
 
       window.location.href = redirectByRole[userRole] || "/";
@@ -214,6 +239,8 @@ export default function Login() {
                 value={form.email}
                 onChange={handleChange}
                 className={styles.formField}
+                error={Boolean(errors.email)}
+                helperText={errors.email}
               />
               <TextField
                 required
@@ -226,6 +253,8 @@ export default function Login() {
                 value={form.password}
                 onChange={handleChange}
                 className={styles.formField}
+                error={Boolean(errors.password)}
+                helperText={errors.password}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">

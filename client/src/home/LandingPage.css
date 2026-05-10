@@ -31,6 +31,7 @@
 .lp-nav button,
 .lp-login-btn,
 .lp-search button,
+.lp-clear-search,
 .lp-card-row button,
 .lp-cta button {
   border: none;
@@ -157,6 +158,11 @@
   box-shadow: 0 10px 20px rgba(199, 103, 72, 0.35);
 }
 
+.lp-search button:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
 .lp-section {
   padding: 84px 5vw;
 }
@@ -177,6 +183,17 @@
   margin: 10px 0 0;
   color: var(--lp-muted);
   font-size: 1.08rem;
+}
+
+.lp-clear-search {
+  margin-top: 16px;
+  color: var(--lp-brand-deep);
+  font-weight: 700;
+}
+
+.lp-search-status {
+  color: #9f3a28;
+  font-weight: 700;
 }
 
 .lp-cards {
@@ -227,6 +244,17 @@
 .lp-location {
   margin: 8px 0 16px;
   color: var(--lp-muted);
+}
+
+.lp-card-copy {
+  display: -webkit-box;
+  min-height: 4.5em;
+  margin: 0 0 18px;
+  overflow: hidden;
+  color: var(--lp-muted);
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .lp-card-row {

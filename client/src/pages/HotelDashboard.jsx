@@ -1,10 +1,9 @@
 
 import React, { useState } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Paper, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import DashboardLayout from "../layout/DashboardLayout";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
-import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 import BedRoundedIcon from "@mui/icons-material/BedRounded";
 import PeopleAltRoundedIcon from "@mui/icons-material/PeopleAltRounded";
 import StarRoundedIcon from "@mui/icons-material/StarRounded";
@@ -19,7 +18,6 @@ import HotelBookings from "./HotelBookings";
 import HotelChat from "./HotelChat";
 import HotelCustomerIntelligence from "./HotelCustomerIntelligence";
 import HotelReviews from "./HotelReviews";
-import HotelAnalytics from "./HotelAnalytics";
 import HotelProfile from "./HotelProfile";
 
 export default function HotelDashboard() {
@@ -27,7 +25,6 @@ export default function HotelDashboard() {
   const [section, setSection] = useState("overview");
   const menuItems = [
     { id: "overview", label: t("dashboard.menu.overview"), icon: <DashboardRoundedIcon /> },
-    { id: "revenue", label: t("dashboard.menu.revenue"), icon: <TrendingUpRoundedIcon /> },
     { id: "rooms", label: t("dashboard.menu.rooms"), icon: <BedRoundedIcon /> },
     { id: "bookings", label: t("dashboard.menu.bookings"), icon: <EventAvailableRoundedIcon /> },
     { id: "customers", label: t("dashboard.menu.customers"), icon: <PeopleAltRoundedIcon /> },
@@ -39,10 +36,6 @@ export default function HotelDashboard() {
     overview: {
       title: t("dashboard.section.overview.title"),
       subtitle: t("dashboard.section.overview.subtitle"),
-    },
-    revenue: {
-      title: t("dashboard.section.revenue.title"),
-      subtitle: t("dashboard.section.revenue.subtitle"),
     },
     rooms: {
       title: t("dashboard.section.rooms.title"),
@@ -78,8 +71,6 @@ export default function HotelDashboard() {
     switch (section) {
       case "overview":
         return <HotelDashboardOverview showHeader={false} onQuickAction={setSection} />;
-      case "revenue":
-        return <HotelAnalytics showHeader={false} />;
       case "rooms":
         return <RoomManagement showHeader={false} />;
       case "bookings":
@@ -105,14 +96,40 @@ export default function HotelDashboard() {
       selected={section}
       onSelect={setSection}
     >
-      <Box sx={{ mb: { xs: 2, md: 3 } }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: "#0f172a" }}>
-          {meta.title}
-        </Typography>
-        <Typography sx={{ color: "var(--dash-muted)", mt: 0.5 }}>
-          {meta.subtitle}
-        </Typography>
-      </Box>
+      <Paper
+        elevation={0}
+        sx={{
+          mb: { xs: 2.5, md: 3 },
+          p: { xs: 2, md: 2.5 },
+          borderRadius: 2.5,
+          border: "1px solid var(--dash-border)",
+          boxShadow: "var(--dash-shadow)",
+          background:
+            "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.96) 100%)",
+        }}
+      >
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          alignItems={{ xs: "flex-start", md: "center" }}
+          justifyContent="space-between"
+        >
+          <Box>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 900,
+                color: "#0f172a",
+                letterSpacing: 0,
+                fontSize: { xs: 28, md: 36 },
+                lineHeight: 1.08,
+              }}
+            >
+              {meta.title}
+            </Typography>
+          </Box>
+        </Stack>
+      </Paper>
       {renderSection()}
     </DashboardLayout>
   );

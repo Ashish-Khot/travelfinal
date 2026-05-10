@@ -223,8 +223,9 @@ function ReviewsPage({ user, guideProfile }) {
             }
           });
           setRatingDistribution(dist);
-        } else if (guideProfile?.ratings) {
-          setAverageRating(guideProfile.ratings);
+        } else {
+          setAverageRating(0);
+          setRatingDistribution({ 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 });
         }
       } catch (err) {
         console.error('Error fetching reviews:', err);
@@ -272,7 +273,7 @@ function ReviewsPage({ user, guideProfile }) {
   }
 
   const totalReviews = reviews.length;
-  const displayRating = averageRating || guideProfile?.ratings || 0;
+  const displayRating = totalReviews > 0 ? averageRating : 0;
 
   return (
     <Box>
@@ -477,7 +478,23 @@ import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 
-const drawerWidth = 240;
+const drawerWidth = 272;
+const collapsedDrawerWidth = 72;
+
+const guideColors = {
+  ink: '#172326',
+  muted: '#61706d',
+  primary: '#2f6f68',
+  primaryDeep: '#173b38',
+  secondary: '#7c8f68',
+  accent: '#d89b5f',
+  sidebarText: '#edf7f2',
+  sidebarMuted: '#b7cec6',
+  pageBackground: '#f6f4ee',
+  sidebarBackground: '#173b38',
+  activeNavBackground: '#d8e7e1',
+  heroBackground: 'linear-gradient(135deg, #1b3f3c 0%, #2f6f68 100%)',
+};
 
 const navItems = [
   { label: 'Dashboard', icon: <DashboardIcon /> },
@@ -492,21 +509,20 @@ const navItems = [
 ];
 
 const glassBg = theme => `
-  linear-gradient(135deg, ${alpha(theme.palette.background.paper, 0.7)}, ${alpha(theme.palette.primary.light, 0.2)}),
-  rgba(255,255,255,0.4)
+  linear-gradient(180deg, ${alpha(theme.palette.background.paper, 0.96)}, ${alpha('#f6f4ee', 0.92)})
 `;
 
 const GlassCard = styled(Box)(({ theme }) => ({
   background: glassBg(theme),
-  boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.18)',
+  boxShadow: '0 14px 34px rgba(23, 35, 38, 0.08)',
   borderRadius: 20,
-  border: '1px solid rgba(255,255,255,0.18)',
-  backdropFilter: 'blur(12px)',
+  border: '1px solid rgba(23, 35, 38, 0.08)',
+  backdropFilter: 'blur(10px)',
   padding: theme.spacing(3),
   transition: 'transform 0.2s, box-shadow 0.2s',
   '&:hover': {
-    transform: 'translateY(-4px) scale(1.03)',
-    boxShadow: '0 12px 40px 0 rgba(31, 38, 135, 0.22)',
+    transform: 'translateY(-2px)',
+    boxShadow: '0 18px 42px rgba(23, 35, 38, 0.12)',
   },
 }));
 
@@ -550,43 +566,47 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: prop => prop !== 'open' })
     '& .MuiDrawer-paper': {
       width: drawerWidth,
       boxSizing: 'border-box',
-      background: glassBg(theme),
-      borderRight: 'none',
-      backdropFilter: 'blur(10px)',
+      background: guideColors.sidebarBackground,
+      color: guideColors.sidebarText,
+      borderRight: '1px solid rgba(237, 247, 242, 0.12)',
+      boxShadow: '14px 0 30px rgba(23, 35, 38, 0.14)',
       transition: theme.transitions.create('width', {
         easing: theme.transitions.easing.sharp,
         duration: theme.transitions.duration.enteringScreen,
       }),
       ...(open ? {} : {
-        width: theme.spacing(8),
+        width: collapsedDrawerWidth,
         overflowX: 'hidden',
       }),
     },
   }));
 
 const metrics = [
-  { title: 'Total Bookings', value: 128, icon: <BookingsIcon fontSize="large" color="primary" />, color: 'primary.main', gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' },
-  { title: 'Monthly Earnings', value: '₹2,340', icon: <EarningsIcon fontSize="large" color="success" />, color: 'success.main', gradient: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)' },
-  { title: 'Upcoming Tours', value: 7, icon: <TourIcon fontSize="large" color="info" />, color: 'info.main', gradient: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' },
-  { title: 'Rating', value: '4.9', icon: <ReviewsIcon fontSize="large" color="warning" />, color: 'warning.main', gradient: 'linear-gradient(135deg, #fceabb 0%, #f8b500 100%)' },
+  { title: 'Total Bookings', value: 128, icon: <BookingsIcon fontSize="large" color="primary" />, color: 'primary.main', gradient: '#e3eee9' },
+  { title: 'Monthly Earnings', value: '₹2,340', icon: <EarningsIcon fontSize="large" color="success" />, color: 'success.main', gradient: '#edf3e6' },
+  { title: 'Upcoming Tours', value: 7, icon: <TourIcon fontSize="large" color="info" />, color: 'info.main', gradient: '#eee5d8' },
+  { title: 'Rating', value: '4.9', icon: <ReviewsIcon fontSize="large" color="warning" />, color: 'warning.main', gradient: '#f4eadc' },
 ];
+
+const guideDashboardFont = "'Trebuchet MS', 'Aptos', 'Segoe UI Variable', 'Segoe UI', sans-serif";
 
 const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#1976d2' },
-    secondary: { main: '#06b6d4' },
-    success: { main: '#10b981' },
+    primary: { main: guideColors.primary },
+    secondary: { main: guideColors.secondary },
+    success: { main: '#16a34a' },
     warning: { main: '#f59e0b' },
-    error: { main: '#ef4444' },
-    info: { main: '#3b82f6' },
-    background: { default: '#f9fafb', paper: '#fff' },
+    error: { main: '#dc2626' },
+    info: { main: guideColors.secondary },
+    background: { default: guideColors.pageBackground, paper: '#fff' },
+    text: { primary: guideColors.ink, secondary: guideColors.muted },
   },
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 10 },
   typography: {
-    fontFamily: "'Poppins', 'Inter', 'Segoe UI', 'Roboto', sans-serif",
-    h4: { fontWeight: 700, letterSpacing: '-0.5px' },
-    h5: { fontWeight: 700, letterSpacing: '-0.5px' },
+    fontFamily: guideDashboardFont,
+    h4: { fontWeight: 700, letterSpacing: 0 },
+    h5: { fontWeight: 700, letterSpacing: 0 },
     h6: { fontWeight: 700 },
   },
   components: {
@@ -616,7 +636,7 @@ const theme = createTheme({
   }
 });
 
-function DashboardPage({ user, bookings, guideProfile, tours }) {
+function DashboardPage({ user, bookings, guideProfile, guideReviews, tours }) {
   // Calculate metrics
   const totalBookings = bookings.length;
   const pendingBookings = bookings.filter(b => b.status === 'pending').length;
@@ -633,6 +653,202 @@ function DashboardPage({ user, bookings, guideProfile, tours }) {
   
   const responseRate = totalBookings > 0 ? 95 : 0; // Placeholder, should come from backend
   const completionRate = totalBookings > 0 ? Math.round((completedTours / totalBookings) * 100) : 0;
+  const activeBookings = bookings.filter(b => ['pending', 'confirmed'].includes((b.status || '').toLowerCase())).length;
+  const fetchedReviews = Array.isArray(guideReviews) ? guideReviews : [];
+  const reviewCount = fetchedReviews.length || Number(guideProfile?.reviewCount || guideProfile?.reviewsCount || guideProfile?.totalReviews || 0);
+  const ratingValue = fetchedReviews.length > 0
+    ? fetchedReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / fetchedReviews.length
+    : Number(guideProfile?.ratings || guideProfile?.rating || 0);
+  const sortedBookings = [...bookings].sort((a, b) => new Date(b.createdAt || b.startDateTime || 0) - new Date(a.createdAt || a.startDateTime || 0));
+  const upcomingBooking = [...bookings]
+    .filter(b => new Date(b.startDateTime) >= new Date() && (b.status || '').toLowerCase() !== 'cancelled')
+    .sort((a, b) => new Date(a.startDateTime) - new Date(b.startDateTime))[0];
+  const formatCurrency = value => `INR ${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Number(value || 0))}`;
+  const formatDate = value => value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled';
+  const statusRows = ['pending', 'confirmed', 'completed'].map(status => ({
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    value: bookings.filter(b => (b.status || '').toLowerCase() === status).length,
+  }));
+  const statCards = [
+    { label: 'Bookings', value: totalBookings, meta: `${activeBookings} active`, tone: guideColors.primary, icon: <BookingsIcon /> },
+    { label: 'Earnings', value: formatCurrency(totalEarnings), meta: `${confirmedBookings} confirmed`, tone: '#16a34a', icon: <EarningsIcon /> },
+    { label: 'Upcoming', value: upcomingTours, meta: upcomingBooking ? formatDate(upcomingBooking.startDateTime) : 'No upcoming tour', tone: guideColors.secondary, icon: <CalendarIcon /> },
+    { label: 'Rating', value: reviewCount > 0 ? ratingValue.toFixed(1) : 'New', meta: `${reviewCount} reviews`, tone: '#f59e0b', icon: <ReviewsIcon /> },
+  ];
+  const cardSx = {
+    bgcolor: '#fff',
+    border: '1px solid #dbe3ef',
+    borderRadius: 3,
+    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.06)',
+  };
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box
+        sx={{
+          p: { xs: 2.5, md: 3.5 },
+          borderRadius: 4,
+          color: '#fff',
+          background: guideColors.heroBackground,
+          boxShadow: '0 22px 44px rgba(23, 59, 56, 0.18)',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr auto' },
+          gap: 2.5,
+          alignItems: 'center',
+        }}
+      >
+        <Box>
+          <Typography variant="overline" sx={{ letterSpacing: 2.4, color: 'rgba(255,255,255,0.72)', fontWeight: 800 }}>
+            Guide Workspace
+          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 800, mt: 0.5 }}>
+            Welcome back, {user?.name || 'Guide'}
+          </Typography>
+          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.78)', mt: 1 }}>
+            Manage tourist requests, upcoming tours, messages, and profile readiness from one clean workspace.
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            borderRadius: 3,
+            bgcolor: 'rgba(255,255,255,0.12)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            minWidth: 220,
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.72)', fontWeight: 700 }}>
+            Next booking
+          </Typography>
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, mt: 0.5 }}>
+            {upcomingBooking?.destination || 'No upcoming booking'}
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.74)' }}>
+            {upcomingBooking ? formatDate(upcomingBooking.startDateTime) : 'New requests will appear here'}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' }, gap: 2.25 }}>
+        {statCards.map(card => (
+          <Box key={card.label} sx={{ ...cardSx, p: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: 1 }}>
+                  {card.label}
+                </Typography>
+                <Typography variant="h4" sx={{ color: guideColors.ink, fontWeight: 900, mt: 0.5 }}>
+                  {card.value}
+                </Typography>
+              </Box>
+              <Box sx={{ width: 44, height: 44, borderRadius: 2.5, display: 'grid', placeItems: 'center', color: card.tone, bgcolor: alpha(card.tone, 0.1) }}>
+                {card.icon}
+              </Box>
+            </Box>
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>
+              {card.meta}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.35fr 0.65fr' }, gap: 2.25 }}>
+        <Box sx={{ ...cardSx, p: { xs: 2.5, md: 3 } }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2.5 }}>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                Tourist Activity
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Latest guide bookings from tourists
+              </Typography>
+            </Box>
+            <Chip label={`${pendingBookings} pending`} sx={{ bgcolor: '#eee5d8', color: '#8a5a2b', fontWeight: 800 }} />
+          </Box>
+
+          {sortedBookings.length === 0 ? (
+            <Box sx={{ py: 6, textAlign: 'center', border: '1px dashed #cbd5e1', borderRadius: 3, color: 'text.secondary' }}>
+              <BookingsIcon sx={{ fontSize: 44, color: '#94a3b8', mb: 1 }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#334155' }}>
+                No tourist bookings yet
+              </Typography>
+              <Typography variant="body2">
+                Bookings created by tourists will show here automatically.
+              </Typography>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+              {sortedBookings.slice(0, 5).map(booking => {
+                const status = (booking.status || 'pending').toLowerCase();
+                const touristName = booking.touristId?.name || booking.tourist?.name || 'Tourist';
+                const statusTone = status === 'completed' ? '#16a34a' : status === 'confirmed' ? guideColors.primary : status === 'rejected' ? '#dc2626' : guideColors.secondary;
+                return (
+                  <Box
+                    key={booking._id}
+                    sx={{
+                      py: 2,
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: '1fr auto' },
+                      gap: 1.5,
+                      borderBottom: '1px solid #edf2f7',
+                      '&:last-child': { borderBottom: 0 },
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: guideColors.ink }}>
+                        {touristName} to {booking.destination || 'destination pending'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {formatDate(booking.startDateTime)} | {formatCurrency(booking.price)}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={status}
+                      size="small"
+                      sx={{ justifySelf: { xs: 'start', md: 'end' }, bgcolor: alpha(statusTone, 0.1), color: statusTone, fontWeight: 800, textTransform: 'capitalize' }}
+                    />
+                  </Box>
+                );
+              })}
+            </Box>
+          )}
+        </Box>
+
+        <Box sx={{ ...cardSx, p: { xs: 2.5, md: 3 } }}>
+          <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>
+            Booking Pipeline
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {statusRows.map(row => {
+              const width = totalBookings > 0 ? Math.round((row.value / totalBookings) * 100) : 0;
+              return (
+                <Box key={row.label}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{row.label}</Typography>
+                    <Typography variant="body2" color="text.secondary">{row.value}</Typography>
+                  </Box>
+                  <Box sx={{ height: 8, borderRadius: 999, bgcolor: '#e2e8f0', overflow: 'hidden' }}>
+                    <Box sx={{ width: `${width}%`, minWidth: row.value > 0 ? 18 : 0, height: '100%', bgcolor: row.label === 'Completed' ? '#16a34a' : row.label === 'Confirmed' ? guideColors.primary : guideColors.secondary }} />
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+
+          <Divider sx={{ my: 2.5 }} />
+          <Typography variant="subtitle2" sx={{ fontWeight: 800, mb: 1 }}>
+            Profile Readiness
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            <Chip size="small" label={guideProfile?.bio ? 'Bio added' : 'Bio missing'} color={guideProfile?.bio ? 'success' : 'warning'} variant="outlined" />
+            <Chip size="small" label={guideProfile?.languages?.length || guideProfile?.language ? 'Languages added' : 'Languages missing'} color={guideProfile?.languages?.length || guideProfile?.language ? 'success' : 'warning'} variant="outlined" />
+            <Chip size="small" label={guideProfile?.identityProof ? 'ID verified file' : 'ID proof missing'} color={guideProfile?.identityProof ? 'success' : 'warning'} variant="outlined" />
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
 
   return (
     <Box>
@@ -754,13 +970,13 @@ function DashboardPage({ user, bookings, guideProfile, tours }) {
       </Box>
 
       {/* Pricing Card */}
-      <Box sx={{ p: 3, bgcolor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: 3, boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)', border: 'none', mb: 4, color: '#fff' }}>
+      <Box sx={{ p: 3, background: guideColors.heroBackground, borderRadius: 3, boxShadow: '0 18px 38px rgba(23, 59, 56, 0.18)', border: 'none', mb: 4, color: '#fff' }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
           <Box>
             <Typography variant="subtitle2" fontWeight={600} mb={2} sx={{ opacity: 0.9 }}>YOUR PRICING</Typography>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 2 }}>
               <Typography variant="h3" fontWeight={900} sx={{ color: '#fff' }}>
-                {guideProfile?.currency === 'INR' ? '₹' : '$'}{guideProfile?.price || '0'}
+                ₹{guideProfile?.price || '0'}
               </Typography>
               <Typography variant="h6" fontWeight={600} sx={{ opacity: 0.9 }}>
                 /{guideProfile?.rateType === 'hourly' ? 'hour' : 'day'}
@@ -768,7 +984,7 @@ function DashboardPage({ user, bookings, guideProfile, tours }) {
             </Box>
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Chip 
-                label={`Currency: ${guideProfile?.currency || 'USD'}`}
+                label="Currency: INR"
                 size="small"
                 sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: '#fff', fontWeight: 600 }}
               />
@@ -826,8 +1042,8 @@ function DashboardPage({ user, bookings, guideProfile, tours }) {
                       borderRadius: 12,
                       fontSize: 11,
                       fontWeight: 600,
-                      bgcolor: booking.status === 'confirmed' ? '#dbeafe' : booking.status === 'completed' ? '#dcfce7' : '#fef3c7',
-                      color: booking.status === 'confirmed' ? '#0369a1' : booking.status === 'completed' ? '#047857' : '#b45309'
+                      backgroundColor: booking.status === 'confirmed' ? '#e3eee9' : booking.status === 'completed' ? '#dcebdd' : '#f1e3cf',
+                      color: booking.status === 'confirmed' ? guideColors.primary : booking.status === 'completed' ? '#16a34a' : '#b45309'
                     }}>
                       {booking.status.toUpperCase()}
                     </span>
@@ -1031,7 +1247,7 @@ const MyToursPage = ({ tours, onCreateTour }) => {
               required
               fullWidth
               type="number"
-              placeholder="e.g., 150"
+              placeholder="e.g., 2500"
             />
             <TextField
               label="Duration (days)"
@@ -1118,12 +1334,45 @@ const MyToursPage = ({ tours, onCreateTour }) => {
   );
 };
 import BookingsDataGrid from '../components/BookingsDataGrid';
-const BookingsPage = ({ bookings, refreshBookings }) => (
-  <Box>
-    <Typography variant="h5" fontWeight={700} mb={3}>Bookings</Typography>
-    <BookingsDataGrid bookings={bookings} onStatusChange={refreshBookings} />
-  </Box>
-);
+const BookingsPage = ({ bookings, refreshBookings }) => {
+  const counts = bookings.reduce((acc, booking) => {
+    const status = (booking.status || 'pending').toLowerCase();
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box
+        sx={{
+          p: { xs: 2.5, md: 3 },
+          borderRadius: 3,
+          bgcolor: '#fff',
+          border: '1px solid #dbe3ef',
+          boxShadow: '0 18px 40px rgba(15, 23, 42, 0.05)',
+          display: 'flex',
+          alignItems: { xs: 'flex-start', md: 'center' },
+          justifyContent: 'space-between',
+          gap: 2,
+          flexDirection: { xs: 'column', md: 'row' },
+        }}
+      >
+        <Box>
+          <Typography variant="h5" fontWeight={800}>Bookings</Typography>
+          <Typography variant="body2" color="text.secondary" mt={0.5}>
+            Tourist requests and confirmed guide tours
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Chip label={`${counts.pending || 0} pending`} sx={{ bgcolor: '#f1e3cf', color: '#8a5a2b', fontWeight: 800 }} />
+          <Chip label={`${counts.confirmed || 0} confirmed`} sx={{ bgcolor: '#e3eee9', color: guideColors.primary, fontWeight: 800 }} />
+          <Chip label={`${counts.completed || 0} completed`} sx={{ bgcolor: '#dcebdd', color: '#315f38', fontWeight: 800 }} />
+        </Box>
+      </Box>
+      <BookingsDataGrid bookings={bookings} onStatusChange={refreshBookings} />
+    </Box>
+  );
+};
 import BookingCalendar from '../components/BookingCalendar';
 const CalendarPage = () => (
   <Box>
@@ -1146,6 +1395,7 @@ export default function GuideDashboard() {
   const [user, setUser] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [guideProfile, setGuideProfile] = useState(null);
+  const [guideReviews, setGuideReviews] = useState([]);
   const [tours, setTours] = useState([]);
   const [selected, setSelected] = useState('Dashboard');
   const [open, setOpen] = useState(true);
@@ -1154,27 +1404,78 @@ export default function GuideDashboard() {
 
   // Move fetchGuideData to top-level so it's available in JSX
   const fetchGuideData = async () => {
+    const storedUser = localStorage.getItem('user');
+    if (!storedUser) return;
+
+    const userObj = JSON.parse(storedUser);
+    let nextGuideProfile = null;
+
     try {
-      const storedUser = localStorage.getItem('user');
-      if (!storedUser) return;
-      const userObj = JSON.parse(storedUser);
-      // Fetch guide profile
-      const profileRes = await api.get(`/guide/profile/${userObj._id}`);
-      setGuideProfile(profileRes.data.guide);
-      // Fetch bookings for this guide
-      const bookingsRes = await api.get(`/booking/guide/${userObj._id}`);
-      console.log('[DEBUG] GuideDashboard fetched bookings:', bookingsRes.data.bookings);
-      if (Array.isArray(bookingsRes.data.bookings)) {
-        bookingsRes.data.bookings.forEach((b, i) => {
-          console.log(`[DEBUG] Booking #${i}: status="${b.status}", destination="${b.destination}"`);
-        });
+      const profileRes = await api.get('/guide/profile');
+      nextGuideProfile = profileRes.data.guide;
+      if (profileRes.data.user) {
+        const mergedUser = {
+          ...userObj,
+          ...profileRes.data.user,
+          _id: profileRes.data.user._id || userObj._id,
+          role: profileRes.data.user.role || userObj.role,
+        };
+        setUser(mergedUser);
+        localStorage.setItem('user', JSON.stringify(mergedUser));
       }
+    } catch (err) {
+      console.warn('Unable to refresh guide profile:', err.response?.data?.message || err.message);
+    }
+
+    try {
+      const reviewsRes = await api.get(`/review/guide/${userObj._id}/reviews`);
+      const reviewsData = reviewsRes.data.reviews || [];
+      const averageRating = reviewsData.length > 0
+        ? reviewsData.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviewsData.length
+        : 0;
+
+      setGuideReviews(reviewsData);
+      if (nextGuideProfile) {
+        nextGuideProfile = {
+          ...nextGuideProfile,
+          reviews: reviewsData,
+          reviewCount: reviewsData.length,
+          totalReviews: reviewsData.length,
+          ratings: averageRating,
+          rating: averageRating,
+        };
+      }
+    } catch (err) {
+      console.warn('Unable to refresh guide reviews:', err.response?.data?.message || err.message);
+      setGuideReviews([]);
+      if (nextGuideProfile) {
+        nextGuideProfile = {
+          ...nextGuideProfile,
+          reviews: [],
+          reviewCount: 0,
+          totalReviews: 0,
+        };
+      }
+    }
+
+    if (nextGuideProfile) {
+      setGuideProfile(nextGuideProfile);
+    }
+
+    try {
+      const bookingsRes = await api.get(`/booking/guide/${userObj._id}`);
       setBookings(bookingsRes.data.bookings || []);
-      // Fetch tours for this guide
+    } catch (err) {
+      console.warn('Unable to refresh guide bookings:', err.response?.data?.message || err.message);
+      setBookings([]);
+    }
+
+    try {
       const toursRes = await api.get(`/tour/guide/${userObj._id}`);
       setTours(toursRes.data.tours || []);
     } catch (err) {
-      console.log('[DEBUG] GuideDashboard fetch error:', err);
+      console.warn('Unable to refresh guide tours:', err.response?.data?.message || err.message);
+      setTours([]);
     }
   };
 
@@ -1208,11 +1509,12 @@ export default function GuideDashboard() {
     socket.on('bookingUpdate', (data) => {
       // Only refresh if the update is for this guide
       if (data && data.guideId === userObj._id) {
-        console.log('[DEBUG] Received bookingUpdate event:', data);
         fetchGuideData();
       }
     });
+    window.addEventListener('guideReviewsUpdated', fetchGuideData);
     return () => {
+      window.removeEventListener('guideReviewsUpdated', fetchGuideData);
       if (socket) {
         socket.off('bookingUpdate');
         socket.disconnect();
@@ -1222,34 +1524,35 @@ export default function GuideDashboard() {
 
   // ProfilePage now uses guideProfile
   const ProfilePage = () => {
-    const languageOptions = [
-      'English',
-      'Hindi',
-      'Spanish',
-      'French',
-      'German',
-      'Italian',
-      'Portuguese',
-      'Chinese (Mandarin)',
-      'Chinese (Cantonese)',
-      'Japanese',
-      'Russian',
-      'Arabic',
-      'Other (please specify)'
-    ];
+    const getLanguagesText = (languages) => {
+      if (!languages) return '';
+      if (typeof languages === 'string') return languages;
+      if (!Array.isArray(languages)) return '';
+      return languages
+        .map((language) => (typeof language === 'string' ? language : language?.name || ''))
+        .filter(Boolean)
+        .join(', ');
+    };
+
+    const account = guideProfile?.userId && typeof guideProfile.userId === 'object'
+      ? guideProfile.userId
+      : {};
+    const languageText = getLanguagesText(guideProfile?.languages) || guideProfile?.language || '';
 
     const [edit, setEdit] = useState(false);
     const [form, setForm] = useState({
-      name: user?.name || '',
-      email: user?.email || '',
-      phone: guideProfile?.phone || user?.phone || '',
-      language: guideProfile?.languages?.[0] || '',
-      customLanguage: '',
+      name: account?.name || guideProfile?.name || user?.name || '',
+      email: account?.email || guideProfile?.email || user?.email || '',
+      phone: guideProfile?.phone || account?.phone || user?.phone || '',
+      country: account?.country || guideProfile?.country || user?.country || '',
+      interests: account?.interests || guideProfile?.interests || user?.interests || '',
+      language: languageText,
       bio: guideProfile?.bio || '',
+      experienceYears: guideProfile?.experienceYears ?? 0,
       price: guideProfile?.price ?? 0,
-      currency: guideProfile?.currency || 'USD',
+      currency: 'INR',
       rateType: guideProfile?.rateType || 'daily',
-      avatar: user?.avatar || '',
+      avatar: account?.avatar || guideProfile?.avatar || user?.avatar || '',
     });
     const [avatarPreview, setAvatarPreview] = useState(user?.avatar || '');
     const [uploading, setUploading] = useState(false);
@@ -1259,27 +1562,24 @@ export default function GuideDashboard() {
 
     useEffect(() => {
       // Prefer avatar from user, fallback to guideProfile.userId.avatar if available
-      const avatar = user?.avatar || guideProfile?.userId?.avatar || '';
+      const profileUser = guideProfile?.userId && typeof guideProfile.userId === 'object'
+        ? guideProfile.userId
+        : {};
+      const avatar = profileUser?.avatar || guideProfile?.avatar || user?.avatar || '';
       
-      // Handle languages - extract name if it's an object array
-      let languageName = '';
-      if (guideProfile?.languages && Array.isArray(guideProfile.languages)) {
-        if (guideProfile.languages[0]) {
-          languageName = typeof guideProfile.languages[0] === 'string' 
-            ? guideProfile.languages[0]
-            : guideProfile.languages[0].name || '';
-        }
-      }
+      const languageName = getLanguagesText(guideProfile?.languages) || guideProfile?.language || '';
       
       setForm({
-        name: user?.name || '',
-        email: user?.email || '',
-        phone: guideProfile?.phone || user?.phone || '',
+        name: profileUser?.name || guideProfile?.name || user?.name || '',
+        email: profileUser?.email || guideProfile?.email || user?.email || '',
+        phone: guideProfile?.phone || profileUser?.phone || user?.phone || '',
+        country: profileUser?.country || guideProfile?.country || user?.country || '',
+        interests: profileUser?.interests || guideProfile?.interests || user?.interests || '',
         language: languageName,
-        customLanguage: '',
         bio: guideProfile?.bio || '',
+        experienceYears: guideProfile?.experienceYears ?? 0,
         price: guideProfile?.price ?? 0,
-        currency: guideProfile?.currency || 'USD',
+        currency: 'INR',
         rateType: guideProfile?.rateType || 'daily',
         avatar,
       });
@@ -1288,7 +1588,10 @@ export default function GuideDashboard() {
 
     const handleChange = e => {
       const { name, value } = e.target;
-      setForm({ ...form, [name]: name === 'price' ? Number(value) : value });
+      setForm({
+        ...form,
+        [name]: ['price', 'experienceYears'].includes(name) ? Number(value) : value
+      });
     };
 
     const handleAvatarChange = async (e) => {
@@ -1324,27 +1627,42 @@ export default function GuideDashboard() {
       setErrorMsg('');
       setSuccessMsg('');
       try {
-        // Use customLanguage if "Other" is selected, otherwise use selected language
-        const selectedLanguage = form.language === 'Other (please specify)' 
-          ? form.customLanguage 
-          : form.language;
+        const selectedLanguages = form.language
+          .split(/[\n,]+/)
+          .map((language) => language.trim())
+          .filter(Boolean);
         
-        if (!selectedLanguage) {
-          setErrorMsg('Please select or specify a language');
+        if (selectedLanguages.length === 0) {
+          setErrorMsg('Please enter at least one language');
           return;
         }
         
         const payload = {
+          name: form.name,
           bio: form.bio,
-          languages: [selectedLanguage],
+          languages: selectedLanguages,
           phone: form.phone,
+          country: form.country,
+          interests: form.interests,
+          experienceYears: Number(form.experienceYears) || 0,
           price: Number(form.price) || 0,
-          currency: form.currency,
+          currency: 'INR',
           rateType: form.rateType,
         };
-        console.log('Sending payload:', payload);
         const response = await api.put('/guide/profile', payload);
-        console.log('Update response:', response.data);
+        if (response.data.guide) {
+          setGuideProfile(response.data.guide);
+        }
+        if (response.data.user) {
+          const mergedUser = {
+            ...(user || {}),
+            ...response.data.user,
+            _id: response.data.user._id || user?._id,
+            role: response.data.user.role || user?.role,
+          };
+          setUser(mergedUser);
+          localStorage.setItem('user', JSON.stringify(mergedUser));
+        }
         setSuccessMsg('Profile updated!');
       } catch (err) {
         console.error('Update error:', err.response?.data || err.message);
@@ -1354,7 +1672,7 @@ export default function GuideDashboard() {
 
     return (
       <Box sx={{ maxWidth: 600, mx: 'auto', bgcolor: '#fafaf6', p: 4, borderRadius: 4, boxShadow: 2 }}>
-        <Typography variant="h4" fontWeight={700} mb={1} sx={{ fontFamily: 'serif' }}>My Profile</Typography>
+        <Typography variant="h4" fontWeight={700} mb={1}>My Profile</Typography>
         <Typography variant="subtitle1" color="text.secondary" mb={3}>
           Manage your account settings and preferences
         </Typography>
@@ -1393,7 +1711,7 @@ export default function GuideDashboard() {
           </Box>
           <Box mb={2}>
             <Typography fontWeight={600} mb={0.5}><ProfileIcon sx={{ mr: 1, verticalAlign: 'middle' }} /> Full Name</Typography>
-            <TextField fullWidth name="name" value={form.name} onChange={handleChange} disabled sx={{ bgcolor: '#f8f8f2' }} />
+            <TextField fullWidth name="name" value={form.name} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
           </Box>
           <Box mb={2}>
             <Typography fontWeight={600} mb={0.5}><ProfileIcon sx={{ mr: 1, verticalAlign: 'middle' }} /> Email Address</Typography>
@@ -1405,31 +1723,36 @@ export default function GuideDashboard() {
             <TextField fullWidth name="phone" value={form.phone} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
           </Box>
           <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><span role="img" aria-label="language">🌐</span> Preferred Language</Typography>
+            <Typography fontWeight={600} mb={0.5}>Country</Typography>
+            <TextField fullWidth name="country" value={form.country} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
+          </Box>
+          <Box mb={2}>
+            <Typography fontWeight={600} mb={0.5}>Interests</Typography>
+            <TextField fullWidth name="interests" value={form.interests} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
+          </Box>
+          <Box mb={2}>
+            <Typography fontWeight={600} mb={0.5}><span role="img" aria-label="language">🌐</span> Known Languages</Typography>
             <TextField
-              select
               fullWidth
               name="language"
               value={form.language}
               onChange={handleChange}
+              placeholder="Hindi, English, Spanish"
+              helperText="Separate multiple languages with commas."
               sx={{ bgcolor: '#f8f8f2' }}
-            >
-              <MenuItem value="">Select a language</MenuItem>
-              {languageOptions.map((lang) => (
-                <MenuItem key={lang} value={lang}>{lang}</MenuItem>
-              ))}
-            </TextField>
-            {form.language === 'Other (please specify)' && (
-              <TextField
-                fullWidth
-                label="Please specify your language"
-                name="customLanguage"
-                value={form.customLanguage}
-                onChange={handleChange}
-                placeholder="e.g., Korean, Dutch, Swedish"
-                sx={{ bgcolor: '#f8f8f2', mt: 1.5 }}
-              />
-            )}
+            />
+          </Box>
+          <Box mb={2}>
+            <Typography fontWeight={600} mb={0.5}>Experience (years)</Typography>
+            <TextField
+              fullWidth
+              type="number"
+              name="experienceYears"
+              value={form.experienceYears}
+              onChange={handleChange}
+              inputProps={{ min: 0, step: 1 }}
+              sx={{ bgcolor: '#f8f8f2' }}
+            />
           </Box>
 
           {/* PRICING SETTINGS */}
@@ -1446,9 +1769,9 @@ export default function GuideDashboard() {
                   value={form.price}
                   onChange={handleChange}
                   type="number"
-                  inputProps={{ step: "0.01", min: "0" }}
+                  inputProps={{ step: "1", min: "0" }}
                   sx={{ flex: 1, bgcolor: '#fff' }}
-                  placeholder="e.g., 50"
+                  placeholder="e.g., 2500"
                 />
                 
                 {/* Currency Selector */}
@@ -1456,11 +1779,10 @@ export default function GuideDashboard() {
                   select
                   label="Currency"
                   name="currency"
-                  value={form.currency}
-                  onChange={handleChange}
+                  value="INR"
+                  disabled
                   sx={{ width: 110, bgcolor: '#fff' }}
                 >
-                  <MenuItem value="USD">$ USD</MenuItem>
                   <MenuItem value="INR">₹ INR</MenuItem>
                 </TextField>
 
@@ -1483,48 +1805,17 @@ export default function GuideDashboard() {
             <Box sx={{ bgcolor: '#e8f5e9', p: 1.5, borderRadius: 1.5, border: '1px solid #81c784', mb: 2 }}>
               <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 600 }}>
                 📊 Your Rate: <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1b5e20' }}>
-                  {form.currency === 'USD' ? '$' : '₹'}{form.price}
+                  ₹{form.price}
                 </span> per {form.rateType === 'hourly' ? 'hour' : 'day'}
               </Typography>
             </Box>
 
-            {/* Currency Conversion Info */}
             <Box sx={{ bgcolor: '#fff3cd', p: 1.5, borderRadius: 1.5, border: '1px solid #ffc107' }}>
               <Typography variant="caption" sx={{ color: '#856404', fontWeight: 600 }}>
-                💡 {form.currency === 'USD' 
-                  ? `Equivalent: ₹${(form.price * 83).toFixed(2)}/day (approx. @83 INR/USD)`
-                  : `Equivalent: $${(form.price / 83).toFixed(2)}/day (approx. @83 INR/USD)`
-                }
+                💡 All guide charges are shown and saved in Indian Rupees.
               </Typography>
             </Box>
 
-            {/* Pricing Tiers Info */}
-            <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #e0e7ff' }}>
-              <Typography fontWeight={600} sx={{ fontSize: '0.95rem', mb: 1.5, color: '#4f46e5' }}>📈 Pricing Recommendations</Typography>
-              <Stack spacing={1}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, bgcolor: '#ffffff', borderRadius: 1, border: '1px solid #ddd' }}>
-                  <Box>
-                    <Typography variant="caption" fontWeight={600}>Budget Guide</Typography>
-                    <Typography variant="caption" color="text.secondary">Good for starting out</Typography>
-                  </Box>
-                  <Typography variant="caption" fontWeight={700} sx={{ color: '#10b981' }}>₹1,600-4,000</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, bgcolor: '#eff6ff', borderRadius: 1, border: '1px solid #bfdbfe', background: form.price >= 50 && form.price <= 100 ? '#dbeafe' : '#ffffff' }}>
-                  <Box>
-                    <Typography variant="caption" fontWeight={600}>Standard Guide</Typography>
-                    <Typography variant="caption" color="text.secondary">Most popular choice</Typography>
-                  </Box>
-                  <Typography variant="caption" fontWeight={700} sx={{ color: '#1976d2' }}>₹4,000-8,000</Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1, bgcolor: '#faf5ff', borderRadius: 1, border: '1px solid #e9d5ff' }}>
-                  <Box>
-                    <Typography variant="caption" fontWeight={600}>Premium Guide</Typography>
-                    <Typography variant="caption" color="text.secondary">Expert with high ratings</Typography>
-                  </Box>
-                  <Typography variant="caption" fontWeight={700} sx={{ color: '#9333ea' }}>₹8,000+</Typography>
-                </Box>
-              </Stack>
-            </Box>
           </Box>
 
           <Box mb={2}>
@@ -1600,7 +1891,7 @@ export default function GuideDashboard() {
   };
 
   const pageMap = {
-    Dashboard: <DashboardPage user={user} bookings={bookings} guideProfile={guideProfile} tours={tours} />,
+    Dashboard: <DashboardPage user={user} bookings={bookings} guideProfile={guideProfile} guideReviews={guideReviews} tours={tours} />,
     'My Tours': <MyToursPage tours={tours} onCreateTour={handleCreateTour} />,
     Bookings: <BookingsPage bookings={bookings} refreshBookings={fetchGuideData} />,
     Calendar: <CalendarPage />,
@@ -1610,11 +1901,6 @@ export default function GuideDashboard() {
     Profile: <ProfilePage />,
     Settings: <SettingsPage />,
   };
-
-  // Debug logging
-  console.log('GuideDashboard user:', user);
-  console.log('GuideDashboard guideProfile:', guideProfile);
-  console.log('GuideDashboard selected:', selected);
 
   // Loading state
   if (!user) {
@@ -1634,15 +1920,42 @@ export default function GuideDashboard() {
     );
   }
 
+  const activeDrawerWidth = open ? drawerWidth : collapsedDrawerWidth;
+  const avatarLetter = (user?.name || 'G').charAt(0).toUpperCase();
+
   return (
     <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default', position: 'relative' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          minHeight: '100vh',
+          bgcolor: 'background.default',
+          background: guideColors.pageBackground,
+          position: 'relative',
+          fontFamily: guideDashboardFont,
+        }}
+      >
         <CssBaseline />
         {/* Sidebar */}
         <Drawer variant="permanent" open={open} sx={{ position: 'fixed', left: 0, top: 0, height: '100vh', zIndex: 1200 }}>
-          <Toolbar />
-          <Divider />
-          <List>
+          <Box sx={{ px: open ? 2.25 : 1.25, py: 2.5, minHeight: 88, borderBottom: '1px solid rgba(148, 163, 184, 0.16)' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: open ? 'flex-start' : 'center' }}>
+              <Avatar sx={{ width: 42, height: 42, bgcolor: guideColors.accent, color: guideColors.ink, fontWeight: 900, boxShadow: '0 8px 18px rgba(23, 35, 38, 0.2)' }}>
+                {avatarLetter}
+              </Avatar>
+              {open && (
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="subtitle1" sx={{ color: '#fff', fontWeight: 900, lineHeight: 1.2 }} noWrap>
+                    {user?.name || 'Guide'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: guideColors.sidebarMuted, fontWeight: 700 }}>
+                    Guide Dashboard
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+          </Box>
+          <List sx={{ px: 1.25, py: 2 }}>
             {navItems.map((item) => (
               <ListItem key={item.label} disablePadding sx={{ display: 'block' }}>
                 <ListItemButton
@@ -1650,40 +1963,70 @@ export default function GuideDashboard() {
                     minHeight: 48,
                     justifyContent: open ? 'initial' : 'center',
                     px: 2.5,
-                    borderRadius: 2,
-                    my: 0.5,
-                    background: selected === item.label ? alpha(theme.palette.primary.main, 0.08) : 'none',
-                    transition: 'background 0.2s',
+                    borderRadius: 2.5,
+                    my: 0.65,
+                    color: selected === item.label ? guideColors.ink : guideColors.sidebarText,
+                    background: selected === item.label ? guideColors.activeNavBackground : 'transparent',
+                    boxShadow: selected === item.label ? '0 10px 22px rgba(23, 35, 38, 0.16)' : 'none',
+                    transition: 'background 0.2s, color 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                      bgcolor: selected === item.label ? undefined : 'rgba(216, 231, 225, 0.16)',
+                    },
                   }}
                   selected={selected === item.label}
                   onClick={() => setSelected(item.label)}
                 >
-                  <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : 'auto', justifyContent: 'center', color: selected === item.label ? 'primary.main' : 'inherit' }}>
+                  <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : 'auto', justifyContent: 'center', color: 'inherit' }}>
                     {item.icon}
                   </ListItemIcon>
-                  <ListItemText primary={item.label} sx={{ opacity: open ? 1 : 0, transition: 'opacity 0.2s' }} />
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{ fontWeight: selected === item.label ? 900 : 700, fontSize: 14 }}
+                    sx={{ opacity: open ? 1 : 0, transition: 'opacity 0.2s' }}
+                  />
                 </ListItemButton>
               </ListItem>
             ))}
           </List>
         </Drawer>
         {/* Main Content */}
-        <Box sx={{ flex: 1, marginLeft: `${drawerWidth}px`, width: `calc(100% - ${drawerWidth}px)`, minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-          <AppBar position="fixed" open={open} elevation={0} color="inherit" sx={{ left: `${drawerWidth}px`, width: `calc(100% - ${drawerWidth}px)`, backdropFilter: 'blur(8px)', background: glassBg(theme) }}>
-            <Toolbar>
+        <Box sx={{ flex: 1, marginLeft: `${activeDrawerWidth}px`, width: `calc(100% - ${activeDrawerWidth}px)`, minHeight: '100vh', display: 'flex', flexDirection: 'column', transition: theme.transitions.create(['margin-left', 'width'], { duration: theme.transitions.duration.shorter }) }}>
+          <AppBar
+            position="fixed"
+            open={open}
+            elevation={0}
+            color="inherit"
+            sx={{
+              marginLeft: 0,
+              left: `${activeDrawerWidth}px`,
+              width: `calc(100% - ${activeDrawerWidth}px)`,
+              backdropFilter: 'blur(18px)',
+              background: glassBg(theme),
+              borderBottom: '1px solid rgba(148, 163, 184, 0.22)',
+              boxShadow: '0 12px 34px rgba(15, 23, 42, 0.06)',
+              transition: theme.transitions.create(['left', 'width'], { duration: theme.transitions.duration.shorter }),
+            }}
+          >
+            <Toolbar sx={{ minHeight: 76, px: { xs: 2, md: 4 } }}>
               <IconButton color="inherit" aria-label="open drawer" onClick={() => setOpen(!open)} edge="start" sx={{ mr: 2 }}>
                 {open ? <ChevronLeftIcon /> : <MenuIcon />}
               </IconButton>
-              <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-                Guide Dashboard
-              </Typography>
+              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 900, color: guideColors.ink }}>
+                  {selected}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                  Guide Dashboard
+                </Typography>
+              </Box>
               <Tooltip title="Profile">
-                <Avatar sx={{ bgcolor: 'primary.main', boxShadow: 2 }}>G</Avatar>
+                <Avatar sx={{ bgcolor: 'primary.main', boxShadow: '0 8px 20px rgba(47,111,104,0.22)', fontWeight: 900 }}>
+                  {avatarLetter}
+                </Avatar>
               </Tooltip>
             </Toolbar>
           </AppBar>
-          <Main open={open} sx={{ pt: 10 }}>
-            {/* Add top padding to avoid AppBar overlap */}
+          <Main open={open} sx={{ pt: 12, px: { xs: 2, md: 4 }, maxWidth: '1680px', width: '100%', mx: 'auto', marginLeft: 0 }}>
             {pageMap[selected]}
           </Main>
         </Box>

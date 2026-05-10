@@ -6,7 +6,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true },
   password: { type: String, required: true },
   phone: { type: String, required: true },
-  country: { type: String, required: true },
+  country: { type: String, default: "" },
   interests: { type: String, default: "" },
   role: {
     type: String,
@@ -24,10 +24,10 @@ const UserSchema = new mongoose.Schema({
   nationality: { type: String, default: "" },
   
   // For hotel users: array of image URLs (uploaded or external)
-  hotelImages: [{ type: String, default: [] }],
+  hotelImages: { type: [String], default: [] },
   // For hotel users: address and amenities
   address: { type: String, default: '' },
-  amenities: [{ type: String, default: [] }]
+  amenities: { type: [String], default: [] }
 }, { timestamps: true });
 
 

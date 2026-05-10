@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './LandingPage.css';
 
@@ -6,19 +6,19 @@ const DESTINATIONS = [
   {
     title: 'Swiss Alps',
     location: 'Switzerland',
-    price: '$1200 - $2500',
+    price: '₹1,20,000 - ₹2,50,000',
     image: 'https://images.unsplash.com/photo-1508261305436-4b35c91f6d2f?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Coastal Paradise',
     location: 'Mediterranean',
-    price: '$800 - $1800',
+    price: '₹80,000 - ₹1,80,000',
     image: 'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=1200&q=80',
   },
   {
     title: 'Mountain Retreat',
     location: 'Norway',
-    price: '$1000 - $2200',
+    price: '₹1,00,000 - ₹2,20,000',
     image: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1200&q=80',
   },
 ];
@@ -38,11 +38,42 @@ const FEATURES = [
   },
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api').replace(/\/$/, '');
+
+const normalizeSearchResult = (feature, index) => {
+  const properties = feature?.properties || {};
+  const coordinates = feature?.geometry?.coordinates || [];
+  const kinds = properties.kinds || properties.category || '';
+  const shortKinds = kinds
+    ? kinds
+        .split(',')
+        .map((item) => item.replace(/_/g, ' ').trim())
+        .filter(Boolean)
+        .slice(0, 2)
+        .join(' / ')
+    : 'Explore destination';
+
+  return {
+    title: properties.name || `Destination ${index + 1}`,
+    location: [properties.address?.city, properties.address?.country].filter(Boolean).join(', ') || shortKinds,
+    price: shortKinds,
+    description: properties.description || 'Explore attractions, local guides, and trip ideas for this destination.',
+    image: properties.image,
+    lat: coordinates[1],
+    lon: coordinates[0],
+  };
+};
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
+  const [searchedQuery, setSearchedQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   const fallbackImage =
     'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80';
+  const visibleDestinations = searchedQuery ? searchResults : DESTINATIONS;
 
   const scrollToSection = (id) => {
     const node = document.getElementById(id);
@@ -51,12 +82,54 @@ export default function LandingPage() {
     }
   };
 
-  const handleHeroSearch = () => {
-    if (!query.trim()) {
+  const handleHeroSearch = async (event) => {
+    event.preventDefault();
+    const destination = query.trim();
+
+    if (!destination) {
+      setSearchedQuery('');
+      setSearchResults([]);
+      setSearchError('');
       scrollToSection('destinations');
       return;
     }
-    navigate('/login');
+
+    setIsSearching(true);
+    setSearchError('');
+    setSearchedQuery(destination);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/opentripmap/search?query=${encodeURIComponent(destination)}&limit=9`
+      );
+
+      if (!response.ok) {
+        throw new Error('Search failed');
+      }
+
+      const data = await response.json();
+      const results = (data.features || []).map(normalizeSearchResult);
+
+      setSearchResults(results);
+      if (results.length === 0) {
+        setSearchError(`No destinations found for "${destination}".`);
+      }
+      scrollToSection('destinations');
+    } catch (error) {
+      console.error('Destination search failed:', error);
+      setSearchResults([]);
+      setSearchError('Could not search destinations right now. Please check that the backend is running.');
+      scrollToSection('destinations');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setQuery('');
+    setSearchedQuery('');
+    setSearchResults([]);
+    setSearchError('');
   };
 
   return (
@@ -85,26 +158,36 @@ export default function LandingPage() {
           <p>
             Explore breathtaking destinations, connect with expert guides, and create unforgettable memories.
           </p>
-          <div className="lp-search">
+          <form className="lp-search" onSubmit={handleHeroSearch}>
             <input
               type="text"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search destinations..."
             />
-            <button type="button" onClick={handleHeroSearch}>Search</button>
-          </div>
+            <button type="submit" disabled={isSearching}>{isSearching ? 'Searching...' : 'Search'}</button>
+          </form>
         </div>
       </section>
 
       <section id="destinations" className="lp-section lp-destinations">
         <div className="lp-heading">
-          <h2>Featured Destinations</h2>
-          <p>Handpicked locations for your next journey</p>
+          <h2>{searchedQuery ? `Search Results for ${searchedQuery}` : 'Featured Destinations'}</h2>
+          <p>
+            {searchedQuery
+              ? `${searchResults.length} destination${searchResults.length === 1 ? '' : 's'} found`
+              : 'Handpicked locations for your next journey'}
+          </p>
+          {searchedQuery && (
+            <button type="button" className="lp-clear-search" onClick={clearSearch}>
+              Show featured destinations
+            </button>
+          )}
+          {searchError && <p className="lp-search-status">{searchError}</p>}
         </div>
         <div className="lp-cards">
-          {DESTINATIONS.map((item) => (
-            <article key={item.title} className="lp-card">
+          {visibleDestinations.map((item) => (
+            <article key={`${item.title}-${item.lat ?? item.location}`} className="lp-card">
               <img
                 src={item.image}
                 alt={item.title}
@@ -116,6 +199,7 @@ export default function LandingPage() {
               <div className="lp-card-body">
                 <h3>{item.title}</h3>
                 <p className="lp-location">{item.location}</p>
+                {item.description && <p className="lp-card-copy">{item.description}</p>}
                 <div className="lp-card-row">
                   <strong>{item.price}</strong>
                   <button type="button" onClick={() => navigate('/login')}>View Details</button>
@@ -150,8 +234,10 @@ export default function LandingPage() {
       <footer className="lp-footer">
         <h3>Travelogue</h3>
         <p>Your gateway to extraordinary adventures</p>
-        <small>� 2026 Travelogue. All rights reserved.</small>
+        <small>© 2026 Travelogue. All rights reserved.</small>
       </footer>
     </div>
   );
 }
+
+

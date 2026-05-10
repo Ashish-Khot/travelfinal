@@ -283,7 +283,7 @@ export default function FloatingChatbot({ onAgentAction }) {
                             <Chip
                               key={`${message.id}-guide-${idx}`}
                               size="small"
-                              label={`${idx + 1}. ${guide.guideName} | ${guide.rating} | ${guide.currency} ${guide.price}/${guide.rateType}`}
+                              label={`${idx + 1}. ${guide.guideName} | ${guide.rating} | ₹${guide.price}/${guide.rateType}`}
                               onClick={() => sendCommand(`book ${guide.guideName}`)}
                               sx={{ justifyContent: 'flex-start', maxWidth: '100%', fontWeight: 700 }}
                             />

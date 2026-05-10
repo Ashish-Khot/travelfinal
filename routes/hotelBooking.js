@@ -6,6 +6,32 @@ const RoomInventoryLog = require('../models/RoomInventoryLog');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
 
 const router = express.Router();
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const BLOCKING_BOOKING_STATUSES = ['pending', 'confirmed', 'checked_in'];
+
+const parseDateOnly = (value) => {
+  if (typeof value !== 'string') return null;
+  const parts = value.split('-').map(Number);
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const getOverlapQuery = ({ hotelId, checkInDate, checkOutDate }) => {
+  return {
+    hotelId,
+    status: { $in: BLOCKING_BOOKING_STATUSES },
+    checkIn: { $lt: checkOutDate },
+    checkOut: { $gt: checkInDate },
+  };
+};
+
+const buildConflictMessage = (conflict) => {
+  const hotelName = conflict?.hotelId?.name || 'this hotel';
+  const roomLabel = conflict?.roomType ? `${conflict.roomType} room` : 'selected room';
+  return `${hotelName} already has an active booking for the ${roomLabel} on these dates. Please choose another date.`;
+};
 
 const adjustRoomAvailability = async ({ hotelOwnerId, roomType, delta, bookingId, reason }) => {
   const room = await Room.findOne({ hotel: hotelOwnerId, type: roomType });
@@ -99,14 +125,6 @@ router.post('/', verifyToken, authorizeRoles('tourist'), async (req, res) => {
     }
     const requestedRoomCount = Math.max(1, Math.floor(roomCountValue));
 
-    const parseDateOnly = (value) => {
-      if (typeof value !== 'string') return null;
-      const parts = value.split('-').map(Number);
-      if (parts.length !== 3) return null;
-      const [year, month, day] = parts;
-      if (!year || !month || !day) return null;
-      return new Date(year, month - 1, day);
-    };
     const checkInDate = parseDateOnly(checkIn);
     const checkOutDate = parseDateOnly(checkOut);
     if (!checkInDate || !checkOutDate) {
@@ -120,23 +138,25 @@ router.post('/', verifyToken, authorizeRoles('tourist'), async (req, res) => {
     if (checkOutDate <= checkInDate) {
       return res.status(400).json({ message: 'Check-out must be after check-in.' });
     }
-    const msPerDay = 1000 * 60 * 60 * 24;
-    const nights = Math.max(1, Math.ceil((checkOutDate - checkInDate) / msPerDay));
+    const nights = Math.max(1, Math.ceil((checkOutDate - checkInDate) / MS_PER_DAY));
     const hotel = await Hotel.findById(hotelId);
     if (!hotel) {
       return res.status(404).json({ message: 'Hotel not found.' });
     }
-    if (roomType) {
-      const overlap = await HotelBooking.findOne({
-        touristId: req.user.userId,
-        hotelId: hotel._id,
-        roomType,
-        status: { $ne: 'cancelled' },
-        $or: [{ checkIn: { $lt: checkOutDate }, checkOut: { $gt: checkInDate } }],
+    const overlap = await HotelBooking.findOne(
+      getOverlapQuery({ hotelId: hotel._id, roomType, checkInDate, checkOutDate })
+    ).populate('hotelId', 'name');
+    if (overlap) {
+      return res.status(409).json({
+        message: buildConflictMessage(overlap),
+        conflict: {
+          bookingId: overlap._id,
+          status: overlap.status,
+          roomType: overlap.roomType,
+          checkIn: overlap.checkIn,
+          checkOut: overlap.checkOut,
+        },
       });
-      if (overlap) {
-        return res.status(400).json({ message: 'You already have a booking for this room type and date range.' });
-      }
     }
 
     let reserved = false;
@@ -239,11 +259,55 @@ router.post('/', verifyToken, authorizeRoles('tourist'), async (req, res) => {
   }
 });
 
+router.get('/availability', verifyToken, authorizeRoles('tourist'), async (req, res) => {
+  try {
+    const { hotelId, checkIn, checkOut, roomType } = req.query;
+    if (!hotelId || !checkIn || !checkOut) {
+      return res.status(400).json({ message: 'hotelId, checkIn, and checkOut are required.' });
+    }
+    const checkInDate = parseDateOnly(checkIn);
+    const checkOutDate = parseDateOnly(checkOut);
+    if (!checkInDate || !checkOutDate) {
+      return res.status(400).json({ message: 'Invalid check-in or check-out date.' });
+    }
+    if (checkOutDate <= checkInDate) {
+      return res.status(400).json({ message: 'Check-out must be after check-in.' });
+    }
+
+    const hotel = await Hotel.findById(hotelId).select('name');
+    if (!hotel) {
+      return res.status(404).json({ message: 'Hotel not found.' });
+    }
+
+    const conflict = await HotelBooking.findOne(
+      getOverlapQuery({ hotelId: hotel._id, roomType, checkInDate, checkOutDate })
+    ).populate('hotelId', 'name');
+
+    if (conflict) {
+      return res.json({
+        available: false,
+        message: buildConflictMessage(conflict),
+        conflict: {
+          bookingId: conflict._id,
+          status: conflict.status,
+          roomType: conflict.roomType,
+          checkIn: conflict.checkIn,
+          checkOut: conflict.checkOut,
+        },
+      });
+    }
+
+    return res.json({ available: true, message: 'Selected dates are available.' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // Tourist view their hotel bookings
 router.get('/tourist', verifyToken, authorizeRoles('tourist'), async (req, res) => {
   try {
     const bookings = await HotelBooking.find({ touristId: req.user.userId })
-      .populate('hotelId', 'name email phone address images amenities')
+      .populate('hotelId', 'name email phone address cityState hotelType images amenities')
       .populate('hotelOwnerId', 'name email phone')
       .sort({ createdAt: -1 });
     res.json({ bookings });
@@ -257,7 +321,7 @@ router.get('/hotel', verifyToken, authorizeRoles('hotel'), async (req, res) => {
   try {
     const bookings = await HotelBooking.find({ hotelOwnerId: req.user.userId })
       .populate('touristId', 'name email phone avatar')
-      .populate('hotelId', 'name email phone address images')
+      .populate('hotelId', 'name email phone address cityState hotelType images amenities')
       .sort({ createdAt: -1 });
     res.json({ bookings });
   } catch (err) {
@@ -303,14 +367,14 @@ router.patch('/:id/status', verifyToken, authorizeRoles('hotel'), async (req, re
       }
     }
 
-    if (status === 'cancelled' && booking.roomReserved && booking.roomType) {
+    if ((status === 'cancelled' || status === 'completed') && booking.roomReserved && booking.roomType) {
       try {
         await adjustRoomAvailability({
           hotelOwnerId: booking.hotelOwnerId,
           roomType: booking.roomType,
           delta: bookedRooms,
           bookingId: booking._id,
-          reason: 'release_on_cancel',
+          reason: status === 'completed' ? 'release_on_complete' : 'release_on_cancel',
         });
         booking.roomReserved = false;
       } catch (roomErr) {
@@ -321,7 +385,7 @@ router.patch('/:id/status', verifyToken, authorizeRoles('hotel'), async (req, re
     booking.status = status;
     await booking.save();
     await booking.populate('touristId', 'name email phone avatar');
-    await booking.populate('hotelId', 'name email phone address images');
+    await booking.populate('hotelId', 'name email phone address cityState hotelType images amenities');
     try {
       const setupSocket = require('../socket/chat');
       const io = setupSocket.ioInstance;

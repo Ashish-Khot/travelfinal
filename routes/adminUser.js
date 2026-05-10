@@ -38,7 +38,9 @@ router.get('/users', verifyToken, authorizeRoles('admin'), async (req, res) => {
         ...u,
         status,
         rejected,
-        guideId: guideMap[u._id.toString()]?._id || null
+        guideId: guideMap[u._id.toString()]?._id || null,
+        guideIdentityProof: guideMap[u._id.toString()]?.identityProof || '',
+        guideVerifiedID: !!guideMap[u._id.toString()]?.verifiedID
       };
     });
     res.json({ users: usersWithGuideStatus });

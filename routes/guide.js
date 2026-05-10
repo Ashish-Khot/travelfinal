@@ -4,6 +4,22 @@ const { verifyToken, authorizeRoles } = require('../middleware/auth');
 const { askGuide } = require('../controllers/guideAiController');
 
 const router = express.Router();
+const USER_PROFILE_FIELDS = 'name email phone country interests avatar role';
+
+function toGuidePayload(guide) {
+  const payload = guide.toObject();
+  const user = payload.userId && typeof payload.userId === 'object' ? payload.userId : {};
+
+  payload.name = user.name || payload.name || '';
+  payload.email = user.email || payload.email || '';
+  payload.phone = payload.phone || user.phone || '';
+  payload.country = user.country || payload.country || '';
+  payload.interests = user.interests || payload.interests || '';
+  payload.avatar = user.avatar || payload.avatar || '';
+  payload.currency = 'INR';
+
+  return payload;
+}
 
 // Real-time virtual guide route (SSE streaming)
 router.post('/ask', verifyToken, askGuide);
@@ -19,6 +35,7 @@ router.post('/apply', verifyToken, authorizeRoles('guide'), async (req, res) => 
       bio,
       languages,
       experienceYears,
+      currency: 'INR',
       approved: false
     });
     await guide.save();
@@ -34,15 +51,15 @@ router.post('/apply', verifyToken, authorizeRoles('guide'), async (req, res) => 
 // Get guide profile by userId (for dashboard)
 router.get('/profile/:userId', async (req, res) => {
   try {
-    console.log('[DEBUG] Fetching guide profile for userId:', req.params.userId);
     const guide = await Guide.findOne({ userId: req.params.userId })
+      .populate('userId', USER_PROFILE_FIELDS)
       .populate('travelogues')
       .populate('bookings');
     if (!guide) {
-      console.log('[DEBUG] Guide profile not found for userId:', req.params.userId);
       return res.status(404).json({ message: 'Guide profile not found' });
     }
-    res.json({ guide });
+    const payload = toGuidePayload(guide);
+    res.json({ guide: payload, user: payload.userId });
   } catch (err) {
     console.log('[DEBUG] Error in /profile/:userId:', err);
     if (err && err.stack) console.log(err.stack);
@@ -54,8 +71,10 @@ router.get('/profile/:userId', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const guides = await Guide.find({ approved: true })
-      .populate('userId', 'name email avatar country languages bio');
-    res.json({ guides });
+      .populate('userId', USER_PROFILE_FIELDS);
+    res.json({
+      guides: guides.map(toGuidePayload)
+    });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

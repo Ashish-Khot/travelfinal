@@ -1,7 +1,25 @@
 import React from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, Chip, Box, CircularProgress } from '@mui/material';
 
+const getUploadUrl = (path = '') => {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return `http://localhost:3001${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+const isImageProof = (path = '') => /\.(png|jpe?g|webp|gif)$/i.test(path.split('?')[0]);
+
 export default function GuideInfoDialog({ open, onClose, guide, loading, onApprove, onReject, approving, rejecting, isGuide }) {
+  const languageText = Array.isArray(guide?.languages)
+    ? guide.languages
+        .map((language) => (typeof language === 'string' ? language : language?.name))
+        .filter(Boolean)
+        .join(', ')
+    : guide?.languages || '';
+  const identityProof = guide?.identityProof || guide?.identityProofUrl || '';
+  const identityProofUrl = getUploadUrl(identityProof);
+  const hasImageProof = isImageProof(identityProof);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{isGuide ? 'Guide Information' : 'User Information'}</DialogTitle>
@@ -24,9 +42,67 @@ export default function GuideInfoDialog({ open, onClose, guide, loading, onAppro
               <>
                 <Typography><b>Bio:</b> {guide.bio || '-'}</Typography>
                 <Typography><b>Experience:</b> {guide.experienceYears || 0} years</Typography>
-                <Typography><b>Languages:</b> {guide.languages?.join(', ') || '-'}</Typography>
+                <Typography><b>Languages:</b> {languageText || '-'}</Typography>
                 <Typography><b>Phone:</b> {guide.phone || '-'}</Typography>
                 <Typography><b>Country:</b> {guide.userId?.country || '-'}</Typography>
+                <Box sx={{ mt: 2, mb: 1.5 }}>
+                  <Typography sx={{ fontWeight: 700, mb: 0.75 }}>Identity Proof</Typography>
+                  {identityProofUrl ? (
+                    <Box
+                      sx={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        p: 1.25,
+                        bgcolor: '#f8fafc',
+                      }}
+                    >
+                      {hasImageProof ? (
+                        <Box
+                          component="img"
+                          src={identityProofUrl}
+                          alt="Guide identity proof"
+                          sx={{
+                            display: 'block',
+                            width: '100%',
+                            maxHeight: 260,
+                            objectFit: 'contain',
+                            borderRadius: '10px',
+                            bgcolor: '#fff',
+                          }}
+                        />
+                      ) : (
+                        <Box
+                          sx={{
+                            minHeight: 110,
+                            display: 'grid',
+                            placeItems: 'center',
+                            borderRadius: '10px',
+                            bgcolor: '#fff',
+                            color: '#475569',
+                            border: '1px dashed #cbd5e1',
+                            textAlign: 'center',
+                            px: 2,
+                          }}
+                        >
+                          <Typography sx={{ fontWeight: 700 }}>PDF identity proof uploaded</Typography>
+                          <Typography sx={{ fontSize: 13, color: '#64748b' }}>Open the file to verify details.</Typography>
+                        </Box>
+                      )}
+                      <Button
+                        href={identityProofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        size="small"
+                        variant="outlined"
+                        sx={{ textTransform: 'none', mt: 1 }}
+                      >
+                        Open identity proof
+                      </Button>
+                    </Box>
+                  ) : (
+                    <Chip label="No identity proof uploaded" color="warning" variant="outlined" />
+                  )}
+                </Box>
                 <Typography><b>Ratings:</b> {guide.ratings || 0}</Typography>
                 <Typography><b>Earnings:</b> {guide.earnings || 0}</Typography>
               </>

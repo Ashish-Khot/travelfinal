@@ -31,22 +31,22 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import { io } from "socket.io-client";
 
 const cardStyle = {
-  p: 3,
-  borderRadius: 3,
+  p: { xs: 2, md: 2.25 },
+  borderRadius: 2,
   bgcolor: "#fff",
-  border: "1px solid var(--dash-border)",
-  boxShadow: "var(--dash-shadow)",
+  border: "1px solid #dbe3ee",
+  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.06)",
 };
 
 const metricCardStyle = {
-  p: 2.5,
-  borderRadius: 3,
-  border: "1px solid transparent",
+  p: { xs: 2, md: 2.25 },
+  borderRadius: 2,
+  border: "1px solid #dbe3ee",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  boxShadow: "0 12px 30px rgba(15, 23, 42, 0.08)",
-  minHeight: 132,
+  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.06)",
+  minHeight: 116,
 };
 
 export default function HotelDashboardOverview({ showHeader = true, onQuickAction }) {
