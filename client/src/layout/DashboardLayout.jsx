@@ -3,7 +3,7 @@ import { Box } from "@mui/material";
 import Sidebar from "./Sidebar";
 import TopNavbar from "./TopNavbar";
 
-const drawerWidth = 250;
+const drawerWidth = 280;
 
 export default function DashboardLayout({
   children,
@@ -18,17 +18,19 @@ export default function DashboardLayout({
   return (
     <Box
       sx={{
-        height: "100vh",
+        minHeight: "100vh",
         display: "flex",
-        bgcolor: "#f8fafc",
+        bgcolor: "#f4f7fb",
         color: "#0f172a",
-        "--dash-ink": "#0f172a",
-        "--dash-accent": "#3b82f6",
+        overflow: "hidden",
+        "--dash-ink": "#102033",
+        "--dash-accent": "#2563eb",
+        "--dash-accent-2": "#0f766e",
         "--dash-muted": "#64748b",
-        "--dash-border": "#e2e8f0",
-        "--dash-shadow": "0 18px 45px rgba(15, 23, 42, 0.08)",
-        "--dash-sidebar-bg": "#0f172a",
-        "--dash-sidebar-text": "#e2e8f0",
+        "--dash-border": "#dbe3ee",
+        "--dash-shadow": "0 16px 42px rgba(15, 23, 42, 0.08)",
+        "--dash-sidebar-bg": "#07111f",
+        "--dash-sidebar-text": "#e5edf7",
       }}
     >
       <Sidebar
@@ -46,20 +48,32 @@ export default function DashboardLayout({
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
+          height: "100vh",
+          background:
+            "radial-gradient(circle at top right, rgba(37,99,235,0.10), transparent 34%), radial-gradient(circle at bottom left, rgba(15,118,110,0.12), transparent 30%), #f4f7fb",
         }}
       >
-        <Box sx={{ px: { xs: 2, md: 3 }, pt: { xs: 2, md: 3 } }}>
+        <Box sx={{ px: { xs: 2, md: 3, xl: 4 }, pt: { xs: 2, md: 3 } }}>
           <TopNavbar onMenuClick={handleDrawerToggle} />
         </Box>
         <Box
           sx={{
             flex: 1,
             overflow: "auto",
-            px: { xs: 2, md: 3 },
+            px: { xs: 2, md: 3, xl: 4 },
             py: { xs: 2, md: 3 },
+            scrollbarWidth: "thin",
+            scrollbarColor: "rgba(100,116,139,0.55) transparent",
+            "&::-webkit-scrollbar": { width: 10, height: 10 },
+            "&::-webkit-scrollbar-thumb": {
+              bgcolor: "rgba(100,116,139,0.35)",
+              borderRadius: 999,
+              border: "3px solid transparent",
+              backgroundClip: "content-box",
+            },
           }}
         >
-          <Box sx={{ minHeight: "100%" }}>{children}</Box>
+          <Box sx={{ width: "100%", maxWidth: 1500, mx: "auto", minHeight: "100%" }}>{children}</Box>
         </Box>
       </Box>
     </Box>

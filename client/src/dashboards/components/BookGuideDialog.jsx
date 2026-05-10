@@ -19,6 +19,7 @@ import Alert from '@mui/material/Alert';
 import { DatePicker, TimePicker } from '@mui/x-date-pickers';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { PickersDay } from '@mui/x-date-pickers/PickersDay';
 import dayjs from 'dayjs';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
@@ -26,12 +27,28 @@ import PeopleIcon from '@mui/icons-material/People';
 import EditNoteIcon from '@mui/icons-material/EditNote';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import SecurityIcon from '@mui/icons-material/Security';
-import CancelIcon from '@mui/icons-material/Cancel';
 import GuideAvailabilityCalendar from './GuideAvailabilityCalendar';
 import SlotPicker from './SlotPicker';
-import axios from 'axios';
+import api from '../../api';
 
-export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
+const ACTIVE_BOOKING_STATUSES = new Set(['pending', 'confirmed', 'accepted']);
+
+const isBusyBooking = (booking) => ACTIVE_BOOKING_STATUSES.has(booking?.status || 'pending');
+
+const getGuideUserId = (guide) => {
+  const rawId =
+    guide?.userId?._id ||
+    guide?.userId ||
+    guide?.guideId?._id ||
+    guide?.guideId ||
+    guide?.id ||
+    guide?._id ||
+    '';
+
+  return rawId ? String(rawId) : '';
+};
+
+export default function BookGuideDialog({ open, guide, onClose, onConfirm, onViewReviews }) {
   const [destination, setDestination] = useState('');
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
@@ -44,17 +61,34 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
   const [slotPickerDate, setSlotPickerDate] = useState(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [bookings, setBookings] = useState([]);
+  const guideUserId = getGuideUserId(guide);
 
-  // Fetch busy dates when guide changes
+  // Fetch busy dates when guide changes.
   React.useEffect(() => {
-    if (!guide?.id && !guide?._id) return;
-    axios.get(`/api/booking/guide/${guide.id || guide._id}`)
+    if (!open || !guideUserId) {
+      setBookings([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    api.get(`/booking/guide/${guideUserId}`)
       .then(res => {
-        const bookings = res.data.bookings || [];
-        setBookings(bookings);
+        if (!cancelled) {
+          setBookings((res.data.bookings || []).filter(isBusyBooking));
+        }
       })
-      .catch(err => console.error('Error fetching bookings:', err));
-  }, [guide]);
+      .catch(err => {
+        if (!cancelled) {
+          console.error('Error fetching bookings:', err);
+          setBookings([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [guideUserId, open]);
 
   React.useEffect(() => {
     if (open) {
@@ -65,6 +99,9 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
       setEndTime(null);
       setGuestCount(1);
       setSpecialRequests('');
+      setShowCalendar(false);
+      setShowSlotPicker(false);
+      setSlotPickerDate(null);
       setShowConfirmation(false);
     }
   }, [open]);
@@ -94,7 +131,17 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
   const isEndDateValid = !startDate || !endDate || dayjs(endDate).isAfter(dayjs(startDate)) || dayjs(endDate).isSame(dayjs(startDate));
   const isEndTimeValid = !startDate || !endDate || !startTime || !endTime || dayjs(endDate).isAfter(dayjs(startDate)) || (dayjs(endDate).isSame(dayjs(startDate)) ? (!startTime || !endTime || dayjs(endTime, 'HH:mm').isAfter(dayjs(startTime, 'HH:mm'))) : true);
 
+  const toDateTime = (date, time) => {
+    if (!date || !time) return null;
+    return dayjs(date)
+      .hour(dayjs(time).hour())
+      .minute(dayjs(time).minute())
+      .second(0)
+      .millisecond(0);
+  };
+
   const getDayStatus = (date) => {
+    if (!date) return 'free';
     const dayStart = dayjs(date).startOf('day');
     const dayEnd = dayjs(date).endOf('day');
     let busyHours = Array(24).fill(false);
@@ -107,6 +154,7 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
       for (let h = startHour; h <= endHour; h++) busyHours[h] = true;
     });
     const busyCount = busyHours.filter(Boolean).length;
+    if (guide?.rateType !== 'hourly' && busyCount > 0) return 'full';
     if (busyCount === 24) return 'full';
     if (busyCount > 0) return 'partial';
     return 'free';
@@ -116,7 +164,92 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
   const disableStartDate = date => isDateBusy(date);
   const disableEndDate = date => isDateBusy(date);
 
-  const isFormComplete = destination && startDate && endDate && startTime && endTime && isEndDateValid && isEndTimeValid && guestCount > 0;
+  const selectedStartDateTime = toDateTime(startDate, startTime);
+  const selectedEndDateTime = toDateTime(endDate, endTime);
+  const hasBookingConflict =
+    Boolean(selectedStartDateTime && selectedEndDateTime && selectedEndDateTime.isAfter(selectedStartDateTime)) &&
+    bookings.some((booking) => {
+      const bookedStart = dayjs(booking.startDateTime);
+      const bookedEnd = dayjs(booking.endDateTime);
+      return selectedStartDateTime.isBefore(bookedEnd) && selectedEndDateTime.isAfter(bookedStart);
+    });
+
+  const getDaySx = (date, outsideCurrentMonth, selected) => {
+    const status = getDayStatus(date);
+
+    if (outsideCurrentMonth) return {};
+    if (selected) {
+      return {
+        backgroundColor: '#2563eb',
+        color: '#fff',
+        borderColor: '#2563eb',
+        '&:hover': { backgroundColor: '#1d4ed8' },
+      };
+    }
+    if (status === 'full') {
+      return {
+        backgroundColor: '#fee2e2',
+        color: '#991b1b',
+        borderColor: '#ef4444',
+        textDecoration: 'line-through',
+        '&:hover': { backgroundColor: '#fee2e2' },
+        '&.Mui-disabled': {
+          opacity: 1,
+          backgroundColor: '#fee2e2',
+          color: '#991b1b',
+        },
+      };
+    }
+    if (status === 'partial') {
+      return {
+        backgroundColor: '#fef3c7',
+        color: '#92400e',
+        borderColor: '#f59e0b',
+        '&:hover': { backgroundColor: '#fde68a' },
+      };
+    }
+
+    return {};
+  };
+
+  const BookingStatusDay = (props) => {
+    const { day, outsideCurrentMonth, selected, disabled, ...other } = props;
+    const status = getDayStatus(day);
+
+    return (
+      <PickersDay
+        {...other}
+        day={day}
+        outsideCurrentMonth={outsideCurrentMonth}
+        selected={selected}
+        disabled={disabled || status === 'full'}
+        sx={{
+          borderRadius: 1.5,
+          border: outsideCurrentMonth || status === 'free' ? '1px solid transparent' : '1px solid',
+          fontWeight: status === 'free' ? 500 : 800,
+          ...getDaySx(day, outsideCurrentMonth, selected),
+        }}
+      />
+    );
+  };
+
+  const handleStartDateChange = (date) => {
+    if (isDateBusy(date)) return;
+    setStartDate(date);
+    if (endDate && date && dayjs(endDate).isBefore(date)) setEndDate(null);
+    if (getDayStatus(date) === 'partial') {
+      setSlotPickerDate(date);
+      setShowSlotPicker(true);
+    }
+  };
+
+  const handleEndDateChange = (date) => {
+    if (isDateBusy(date)) return;
+    setEndDate(date);
+    if (startDate && date && dayjs(date).isBefore(startDate)) setStartDate(null);
+  };
+
+  const isFormComplete = destination && startDate && endDate && startTime && endTime && isEndDateValid && isEndTimeValid && !hasBookingConflict && guestCount > 0;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -152,8 +285,28 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                     </Typography>
                   </Stack>
                   <Typography sx={{ fontSize: '0.9rem', fontWeight: 700, color: '#667eea' }}>
-                    {guide?.currency === 'INR' ? '₹' : '$'}{guide?.price}/{guide?.rateType === 'hourly' ? 'hour' : 'day'}
+                    ₹{guide?.price}/{guide?.rateType === 'hourly' ? 'hour' : 'day'}
                   </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={onViewReviews}
+                    sx={{
+                      mt: 1,
+                      borderRadius: 1.5,
+                      borderColor: '#cbd5e1',
+                      color: '#334155',
+                      fontWeight: 700,
+                      textTransform: 'none',
+                      '&:hover': {
+                        borderColor: '#2d7a4a',
+                        color: '#24663c',
+                        bgcolor: '#f0fdf4',
+                      },
+                    }}
+                  >
+                    View Reviews
+                  </Button>
                 </Box>
               </CardContent>
             </Card>
@@ -198,10 +351,10 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                   {showCalendar ? '✓ Hide Calendar' : '📅 View Availability'}
                 </Button>
 
-                {showCalendar && (guide?.id || guide?._id) && (
+                {showCalendar && guideUserId && (
                   <Box sx={{ mb: 1, p: 1.5, bgcolor: '#f9fafb', borderRadius: 2, border: '1px solid #e5e7eb' }}>
                     <GuideAvailabilityCalendar
-                      guideId={guide.id || guide._id}
+                      rateType={guide?.rateType}
                       onSelectDate={date => {
                         const status = getDayStatus(date);
                         if (status === 'free') setStartDate(date);
@@ -241,13 +394,9 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                       <DatePicker
                         label="Start Date"
                         value={startDate}
-                        onChange={date => {
-                          if (!isDateBusy(date)) {
-                            setStartDate(date);
-                            if (endDate && date && dayjs(endDate).isBefore(date)) setEndDate(null);
-                          }
-                        }}
+                        onChange={handleStartDateChange}
                         shouldDisableDate={disableStartDate}
+                        slots={{ day: BookingStatusDay }}
                         format="DD-MM-YYYY"
                         minDate={today}
                         slotProps={{ textField: { fullWidth: true, size: 'small' } }}
@@ -267,13 +416,9 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                       <DatePicker
                         label="End Date"
                         value={endDate}
-                        onChange={date => {
-                          if (!isDateBusy(date)) {
-                            setEndDate(date);
-                            if (startDate && date && dayjs(date).isBefore(startDate)) setStartDate(null);
-                          }
-                        }}
+                        onChange={handleEndDateChange}
                         shouldDisableDate={disableEndDate}
+                        slots={{ day: BookingStatusDay }}
                         format="DD-MM-YYYY"
                         minDate={startDate || today}
                         slotProps={{
@@ -301,7 +446,31 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                       />
                     </Stack>
                   </Box>
+                  <Stack direction="row" gap={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Busy', bg: '#fee2e2', border: '#ef4444' },
+                      { label: 'Partly booked', bg: '#fef3c7', border: '#f59e0b' },
+                    ].map((item) => (
+                      <Chip
+                        key={item.label}
+                        label={item.label}
+                        size="small"
+                        sx={{
+                          bgcolor: item.bg,
+                          color: '#1f2937',
+                          border: `1px solid ${item.border}`,
+                          fontWeight: 700,
+                        }}
+                      />
+                    ))}
+                  </Stack>
                 </LocalizationProvider>
+
+                {hasBookingConflict && (
+                  <Alert severity="warning" sx={{ border: '1px solid #fde68a', bgcolor: '#fffbeb' }}>
+                    This guide is already booked during the selected time. Choose another date or time.
+                  </Alert>
+                )}
 
                 {/* Guest Count */}
                 <Box>
@@ -349,10 +518,10 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                       <Stack spacing={1}>
                         <Stack direction="row" justifyContent="space-between">
                           <Typography sx={{ fontSize: '0.85rem', color: '#6B7280' }}>
-                            {guide?.currency === 'INR' ? '₹' : '$'}{guide?.price} × {duration} {guide?.rateType === 'hourly' ? 'hours' : 'days'}
+                            ₹{guide?.price} × {duration} {guide?.rateType === 'hourly' ? 'hours' : 'days'}
                           </Typography>
                           <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1F2937' }}>
-                            {guide?.currency === 'INR' ? '₹' : '$'}{totalPrice}
+                            ₹{totalPrice}
                           </Typography>
                         </Stack>
                         <Stack direction="row" justifyContent="space-between">
@@ -360,7 +529,7 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                             Service fee (5%)
                           </Typography>
                           <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: '#1F2937' }}>
-                            {guide?.currency === 'INR' ? '₹' : '$'}{serviceFee}
+                            ₹{serviceFee}
                           </Typography>
                         </Stack>
                         <Divider sx={{ my: 1 }} />
@@ -369,7 +538,7 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                             Total
                           </Typography>
                           <Typography sx={{ fontWeight: 800, color: '#667eea', fontSize: '1.1rem' }}>
-                            {guide?.currency === 'INR' ? '₹' : '$'}{finalTotal}
+                            ₹{finalTotal}
                           </Typography>
                         </Stack>
                       </Stack>
@@ -435,7 +604,7 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm }) {
                           Total Amount
                         </Typography>
                         <Typography sx={{ fontWeight: 800, fontSize: '1.2rem', color: '#667eea' }}>
-                          {guide?.currency === 'INR' ? '₹' : '$'}{finalTotal}
+                          ₹{finalTotal}
                         </Typography>
                       </Stack>
                     </Stack>

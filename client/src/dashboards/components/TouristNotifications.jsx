@@ -185,6 +185,12 @@ export default function TouristNotifications({ onReview, onActionComplete }) {
       if (onReview) {
         onReview();
       }
+      if (onActionComplete) {
+        onActionComplete();
+      }
+      window.dispatchEvent(new CustomEvent('guideReviewsUpdated', {
+        detail: { guideId: currentGuideId },
+      }));
     } catch (err) {
       console.error('[TouristNotifications] Failed to submit review:', err);
       setSnackbar({

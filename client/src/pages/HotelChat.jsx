@@ -259,13 +259,14 @@ export default function HotelChat({ showHeader = true }) {
               item.tourist?.email ||
               "";
             if (!displayName) return null;
+            const displayBookingId = item.hotelBookingId || item.bookingId || null;
             return {
               id: item.tourist._id,
               name: displayName,
               avatar: item.tourist?.avatar || "",
-              room: item.tourist?.roomNumber || "--",
-              bookingId: item.bookingId ? String(item.bookingId).slice(-6) : "N/A",
-              bookingIdRaw: item.bookingId || null,
+              room: item.room || item.tourist?.roomNumber || item.roomType || "--",
+              bookingId: displayBookingId ? String(displayBookingId).slice(-6) : "N/A",
+              bookingIdRaw: null,
               chatId: item.chatId,
               lastMessage: lastMessageText,
               lastMessageAt: lastMessage?.createdAt || null,
@@ -343,11 +344,7 @@ export default function HotelChat({ showHeader = true }) {
       attachmentType: attachment?.type || "",
       attachmentSize: attachment?.size || 0,
     };
-    if (selectedTourist.bookingIdRaw) {
-      await api.post(`/chat/${selectedTourist.bookingIdRaw}/message`, payload);
-    } else {
-      await api.post(`/chat/direct/${selectedTourist.id}/${userId}/message`, payload);
-    }
+    await api.post(`/chat/direct/${selectedTourist.id}/${userId}/message`, payload);
   };
 
   const handleSend = async () => {
@@ -776,16 +773,6 @@ export default function HotelChat({ showHeader = true }) {
                 Room {selectedTourist?.room ?? "--"} - Booking {selectedTourist?.bookingId ?? "N/A"}
               </Typography>
             </Box>
-            <Chip
-              label={selectedTourist?.online ? "Online" : "Offline"}
-              size="small"
-              sx={{
-                bgcolor: selectedTourist?.online ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.2)",
-                color: selectedTourist?.online ? "#15803d" : "#64748b",
-                fontWeight: 600,
-                ml: 1,
-              }}
-            />
           </Stack>
           <Stack direction="row" spacing={1} alignItems="center">
             {selectionMode ? (

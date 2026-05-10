@@ -18,6 +18,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import BookIcon from '@mui/icons-material/Book';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
@@ -26,6 +27,7 @@ const navItems = [
   { label: 'Users', path: '/admin/users', icon: <PeopleIcon /> },
   { label: 'Reviews', path: '/admin/reviews', icon: <RateReviewIcon /> },
   { label: 'Travelogues', path: '/admin/travelogues', icon: <BookIcon /> },
+  { label: 'Reports', path: '/admin/reports', icon: <AssessmentIcon /> },
 ];
 
 const drawerWidth = 248;
@@ -77,7 +79,12 @@ function SidebarContent({ theme, onClose }) {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2, delay: index * 0.04 }}
           >
-            <NavLink to={item.path} style={{ textDecoration: 'none', color: 'inherit' }} onClick={handleNavClick}>
+            <NavLink
+              to={item.path}
+              end={item.path === '/admin'}
+              style={{ textDecoration: 'none', color: 'inherit' }}
+              onClick={handleNavClick}
+            >
               {({ isActive }) => (
                 <ListItem disablePadding>
                   <ListItemButton

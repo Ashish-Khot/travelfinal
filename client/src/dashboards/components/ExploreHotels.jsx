@@ -64,6 +64,27 @@ const normalizePositiveInt = (value, fallback = 1) => {
   return Math.max(1, Math.floor(num));
 };
 
+const parseDateOnly = (value) => {
+  if (!value) return null;
+  const [year, month, day] = String(value).slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const getStayNights = (checkIn, checkOut) => {
+  const start = parseDateOnly(checkIn);
+  const end = parseDateOnly(checkOut);
+  if (!start || !end || end <= start) return 0;
+  return Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+};
+
+const formatCurrency = (value) =>
+  new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0);
+
 const getImageSrc = (src) => {
   if (!src) return FALLBACK_IMAGE;
   if (src.startsWith('/uploads/')) {
@@ -118,6 +139,8 @@ export default function ExploreHotels({ onOpenChat }) {
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomsByHotel, setRoomsByHotel] = useState({});
   const [selectedRoomId, setSelectedRoomId] = useState('');
+  const [dateConflict, setDateConflict] = useState(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     checkIn: '',
     checkOut: '',
@@ -313,6 +336,9 @@ export default function ExploreHotels({ onOpenChat }) {
         hotel.name?.toLowerCase().includes(query) ||
         hotel.ownerName?.toLowerCase().includes(query) ||
         hotel.address?.toLowerCase().includes(query) ||
+        hotel.cityState?.toLowerCase().includes(query) ||
+        hotel.hotelType?.toLowerCase().includes(query) ||
+        normalizeAmenities(hotel.amenities).some((amenity) => amenity.toLowerCase().includes(query)) ||
         hotel.email?.toLowerCase().includes(query) ||
         hotel.phone?.toLowerCase().includes(query)
       );
@@ -374,6 +400,55 @@ export default function ExploreHotels({ onOpenChat }) {
 
   const selectedRoomAvailable = Number(selectedRoom?.available) || 0;
   const selectedRoomTotal = Number(selectedRoom?.total) || 0;
+  const selectedRoomPrice = Number(selectedRoom?.price) || 0;
+  const bookingRooms = normalizePositiveInt(bookingForm.roomCount, 1);
+  const bookingNights = getStayNights(bookingForm.checkIn, bookingForm.checkOut);
+  const bookingEstimate = selectedRoomPrice * bookingNights * bookingRooms;
+  const selectedHotelId = getId(selectedHotel?._id);
+
+  useEffect(() => {
+    if (!bookingDialogOpen || !selectedHotelId || !bookingForm.checkIn || !bookingForm.checkOut || bookingNights <= 0) {
+      setDateConflict(null);
+      setCheckingAvailability(false);
+      return undefined;
+    }
+
+    let isActive = true;
+    const timer = setTimeout(async () => {
+      setCheckingAvailability(true);
+      try {
+        const params = new URLSearchParams({
+          hotelId: selectedHotelId,
+          checkIn: bookingForm.checkIn,
+          checkOut: bookingForm.checkOut,
+        });
+        if (bookingForm.roomType) {
+          params.set('roomType', bookingForm.roomType);
+        }
+        const res = await api.get(`/hotelBooking/availability?${params.toString()}`);
+        if (!isActive) return;
+        if (res.data?.available === false) {
+          const message = res.data?.message || 'Selected dates are already booked. Please choose another date.';
+          setDateConflict({ message });
+          setSnackbar({ open: true, message, severity: 'warning' });
+        } else {
+          setDateConflict(null);
+        }
+      } catch (err) {
+        if (!isActive) return;
+        setDateConflict(null);
+      } finally {
+        if (isActive) {
+          setCheckingAvailability(false);
+        }
+      }
+    }, 350);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timer);
+    };
+  }, [bookingDialogOpen, selectedHotelId, bookingForm.checkIn, bookingForm.checkOut, bookingForm.roomType, bookingNights]);
 
   const roomTypeOptions = useMemo(() => {
     const source = availableRooms.length ? availableRooms : hotelRooms;
@@ -448,12 +523,26 @@ export default function ExploreHotels({ onOpenChat }) {
       notes: '',
     });
     setSelectedRoomId('');
+    setDateConflict(null);
+    setCheckingAvailability(false);
     setBookingDialogOpen(true);
   };
 
   const handleConfirmBooking = async () => {
     if (!selectedHotel || !bookingForm.checkIn || !bookingForm.checkOut) {
       setSnackbar({ open: true, message: 'Please select check-in and check-out dates.', severity: 'warning' });
+      return;
+    }
+    if (getStayNights(bookingForm.checkIn, bookingForm.checkOut) <= 0) {
+      setSnackbar({ open: true, message: 'Check-out date must be after check-in date.', severity: 'warning' });
+      return;
+    }
+    if (checkingAvailability) {
+      setSnackbar({ open: true, message: 'Checking selected dates. Please wait.', severity: 'info' });
+      return;
+    }
+    if (dateConflict) {
+      setSnackbar({ open: true, message: dateConflict.message, severity: 'warning' });
       return;
     }
     if (roomsLoading) {
@@ -593,81 +682,122 @@ export default function ExploreHotels({ onOpenChat }) {
     [roomsByHotel]
   );
 
-  const renderBookingCard = (booking, isGridMode) => (
-    <Card
-      key={booking._id}
-      sx={{
-        p: 3,
-        height: '100%',
-        borderRadius: 3,
-        border: '1px solid #dce8e2',
-        background: 'linear-gradient(180deg, #ffffff 0%, #fbfffd 100%)',
-        boxShadow: '0 10px 24px rgba(15, 70, 55, 0.10)',
-      }}
-    >
-      <Stack
-        direction={isGridMode ? 'column' : { xs: 'column', md: 'row' }}
-        spacing={2}
-        justifyContent="space-between"
+  const renderBookingCard = (booking, isGridMode) => {
+    const bookedRooms = normalizePositiveInt(booking.roomCount, 1);
+    const stayNights = getStayNights(booking.checkIn, booking.checkOut);
+    const pricePerNight = Number(booking.pricePerNight) || 0;
+    const totalAmount = Number(booking.totalAmount) || pricePerNight * stayNights * bookedRooms;
+    const bookingHotel = booking.hotelId && typeof booking.hotelId === 'object'
+      ? booking.hotelId
+      : hotels.find((hotel) => getId(hotel._id) === getId(booking.hotelId));
+    const bookingAmenities = normalizeAmenities(bookingHotel?.amenities);
+    const bookingHotelAddress = bookingHotel?.address || 'Address not provided';
+    const bookingCityState = bookingHotel?.cityState || '';
+    const bookingHotelType = bookingHotel?.hotelType || '';
+
+    return (
+      <Card
+        key={booking._id}
+        sx={{
+          p: 3,
+          height: '100%',
+          borderRadius: 3,
+          border: '1px solid #dce8e2',
+          background: 'linear-gradient(180deg, #ffffff 0%, #fbfffd 100%)',
+          boxShadow: '0 10px 24px rgba(15, 70, 55, 0.10)',
+        }}
       >
-        <Box>
-          <Typography variant="h6" fontWeight={700}>
-            {booking.hotelId?.name || booking.hotelName || 'Hotel'}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Owner: {booking.hotelOwnerId?.name || 'Unknown'}
-          </Typography>
-          <Stack direction="row" spacing={2} mt={1} alignItems="center">
-            <CalendarMonthIcon fontSize="small" />
-            <Typography variant="body2" color="text.secondary">
-              {booking.checkIn?.slice(0, 10)} to {booking.checkOut?.slice(0, 10)}
+        <Stack
+          direction={isGridMode ? 'column' : { xs: 'column', md: 'row' }}
+          spacing={2}
+          justifyContent="space-between"
+        >
+          <Box>
+            <Typography variant="h6" fontWeight={700}>
+              {bookingHotel?.name || booking.hotelName || 'Hotel'}
             </Typography>
-          </Stack>
-          <Stack direction="row" spacing={2} mt={1} alignItems="center">
-            <GroupIcon fontSize="small" />
             <Typography variant="body2" color="text.secondary">
-              {booking.guests} guests, {booking.roomType || 'Standard'} x {normalizePositiveInt(booking.roomCount, 1)} room{normalizePositiveInt(booking.roomCount, 1) > 1 ? 's' : ''}
+              Owner: {booking.hotelOwnerId?.name || 'Unknown'}
             </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mt={1}>
+              {bookingHotelType && <Chip size="small" label={bookingHotelType} />}
+              {bookingCityState && <Chip size="small" label={bookingCityState} />}
+            </Stack>
+            <Stack direction="row" spacing={2} mt={1} alignItems="flex-start">
+              <LocationOnIcon fontSize="small" />
+              <Typography variant="body2" color="text.secondary">
+                {bookingHotelAddress}
+              </Typography>
+            </Stack>
+            <Stack direction="row" spacing={2} mt={1} alignItems="center">
+              <CalendarMonthIcon fontSize="small" />
+              <Typography variant="body2" color="text.secondary">
+                {booking.checkIn?.slice(0, 10)} to {booking.checkOut?.slice(0, 10)}
+              </Typography>
+            </Stack>
+            <Stack direction="row" spacing={2} mt={1} alignItems="center">
+              <GroupIcon fontSize="small" />
+              <Typography variant="body2" color="text.secondary">
+                {booking.guests} guests, {booking.roomType || 'Standard'} x {bookedRooms} room{bookedRooms > 1 ? 's' : ''}
+              </Typography>
+            </Stack>
+            <Box sx={{ mt: 1.25 }}>
+              <Typography variant="body2" sx={{ color: '#0f5132', fontWeight: 800 }}>
+                Total: {formatCurrency(totalAmount)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {pricePerNight ? `${formatCurrency(pricePerNight)} per night` : 'Price not set'} - {stayNights || 0} night{stayNights === 1 ? '' : 's'}
+              </Typography>
+            </Box>
+            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap mt={1.25}>
+              {bookingAmenities.length === 0 ? (
+                <Chip size="small" label="No amenities listed" />
+              ) : (
+                bookingAmenities.slice(0, 4).map((amenity) => (
+                  <Chip key={amenity} size="small" label={amenity} />
+                ))
+              )}
+            </Stack>
+          </Box>
+          <Stack spacing={1} alignItems={isGridMode ? 'flex-start' : { xs: 'flex-start', md: 'flex-end' }}>
+            <Chip label={booking.status} color={statusColors[booking.status] || 'default'} />
+            {(() => {
+              const isReviewed = reviewedBookingIds.has(getId(booking._id));
+              const canReview = booking.status === 'completed';
+              return (
+                <Button
+                  variant={isReviewed ? 'outlined' : 'contained'}
+                  disabled={!canReview || isReviewed}
+                  onClick={() => {
+                    if (!canReview) {
+                      setSnackbar({
+                        open: true,
+                        message: 'Complete the stay to leave a review.',
+                        severity: 'info',
+                      });
+                      return;
+                    }
+                    const hotel = booking.hotelId || hotels.find((h) => h._id === booking.hotelId);
+                    if (hotel && hotel._id) {
+                      handleOpenReview(hotel, booking._id);
+                    } else {
+                      setSnackbar({
+                        open: true,
+                        message: 'Hotel details not available yet. Please try again later.',
+                        severity: 'warning',
+                      });
+                    }
+                  }}
+                >
+                  {isReviewed ? 'Reviewed' : canReview ? 'Leave Review' : 'Awaiting Checkout'}
+                </Button>
+              );
+            })()}
           </Stack>
-        </Box>
-        <Stack spacing={1} alignItems={isGridMode ? 'flex-start' : { xs: 'flex-start', md: 'flex-end' }}>
-          <Chip label={booking.status} color={statusColors[booking.status] || 'default'} />
-          {(() => {
-            const isReviewed = reviewedBookingIds.has(getId(booking._id));
-            const canReview = booking.status === 'completed';
-            return (
-              <Button
-                variant={isReviewed ? 'outlined' : 'contained'}
-                disabled={!canReview || isReviewed}
-                onClick={() => {
-                  if (!canReview) {
-                    setSnackbar({
-                      open: true,
-                      message: 'Complete the stay to leave a review.',
-                      severity: 'info',
-                    });
-                    return;
-                  }
-                  const hotel = booking.hotelId || hotels.find((h) => h._id === booking.hotelId);
-                  if (hotel && hotel._id) {
-                    handleOpenReview(hotel, booking._id);
-                  } else {
-                    setSnackbar({
-                      open: true,
-                      message: 'Hotel details not available yet. Please try again later.',
-                      severity: 'warning',
-                    });
-                  }
-                }}
-              >
-                {isReviewed ? 'Reviewed' : canReview ? 'Leave Review' : 'Awaiting Checkout'}
-              </Button>
-            );
-          })()}
         </Stack>
-      </Stack>
-    </Card>
-  );
+      </Card>
+    );
+  };
 
   return (
     <Box sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
@@ -749,6 +879,9 @@ export default function ExploreHotels({ onOpenChat }) {
             const hotelName = hotel.name || hotel.ownerName || 'Hotel';
             const hotelEmail = hotel.email || hotel.ownerEmail || 'No hotel email';
             const hotelPhone = hotel.phone || hotel.ownerPhone || 'No hotel phone';
+            const hotelAddress = hotel.address || 'Address not provided';
+            const hotelCityState = hotel.cityState || '';
+            const hotelType = hotel.hotelType || '';
             const reviews = getReviewsForHotel(hotel._id);
             const avgRating = getAverageRating(hotel._id);
             const ownerId = getHotelOwnerId(hotel);
@@ -757,6 +890,11 @@ export default function ExploreHotels({ onOpenChat }) {
             const bookableRooms = (rooms || []).filter((room) => room.status !== 'Unavailable');
             const availableRoomUnits = availableList.reduce((sum, room) => sum + (Number(room.available) || 0), 0);
             const totalRoomUnits = bookableRooms.reduce((sum, room) => sum + (Number(room.total) || 0), 0);
+            const pricedRooms = availableList.length ? availableList : bookableRooms;
+            const roomPrices = pricedRooms
+              .map((room) => Number(room.price) || 0)
+              .filter((price) => price > 0);
+            const startingPrice = roomPrices.length ? Math.min(...roomPrices) : 0;
             const canBook = availableRoomUnits > 0;
             const roomStatusLabel =
               rooms.length === 0
@@ -850,10 +988,19 @@ export default function ExploreHotels({ onOpenChat }) {
                       </Stack>
                     </Stack>
 
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={1}>
+                      {hotelType && (
+                        <Chip size="small" icon={<HotelIcon />} label={hotelType} sx={{ fontWeight: 700 }} />
+                      )}
+                      {hotelCityState && (
+                        <Chip size="small" label={hotelCityState} sx={{ fontWeight: 700 }} />
+                      )}
+                    </Stack>
+
                     <Stack direction="row" alignItems="center" spacing={1} mb={1}>
                       <LocationOnIcon fontSize="small" color="action" />
                       <Typography variant="body2" color="text.secondary">
-                        {hotel.address || 'Address not provided'}
+                        {hotelAddress}
                       </Typography>
                     </Stack>
 
@@ -917,6 +1064,16 @@ export default function ExploreHotels({ onOpenChat }) {
                           bgcolor: canBook ? "#dcfce7" : "#f1f5f9",
                           color: canBook ? "#166534" : "#334155",
                           border: canBook ? "1px solid #86efac" : "1px solid #cbd5e1",
+                          fontWeight: 700,
+                        }}
+                      />
+                      <Chip
+                        size="small"
+                        label={startingPrice ? `From ${formatCurrency(startingPrice)} per night` : 'Price not set'}
+                        sx={{
+                          bgcolor: "#fff7ed",
+                          color: "#9a3412",
+                          border: "1px solid #fed7aa",
                           fontWeight: 700,
                         }}
                       />
@@ -1032,6 +1189,24 @@ export default function ExploreHotels({ onOpenChat }) {
           <Typography fontWeight={600} mb={2}>
             {selectedHotel?.name}
           </Typography>
+          <Box sx={{ mb: 2, p: 2, borderRadius: 2.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mb={1}>
+              {selectedHotel?.hotelType && <Chip size="small" label={selectedHotel.hotelType} />}
+              {selectedHotel?.cityState && <Chip size="small" label={selectedHotel.cityState} />}
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {selectedHotel?.address || 'Address not provided'}
+            </Typography>
+            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap mt={1.25}>
+              {normalizeAmenities(selectedHotel?.amenities).length === 0 ? (
+                <Chip size="small" label="No amenities listed" />
+              ) : (
+                normalizeAmenities(selectedHotel?.amenities).slice(0, 5).map((amenity) => (
+                  <Chip key={amenity} size="small" label={amenity} />
+                ))
+              )}
+            </Stack>
+          </Box>
           <Stack spacing={2}>
             <TextField
               label="Check-in Date"
@@ -1104,6 +1279,11 @@ export default function ExploreHotels({ onOpenChat }) {
                 </MenuItem>
               ))}
             </TextField>
+            {dateConflict && (
+              <Alert severity="warning" sx={{ borderRadius: 2 }}>
+                {dateConflict.message}
+              </Alert>
+            )}
             <Box>
               <Typography variant="subtitle2" fontWeight={700} mb={1}>
                 Available Rooms
@@ -1150,11 +1330,11 @@ export default function ExploreHotels({ onOpenChat }) {
                         <Box>
                           <Typography fontWeight={600}>{room.type}</Typography>
                           <Typography variant="caption" color="text.secondary" display="block">
-                            {statusLabel} · {availableCount}/{totalCount || availableCount} available
+                            {statusLabel} - {availableCount}/{totalCount || availableCount} available
                           </Typography>
                         </Box>
                         <Stack alignItems="flex-end" spacing={0.5}>
-                          <Typography fontWeight={700}>₹{room.price}</Typography>
+                          <Typography fontWeight={700}>{formatCurrency(room.price)}</Typography>
                           {isSelected && (
                             <Chip size="small" label="Selected" color="success" />
                           )}
@@ -1164,6 +1344,55 @@ export default function ExploreHotels({ onOpenChat }) {
                   })}
                 </Stack>
               )}
+            </Box>
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2.5,
+                border: '1px solid #cde7dc',
+                bgcolor: '#f7fffb',
+              }}
+            >
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                alignItems={{ xs: 'stretch', sm: 'center' }}
+                justifyContent="space-between"
+              >
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Room price
+                  </Typography>
+                  <Typography fontWeight={800}>
+                    {selectedRoomPrice ? `${formatCurrency(selectedRoomPrice)} per night` : 'Select a priced room'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Stay
+                  </Typography>
+                  <Typography fontWeight={800}>
+                    {bookingNights ? `${bookingNights} night${bookingNights === 1 ? '' : 's'}` : 'Select valid dates'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Rooms
+                  </Typography>
+                  <Typography fontWeight={800}>{bookingRooms}</Typography>
+                </Box>
+                <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Total estimate
+                  </Typography>
+                  <Typography variant="h6" fontWeight={900} sx={{ color: '#0f5132' }}>
+                    {bookingEstimate ? formatCurrency(bookingEstimate) : formatCurrency(0)}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                Total is calculated from the hotel manager room price, number of nights, and selected rooms.
+              </Typography>
             </Box>
             <TextField
               label="Special Requests"
@@ -1181,9 +1410,16 @@ export default function ExploreHotels({ onOpenChat }) {
           <Button
             variant="contained"
             onClick={handleConfirmBooking}
-            disabled={roomsLoading || hotelRooms.length === 0 || availableRooms.length === 0}
+            disabled={
+              roomsLoading ||
+              checkingAvailability ||
+              Boolean(dateConflict) ||
+              hotelRooms.length === 0 ||
+              availableRooms.length === 0 ||
+              bookingNights <= 0
+            }
           >
-            Confirm Booking
+            {checkingAvailability ? 'Checking Dates...' : 'Confirm Booking'}
           </Button>
         </DialogActions>
       </Dialog>

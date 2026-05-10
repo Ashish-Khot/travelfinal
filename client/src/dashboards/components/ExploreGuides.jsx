@@ -1,5 +1,5 @@
 // ExploreGuides.jsx - Premium Explore Guides with hero, filters, favorites & details
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -19,12 +19,12 @@ import GuidesHeroSection from './GuidesHeroSection';
 import GuideFiltersBar from './GuideFiltersBar';
 import GuideCard from './GuideCard';
 import BookGuideDialog from './BookGuideDialog';
-import GuideDetailModal from './GuideDetailModal';
+import GuideReviewsDialog from './GuideReviewsDialog';
 
 import api from '../../api';
 import dayjs from 'dayjs';
 
-export default function ExploreGuides() {
+export default function ExploreGuides({ refreshTrigger = 0 }) {
   const [guides, setGuides] = useState([]);
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [detailModalGuide, setDetailModalGuide] = useState(null);
@@ -38,6 +38,7 @@ export default function ExploreGuides() {
   const [minRating, setMinRating] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [rateTypeFilter, setRateTypeFilter] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [viewMode, setViewMode] = useState('grid');
   const [loading, setLoading] = useState(true);
   const [agentBookingRequest, setAgentBookingRequest] = useState(null);
@@ -53,6 +54,7 @@ export default function ExploreGuides() {
       if (payload.minRating) setMinRating(String(payload.minRating));
       if (payload.maxPrice) setMaxPrice(String(payload.maxPrice));
       if (payload.rateType) setRateTypeFilter(payload.rateType);
+      if (payload.availability) setAvailabilityFilter(payload.availability);
       if (payload.openBooking) {
         setAgentBookingRequest({
           guideUserId: payload.guideUserId || '',
@@ -65,35 +67,66 @@ export default function ExploreGuides() {
     return () => window.removeEventListener('agentExploreGuidesPrefill', handleAgentPrefill);
   }, []);
 
-  // Fetch guides from backend
-  useEffect(() => {
-    async function fetchGuides() {
-      setLoading(true);
+  const fetchGuides = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/guide');
+      let eligibleReviewByGuideId = {};
       try {
-        const res = await api.get('/guide');
-        const realGuides = await Promise.all(
-          (res.data.guides || [])
-            .filter((g) => g.approved && g.userId)
-            .map(async (g) => {
-              // Fetch reviews for this guide and calculate actual rating
-              let reviewCount = 0;
-              let averageRating = 0;
-              try {
-                const guideUserId = g.userId._id || g.userId;
-                const reviewRes = await api.get(`/review/guide/${guideUserId}/reviews`);
-                const reviews = reviewRes.data.reviews || [];
-                reviewCount = reviews.length;
-                
-                // Calculate average rating from actual reviews
-                if (reviews.length > 0) {
-                  const totalRating = reviews.reduce((sum, review) => sum + (review.rating || 0), 0);
-                  averageRating = parseFloat((totalRating / reviews.length).toFixed(1));
-                } else {
-                  averageRating = 0;
-                }
-              } catch (e) {
-                // Reviews endpoint might not exist or error fetching
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+        if (currentUser?._id) {
+          const bookingsRes = await api.get(`/booking/tourist/${currentUser._id}`);
+          eligibleReviewByGuideId = (bookingsRes.data.bookings || [])
+            .filter((booking) =>
+              booking.status === 'completed' &&
+              booking.reviewRequestSent &&
+              booking.reviewRequestStatus === 'accepted' &&
+              !booking.reviewSubmitted
+            )
+            .reduce((acc, booking) => {
+              const bookingGuideId = (booking.guideId?._id || booking.guideId || '').toString();
+              if (bookingGuideId) {
+                acc[bookingGuideId] = {
+                  _id: booking._id,
+                  destination: booking.destination || 'Tour',
+                };
               }
+              return acc;
+            }, {});
+        }
+      } catch (e) {
+        eligibleReviewByGuideId = {};
+      }
+
+      const realGuides = await Promise.all(
+        (res.data.guides || [])
+          .filter((g) => g.approved && g.userId)
+          .map(async (g) => {
+            const guideUserId = g.userId._id || g.userId;
+            let reviews = [];
+            let averageRating = 0;
+
+            try {
+              const reviewRes = await api.get(`/review/guide/${guideUserId}/reviews`);
+              reviews = (reviewRes.data.reviews || []).map((review) => ({
+                _id: review._id,
+                touristName: review.userId?.name || 'Tourist',
+                touristAvatar: review.userId?.avatar || '',
+                rating: Number(review.rating || 0),
+                place: review.place || '',
+                comment: review.comment || '',
+                createdAt: review.createdAt,
+                guideReply: review.guideReply || '',
+                guideReplyDate: review.guideReplyDate || null,
+              }));
+
+              if (reviews.length > 0) {
+                const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+                averageRating = parseFloat((totalRating / reviews.length).toFixed(1));
+              }
+            } catch (e) {
+              reviews = [];
+            }
 
               // Calculate days since last booking
               let daysSinceBooking = null;
@@ -121,17 +154,18 @@ export default function ExploreGuides() {
                 .filter(Boolean);
               const rawAvatar =
                 g.userId?.avatar || g.userId?.profileImage || g.avatar || '';
+              const eligibleReviewBooking = eligibleReviewByGuideId[String(guideUserId)] || null;
 
               return {
                 _id: g._id,
-                userId: g.userId._id,
+                userId: guideUserId,
                 name: g.userId?.name || 'Guide',
                 avatar: rawAvatar,
                 location: g.userId.country || 'Global',
                 languages: languageList,
                 languageNames,
                 price: g.price || 0,
-                currency: g.currency || 'USD',
+                currency: 'INR',
                 rateType: g.rateType || 'daily',
                 rating: averageRating,
                 description: g.bio || 'Experienced local guide with passion for sharing culture',
@@ -139,7 +173,10 @@ export default function ExploreGuides() {
                 experienceYears: g.experienceYears || 5,
                 bookings: completedBookings,
                 travelogues: g.travelogues?.length || 0,
-                reviewCount: reviewCount,
+                reviewCount: reviews.length,
+                reviews,
+                latestReview: reviews[0] || null,
+                eligibleReviewBooking,
                 // New fields
                 guideVideo: g.guideVideo || '',
                 cancelPolicy: g.cancelPolicy || 'Moderate',
@@ -154,19 +191,33 @@ export default function ExploreGuides() {
                 daysSinceBooking: daysSinceBooking,
                 successRate: successRate,
               };
-            })
-        );
-        setGuides(realGuides);
-      } catch (err) {
-        console.error(err);
-        setSuccessMsg('Failed to load guides');
-        setSnackbarSeverity('error');
-      } finally {
-        setLoading(false);
-      }
+          })
+      );
+      setGuides(realGuides);
+    } catch (err) {
+      console.error(err);
+      setSuccessMsg('Failed to load guides');
+      setSnackbarSeverity('error');
+    } finally {
+      setLoading(false);
     }
-    fetchGuides();
   }, []);
+
+  // Fetch guides from backend
+  useEffect(() => {
+    fetchGuides();
+  }, [fetchGuides, refreshTrigger]);
+
+  useEffect(() => {
+    window.addEventListener('guideReviewsUpdated', fetchGuides);
+    return () => window.removeEventListener('guideReviewsUpdated', fetchGuides);
+  }, [fetchGuides]);
+
+  useEffect(() => {
+    if (!detailModalGuide) return;
+    const updatedGuide = guides.find((guide) => guide._id === detailModalGuide._id);
+    if (updatedGuide) setDetailModalGuide(updatedGuide);
+  }, [guides, detailModalGuide]);
 
   const allLanguages = Array.from(
     new Set(guides.flatMap((g) => g.languageNames || []))
@@ -186,8 +237,12 @@ export default function ExploreGuides() {
     const matchesRating = !minRating || guide.rating >= parseFloat(minRating);
     const matchesPrice = !maxPrice || guide.price <= parseFloat(maxPrice);
     const matchesRateType = !rateTypeFilter || guide.rateType === rateTypeFilter;
+    const matchesAvailability =
+      availabilityFilter === 'all' ||
+      (availabilityFilter === 'available' && guide.isAvailable) ||
+      (availabilityFilter === 'unavailable' && !guide.isAvailable);
 
-    return matchesSearch && matchesLanguage && matchesRating && matchesPrice && matchesRateType;
+    return matchesSearch && matchesLanguage && matchesRating && matchesPrice && matchesRateType && matchesAvailability;
   });
 
   useEffect(() => {
@@ -233,11 +288,16 @@ export default function ExploreGuides() {
   };
 
   const handleBook = (guide) => {
+    if (guide?.isAvailable === false) {
+      setSuccessMsg('This guide is currently unavailable for booking.');
+      setSnackbarSeverity('warning');
+      return;
+    }
     setSelectedGuide(guide);
     setDialogOpen(true);
   };
 
-  const handleViewMore = (guide) => {
+  const handleViewReviews = (guide) => {
     setDetailModalGuide(guide);
     setDetailModalOpen(true);
   };
@@ -321,6 +381,8 @@ export default function ExploreGuides() {
           onMinRatingChange={setMinRating}
           maxPrice={maxPrice}
           onMaxPriceChange={setMaxPrice}
+          availabilityFilter={availabilityFilter}
+          onAvailabilityFilterChange={setAvailabilityFilter}
           allLanguages={allLanguages}
           onClear={() => {
             setSearch('');
@@ -328,6 +390,7 @@ export default function ExploreGuides() {
             setMinRating('');
             setMaxPrice('');
             setRateTypeFilter('');
+            setAvailabilityFilter('all');
           }}
           guideCount={filteredGuides.length}
         />
@@ -427,7 +490,7 @@ export default function ExploreGuides() {
                 <GuideCard
                   guide={guide}
                   onBook={handleBook}
-                  onViewMore={handleViewMore}
+                  onViewReviews={handleViewReviews}
                   isFavorite={isFavorite(guide)}
                   onFavoriteToggle={toggleFavorite}
                 />
@@ -470,15 +533,18 @@ export default function ExploreGuides() {
         guide={selectedGuide}
         onClose={handleClose}
         onConfirm={handleConfirm}
+        onViewReviews={() => {
+          if (!selectedGuide) return;
+          setDialogOpen(false);
+          setDetailModalGuide(selectedGuide);
+          setDetailModalOpen(true);
+        }}
       />
 
-      <GuideDetailModal
+      <GuideReviewsDialog
         open={detailModalOpen}
         guide={detailModalGuide}
         onClose={handleDetailModalClose}
-        onBook={handleBook}
-        isFavorite={detailModalGuide ? isFavorite(detailModalGuide) : false}
-        onFavoriteToggle={toggleFavorite}
       />
 
       {/* Snackbar */}

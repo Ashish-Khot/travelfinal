@@ -57,7 +57,7 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange }) {
               <Typography fontSize={15} color="text.secondary">Tourist: {booking.touristId?.name || booking.touristId}</Typography>
             </Box>
             <Box sx={{ textAlign: 'right' }}>
-              <Typography fontWeight={700} color="green" fontSize={22}>${booking.price || 0}</Typography>
+              <Typography fontWeight={700} color="green" fontSize={22}>₹{booking.price || 0}</Typography>
               <Typography fontSize={13} color="text.secondary">Total Price</Typography>
               <Box mt={2} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <Button onClick={() => { setChatBookingId(booking._id); setOpenChat(true); }} className="bg-green-600 hover:bg-green-700">Chat</Button>

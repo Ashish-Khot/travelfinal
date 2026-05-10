@@ -12,7 +12,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import api from '../../api';
 
-export default function ReviewsPanel({ refreshTrigger = 0 }) {
+export default function ReviewsPanel({ refreshTrigger = 0, onReviewSubmitted = () => {} }) {
   const [guides, setGuides] = useState([]);
   const [selectedGuide, setSelectedGuide] = useState(null);
   const [rating, setRating] = useState(0);
@@ -198,6 +198,11 @@ export default function ReviewsPanel({ refreshTrigger = 0 }) {
       
       alert('✅ Review submitted successfully! Thank you for your feedback.');
       
+      onReviewSubmitted();
+      window.dispatchEvent(new CustomEvent('guideReviewsUpdated', {
+        detail: { guideId: selectedGuide.userId },
+      }));
+
       // Remove reviewed guide from list
       const updatedGuides = guides.filter(g => g.userId !== selectedGuide.userId);
       setGuides(updatedGuides);

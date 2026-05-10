@@ -2,21 +2,9 @@ const express = require('express');
 const Booking = require('../models/Booking');
 const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('../services/emailService');
 
 const router = express.Router();
-
-// Helper: send email notification
-async function sendEmail(to, subject, text) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-  await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
-}
 
 // Guide accepts or rejects a booking
 router.post('/booking/:id/action', verifyToken, authorizeRoles('guide'), async (req, res) => {
@@ -46,7 +34,7 @@ router.post('/booking/:id/action', verifyToken, authorizeRoles('guide'), async (
     // Notify tourist
     const tourist = await User.findById(booking.touristId);
     if (tourist && tourist.email) {
-      await sendEmail(tourist.email, emailSubject, emailText);
+      await sendEmail(tourist.email, emailSubject, emailText, { context: 'Booking action' });
     }
     res.json({ message: statusUpdate, booking });
   } catch (err) {

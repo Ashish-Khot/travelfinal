@@ -15,21 +15,17 @@ import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import UploadFileRoundedIcon from "@mui/icons-material/UploadFileRounded";
 
 import PersonIcon from "@mui/icons-material/Person";
 import RoomIcon from "@mui/icons-material/Room";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import HotelIcon from "@mui/icons-material/Hotel";
-import LocalHospitalIcon from "@mui/icons-material/LocalHospital";
 import TravelExploreIcon from "@mui/icons-material/TravelExplore";
 import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
 
 import styles from "./Auth.module.scss";
-
-const languageOptions = [
-  "English", "Hindi", "Spanish", "French", "German", "Chinese", "Other"
-];
 
 const roles = [
   {
@@ -48,21 +44,58 @@ const roles = [
     icon: <HotelIcon fontSize="small" />,
   },
   {
-    value: "hospital",
-    label: "Hospital",
-    icon: <LocalHospitalIcon fontSize="small" />,
-  },
-  {
     value: "admin",
     label: "Admin",
     icon: <AdminPanelSettingsIcon fontSize="small" />,
   },
 ];
 
+const hotelTypes = ["Resort", "Lodge", "Hostel", "Business hotel", "Guest house", "Apartment", "Homestay", "Other"];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_REGEX = /^\d{10}$/;
+const PASSWORD_MIN_LENGTH = 6;
+const IDENTITY_PROOF_MAX_SIZE = 8 * 1024 * 1024;
+const IDENTITY_PROOF_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+const IDENTITY_PROOF_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif"];
+
+const normalizePhoneNumber = (phone) => String(phone || "").replace(/\D/g, "");
+const normalizeAmenities = (value) =>
+  String(value || "")
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const validateIdentityProof = (file) => {
+  if (!file) return "Upload identity proof as a PDF or image.";
+
+  const fileName = file.name.toLowerCase();
+  const hasAllowedExtension = IDENTITY_PROOF_EXTENSIONS.some((extension) =>
+    fileName.endsWith(extension)
+  );
+
+  if (!IDENTITY_PROOF_TYPES.has(file.type) && !hasAllowedExtension) {
+    return "Identity proof must be a PDF or image file.";
+  }
+
+  if (file.size > IDENTITY_PROOF_MAX_SIZE) {
+    return "Identity proof must be 8 MB or smaller.";
+  }
+
+  return "";
+};
+
 export default function Register() {
   const [selectedRole, setSelectedRole] = useState(roles[0].value);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
     severity: "info",
@@ -73,27 +106,45 @@ export default function Register() {
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
     phone: "",
-    country: "",
     interests: "",
+    hotelName: "",
+    hotelAddress: "",
+    cityState: "",
+    hotelType: "",
+    amenities: "",
     bio: "",
     experienceYears: "",
-    languages: [],
+    languages: "",
+    identityProof: null,
   });
 
   const handleRole = (event, newRole) => {
-    if (newRole !== null) setSelectedRole(newRole);
+    if (newRole === null) return;
+    setSelectedRole(newRole);
+    if (newRole !== "tourist" && form.interests) {
+      setForm((prev) => ({ ...prev, interests: "" }));
+    }
   };
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    const nextValue = name === "phone" ? normalizePhoneNumber(value).slice(0, 10) : value;
+    setForm({ ...form, [name]: nextValue });
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: "" });
+    }
   };
 
-  const handleLanguagesChange = (e) => {
-    const value = e.target.value;
-    setForm({
-      ...form,
-      languages: typeof value === "string" ? value.split(",") : value,
+  const handleIdentityProofChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    const fileError = file ? validateIdentityProof(file) : "";
+
+    setForm({ ...form, identityProof: file });
+    setErrors({
+      ...errors,
+      identityProof: fileError,
     });
   };
 
@@ -101,38 +152,128 @@ export default function Register() {
     setSnackbar({ open: true, severity, message });
   };
 
+  const validateForm = () => {
+    const nextErrors = {};
+    const email = form.email.trim();
+    const phone = normalizePhoneNumber(form.phone);
+
+    if (!form.name.trim()) {
+      nextErrors.name = "Full name is required.";
+    }
+
+    if (!email) {
+      nextErrors.email = "Email is required.";
+    } else if (!EMAIL_REGEX.test(email)) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+
+    if (!form.password) {
+      nextErrors.password = "Password is required.";
+    } else if (form.password.length < PASSWORD_MIN_LENGTH) {
+      nextErrors.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+    }
+
+    if (!form.confirmPassword) {
+      nextErrors.confirmPassword = "Confirm your password.";
+    } else if (form.confirmPassword !== form.password) {
+      nextErrors.confirmPassword = "Passwords do not match.";
+    }
+
+    if (!form.phone.trim()) {
+      nextErrors.phone = "Mobile number is required.";
+    } else if (!PHONE_REGEX.test(phone)) {
+      nextErrors.phone = "Enter a 10-digit mobile number.";
+    }
+
+    if (selectedRole === "guide") {
+      if (!form.bio.trim()) {
+        nextErrors.bio = "Bio is required for guide accounts.";
+      }
+      if (form.experienceYears === "" || Number(form.experienceYears) < 0) {
+        nextErrors.experienceYears = "Enter valid years of experience.";
+      }
+      if (!form.languages.trim()) {
+        nextErrors.languages = "Enter at least one language.";
+      }
+      const identityProofError = validateIdentityProof(form.identityProof);
+      if (identityProofError) {
+        nextErrors.identityProof = identityProofError;
+      }
+    }
+
+    if (selectedRole === "hotel") {
+      if (!form.hotelName.trim()) {
+        nextErrors.hotelName = "Hotel name is required.";
+      }
+      if (!form.hotelAddress.trim()) {
+        nextErrors.hotelAddress = "Hotel address is required.";
+      }
+      if (!form.cityState.trim()) {
+        nextErrors.cityState = "City/state is required.";
+      }
+      if (!form.hotelType.trim()) {
+        nextErrors.hotelType = "Select a hotel type.";
+      }
+      if (normalizeAmenities(form.amenities).length === 0) {
+        nextErrors.amenities = "Enter at least one amenity.";
+      }
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
+    if (!validateForm()) return;
     setLoading(true);
 
     try {
-      let payload = {
-        name: form.name,
-        email: form.email,
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
         password: form.password,
-        phone: form.phone,
-        country: form.country,
-        interests: form.interests,
+        phone: normalizePhoneNumber(form.phone),
         role: selectedRole,
       };
-      if (selectedRole === "guide") {
-        payload = {
-          ...payload,
-          bio: form.bio,
-          experienceYears: form.experienceYears,
-          languages: form.languages,
-        };
+      if (selectedRole === "tourist") {
+        payload.interests = form.interests.trim();
       }
-      await api.post("/register", payload);
+      if (selectedRole === "hotel") {
+        payload.hotelName = form.hotelName.trim();
+        payload.hotelAddress = form.hotelAddress.trim();
+        payload.cityState = form.cityState.trim();
+        payload.hotelType = form.hotelType;
+        payload.amenities = normalizeAmenities(form.amenities);
+      }
+      if (selectedRole === "guide") {
+        const submitData = new FormData();
+        Object.entries({
+          ...payload,
+          bio: form.bio.trim(),
+          experienceYears: form.experienceYears,
+          languages: form.languages.trim(),
+        }).forEach(([key, value]) => submitData.append(key, value));
+        submitData.append("identityProof", form.identityProof);
+        await api.post("/register", submitData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await api.post("/register", payload);
+      }
       showToast("success", "Account created successfully. Redirecting to sign in...");
       setTimeout(() => {
         window.location.href = "/login";
       }, 1200);
     } catch (err) {
+      const apiMessage = err.response?.data?.message;
+      const apiError = err.response?.data?.error;
       showToast(
         "error",
-        err.response?.data?.message || err.message || "Registration failed."
+        apiMessage === "Registration failed" && apiError
+          ? apiError
+          : apiMessage || err.message || "Registration failed."
       );
     } finally {
       setLoading(false);
@@ -199,7 +340,14 @@ export default function Register() {
               ))}
             </ToggleButtonGroup>
 
-            <form onSubmit={handleSubmit} className={`${styles.form} ${styles.registerForm}`}>
+            <form
+              onSubmit={handleSubmit}
+              className={`${styles.form} ${styles.registerForm} ${
+                selectedRole === "guide"
+                  ? styles.guideRegisterForm
+                  : styles.basicRegisterForm
+              }`}
+            >
               <Box className={`${styles.formGrid} ${styles.registerGrid}`}>
                 <TextField
                   size="small"
@@ -210,6 +358,8 @@ export default function Register() {
                   value={form.name}
                   onChange={handleChange}
                   className={styles.formField}
+                  error={Boolean(errors.name)}
+                  helperText={errors.name}
                 />
                 <TextField
                   size="small"
@@ -222,6 +372,8 @@ export default function Register() {
                   value={form.email}
                   onChange={handleChange}
                   className={styles.formField}
+                  error={Boolean(errors.email)}
+                  helperText={errors.email}
                 />
                 <TextField
                   size="small"
@@ -234,6 +386,8 @@ export default function Register() {
                   value={form.password}
                   onChange={handleChange}
                   className={styles.formField}
+                  error={Boolean(errors.password)}
+                  helperText={errors.password || `Minimum ${PASSWORD_MIN_LENGTH} characters`}
                   InputProps={{
                     endAdornment: (
                       <InputAdornment position="end">
@@ -256,35 +410,128 @@ export default function Register() {
                   size="small"
                   fullWidth
                   required
-                  label="Phone"
+                  label="Confirm password"
+                  type={showPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  className={styles.formField}
+                  error={Boolean(errors.confirmPassword)}
+                  helperText={errors.confirmPassword}
+                />
+                <TextField
+                  size="small"
+                  fullWidth
+                  required
+                  label="Mobile number"
                   name="phone"
                   type="tel"
                   autoComplete="tel"
                   value={form.phone}
                   onChange={handleChange}
                   className={styles.formField}
+                  error={Boolean(errors.phone)}
+                  helperText={errors.phone || "Enter exactly 10 digits"}
+                  inputProps={{
+                    inputMode: "numeric",
+                    pattern: "[0-9]{10}",
+                    maxLength: 10,
+                  }}
                 />
-                <TextField
-                  size="small"
-                  fullWidth
-                  required
-                  label="Country"
-                  name="country"
-                  value={form.country}
-                  onChange={handleChange}
-                  className={styles.formField}
-                />
-                <TextField
-                  size="small"
-                  fullWidth
-                  label="Interests"
-                  name="interests"
-                  value={form.interests}
-                  onChange={handleChange}
-                  placeholder="Optional"
-                  className={styles.formField}
-                />
+                {selectedRole === "tourist" && (
+                  <TextField
+                    size="small"
+                    fullWidth
+                    label="Interests"
+                    name="interests"
+                    value={form.interests}
+                    onChange={handleChange}
+                    placeholder="Optional"
+                    className={styles.formField}
+                  />
+                )}
               </Box>
+
+              {selectedRole === "hotel" && (
+                <>
+                  <Typography className={styles.sectionTitle}>Hotel profile</Typography>
+                  <Box className={`${styles.formGrid} ${styles.registerGuideGrid}`}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="Hotel name"
+                      name="hotelName"
+                      value={form.hotelName}
+                      onChange={handleChange}
+                      className={styles.formField}
+                      error={Boolean(errors.hotelName)}
+                      helperText={errors.hotelName}
+                    />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="Hotel address"
+                      name="hotelAddress"
+                      value={form.hotelAddress}
+                      onChange={handleChange}
+                      multiline
+                      rows={1}
+                      className={styles.formField}
+                      error={Boolean(errors.hotelAddress)}
+                      helperText={errors.hotelAddress}
+                    />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="City/state"
+                      name="cityState"
+                      value={form.cityState}
+                      onChange={handleChange}
+                      className={styles.formField}
+                      error={Boolean(errors.cityState)}
+                      helperText={errors.cityState}
+                    />
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      select
+                      label="Hotel type"
+                      name="hotelType"
+                      value={form.hotelType}
+                      onChange={handleChange}
+                      className={styles.formField}
+                      error={Boolean(errors.hotelType)}
+                      helperText={errors.hotelType}
+                    >
+                      {hotelTypes.map((type) => (
+                        <MenuItem key={type} value={type}>
+                          {type}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      required
+                      label="Amenities"
+                      name="amenities"
+                      value={form.amenities}
+                      onChange={handleChange}
+                      multiline
+                      rows={1}
+                      placeholder="Wi-Fi, AC, Parking, Restaurant"
+                      className={styles.formField}
+                      error={Boolean(errors.amenities)}
+                      helperText={errors.amenities || "Separate multiple amenities with commas."}
+                    />
+                  </Box>
+                </>
+              )}
 
               {selectedRole === "guide" && (
                 <>
@@ -299,8 +546,10 @@ export default function Register() {
                       value={form.bio}
                       onChange={handleChange}
                       multiline
-                      rows={2}
+                      rows={1}
                       className={`${styles.formField} ${styles.guideBio}`}
+                      error={Boolean(errors.bio)}
+                      helperText={errors.bio}
                     />
                     <TextField
                       size="small"
@@ -313,28 +562,58 @@ export default function Register() {
                       type="number"
                       inputProps={{ min: 0 }}
                       className={`${styles.formField} ${styles.guideExperience}`}
+                      error={Boolean(errors.experienceYears)}
+                      helperText={errors.experienceYears}
                     />
                     <TextField
                       size="small"
-                      select
                       fullWidth
                       required
-                      label="Languages"
+                      label="Known languages"
                       name="languages"
                       value={form.languages}
-                      onChange={handleLanguagesChange}
-                      SelectProps={{
-                        multiple: true,
-                        renderValue: (selected) => selected.join(", "),
-                      }}
+                      onChange={handleChange}
+                      placeholder="English, Hindi, Marathi"
                       className={`${styles.formField} ${styles.guideLanguages}`}
+                      error={Boolean(errors.languages)}
+                      helperText={errors.languages || "Separate multiple languages with commas."}
+                    />
+                    <Box
+                      className={`${styles.fileUploadField} ${
+                        errors.identityProof ? styles.fileUploadError : ""
+                      }`}
                     >
-                      {languageOptions.map((lang) => (
-                        <MenuItem key={lang} value={lang}>
-                          {lang}
-                        </MenuItem>
-                      ))}
-                    </TextField>
+                      <Button
+                        component="label"
+                        variant="outlined"
+                        startIcon={<UploadFileRoundedIcon />}
+                        className={styles.fileUploadButton}
+                        aria-required="true"
+                      >
+                        Identity proof *
+                        <input
+                          hidden
+                          type="file"
+                          accept="application/pdf,image/*,.pdf"
+                          onChange={handleIdentityProofChange}
+                          aria-required="true"
+                        />
+                      </Button>
+                      <Box className={styles.fileUploadCopy}>
+                        <Typography className={styles.fileUploadName}>
+                          {form.identityProof?.name || "Upload PDF or image"}
+                        </Typography>
+                        <Typography
+                          className={
+                            errors.identityProof
+                              ? styles.fileUploadHelperError
+                              : styles.fileUploadHelper
+                          }
+                        >
+                          {errors.identityProof || "Required PDF, JPG, PNG, WebP or GIF up to 8 MB."}
+                        </Typography>
+                      </Box>
+                    </Box>
                   </Box>
                 </>
               )}

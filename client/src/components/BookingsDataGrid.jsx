@@ -122,7 +122,7 @@ const BookingCard = ({ booking, isLoading, onAccept, onReject, onChat, onMessage
               💰 AMOUNT
             </Typography>
             <Typography variant="h6" fontWeight={800} sx={{ color: '#1976d2' }}>
-              ${booking.price || 0}
+              ₹{booking.price || 0}
             </Typography>
           </Box>
         </Grid>

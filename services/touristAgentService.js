@@ -172,7 +172,7 @@ const loadGuideCandidates = async () => {
     country: clean(g.userId?.country),
     languages: (Array.isArray(g.languages) ? g.languages : []).map((x) => clean(x?.name || x)).filter(Boolean),
     price: Number(g.price || 0),
-    currency: g.currency || 'INR',
+    currency: 'INR',
     rateType: g.rateType || 'daily',
     rating: Number(g.ratings || 0),
     reviewCount: 0,
@@ -237,7 +237,7 @@ const pickGuides = async ({ destination, language, budget, rateType, minRating, 
     .slice(0, 5);
 };
 
-const formatGuide = (g) => `${g.guideName}${g.country ? ` - ${g.country}` : ''} (${Number(g.rating || 0).toFixed(1)}, ${g.reviewCount || 0} reviews, ${g.currency} ${g.price}/${g.rateType})`;
+const formatGuide = (g) => `${g.guideName}${g.country ? ` - ${g.country}` : ''} (${Number(g.rating || 0).toFixed(1)}, ${g.reviewCount || 0} reviews, ₹${g.price}/${g.rateType})`;
 
 const handleGuide = async ({ command, suggestionOnly = false }) => {
   const destination = parseDestination(command);

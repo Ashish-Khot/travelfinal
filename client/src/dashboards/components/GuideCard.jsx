@@ -18,7 +18,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { motion } from 'framer-motion';
 
-export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFavoriteToggle }) {
+export default function GuideCard({ guide, onBook, onViewReviews, isFavorite, onFavoriteToggle }) {
   const [liked, setLiked] = React.useState(isFavorite);
   const [videoOpen, setVideoOpen] = useState(false);
 
@@ -30,8 +30,16 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
 
   const handleBook = (e) => {
     e.stopPropagation();
+    if (guide.isAvailable === false) return;
     if (onBook) onBook(guide);
   };
+
+  const handleViewReviews = (e) => {
+    e.stopPropagation();
+    if (onViewReviews) onViewReviews(guide);
+  };
+
+  const latestReview = guide.latestReview;
 
   // Format response time
   const formatResponseTime = (hours) => {
@@ -134,7 +142,7 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
                 position: 'absolute',
                 top: 10,
                 right: 10,
-                background: '#10b981',
+                background: guide.isAvailable ? '#10b981' : '#64748b',
                 color: 'white',
                 px: 1.2,
                 py: 0.4,
@@ -148,6 +156,28 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
               }}
             >
               <span>●</span> Available
+            </Box>
+          )}
+          {guide.isAvailable === false && (
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                background: '#64748b',
+                color: 'white',
+                px: 1.2,
+                py: 0.4,
+                borderRadius: 1,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.4,
+                zIndex: 2,
+                fontSize: '0.75rem',
+                fontWeight: 700,
+              }}
+            >
+              <span>●</span> Unavailable
             </Box>
           )}
 
@@ -313,6 +343,14 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
 
           {/* Response Time & People Guided & Last Booking */}
           <Stack direction="row" gap={0.8} spacing={0} sx={{ flexWrap: 'wrap', mt: 0.3 }}>
+            <Tooltip title="Current booking availability">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2 }}>
+                <Typography sx={{ fontSize: '0.7rem', color: guide.isAvailable ? '#10b981' : '#64748b' }}>●</Typography>
+                <Typography sx={{ fontSize: '0.7rem', color: '#6B7280' }}>
+                  {guide.isAvailable ? 'Open for bookings' : 'Not accepting bookings'}
+                </Typography>
+              </Box>
+            </Tooltip>
             <Tooltip title="Average response time">
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.2 }}>
                 <Typography sx={{ fontSize: '0.7rem', color: '#667eea' }}>⏱️</Typography>
@@ -356,6 +394,41 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
             </Typography>
           )}
 
+          {latestReview && (
+            <Box
+              onClick={handleViewReviews}
+              sx={{
+                mt: 0.4,
+                p: 1,
+                borderRadius: 1.5,
+                bgcolor: '#f9fafb',
+                border: '1px solid #edf2f7',
+                cursor: 'pointer',
+                '&:hover': {
+                  borderColor: '#d1d5db',
+                  bgcolor: '#ffffff',
+                },
+              }}
+            >
+              <Typography sx={{ fontSize: '0.72rem', color: '#374151', fontWeight: 700, mb: 0.3 }}>
+                Latest tourist review
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: '0.74rem',
+                  color: '#6B7280',
+                  lineHeight: 1.35,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                "{latestReview.comment || 'No written comment provided.'}"
+              </Typography>
+            </Box>
+          )}
+
           {/* Price Section */}
           <Box sx={{ mt: 'auto', pt: 0.9, borderTop: '1px solid #f3f4f6' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -364,7 +437,7 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
                   Starting from
                 </Typography>
                 <Typography sx={{ fontSize: '1.15rem', fontWeight: 800, color: '#667eea' }}>
-                  {guide.currency === 'INR' ? '₹' : '$'}{guide.price}
+                  ₹{guide.price}
                 </Typography>
               </Box>
               <Typography variant="caption" sx={{ fontSize: '0.7rem', color: '#9CA3AF', fontWeight: 500 }}>
@@ -373,30 +446,60 @@ export default function GuideCard({ guide, onBook, onViewMore, isFavorite, onFav
             </Stack>
           </Box>
 
-          {/* Book Guide Button */}
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleBook}
-            sx={{
-              mt: 1.1,
-              py: 0.95,
-              backgroundColor: '#2d7a4a',
-              color: 'white',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              textTransform: 'none',
-              borderRadius: 1.5,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: '#24663c',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 6px 12px rgba(45, 122, 74, 0.3)',
-              },
-            }}
-          >
-            Book Guide
-          </Button>
+          {/* Primary Actions */}
+          <Stack direction="row" gap={1} sx={{ mt: 1.1 }}>
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleBook}
+              disabled={guide.isAvailable === false}
+              sx={{
+                flex: 1.15,
+                py: 0.95,
+                backgroundColor: guide.isAvailable === false ? '#cbd5e1' : '#2d7a4a',
+                color: 'white',
+                fontSize: '0.86rem',
+                fontWeight: 700,
+                textTransform: 'none',
+                borderRadius: 1.5,
+                transition: 'all 0.3s ease',
+                whiteSpace: 'nowrap',
+                '&:hover': {
+                  backgroundColor: guide.isAvailable === false ? '#cbd5e1' : '#24663c',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 6px 12px rgba(45, 122, 74, 0.3)',
+                },
+                '&.Mui-disabled': {
+                  backgroundColor: '#cbd5e1',
+                  color: '#475569',
+                },
+              }}
+            >
+              {guide.isAvailable === false ? 'Unavailable' : 'Book Guide'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleViewReviews}
+              sx={{
+                flex: 0.9,
+                py: 0.95,
+                color: '#334155',
+                borderColor: '#cbd5e1',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                textTransform: 'none',
+                borderRadius: 1.5,
+                whiteSpace: 'nowrap',
+                '&:hover': {
+                  borderColor: '#2d7a4a',
+                  color: '#24663c',
+                  bgcolor: '#f0fdf4',
+                },
+              }}
+            >
+              View Reviews
+            </Button>
+          </Stack>
         </Box>
       </Card>
 

@@ -3,12 +3,12 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   FormControl,
-  Grid,
   IconButton,
   InputAdornment,
   InputLabel,
@@ -40,11 +40,38 @@ const STATUS_FULL = "Full";
 const STATUS_UNAVAILABLE = "Unavailable";
 
 const cardStyle = {
-  p: { xs: 2, md: 2.5 },
-  borderRadius: 3,
-  border: "1px solid var(--dash-border)",
-  boxShadow: "0 14px 30px rgba(15, 23, 42, 0.08)",
+  p: { xs: 2, md: 2.25 },
+  borderRadius: 2,
+  border: "1px solid #dbe3ee",
+  boxShadow: "0 10px 28px rgba(15, 23, 42, 0.06)",
   bgcolor: "#fff",
+};
+
+const inputSx = {
+  "& .MuiOutlinedInput-root": {
+    borderRadius: 1.5,
+    bgcolor: "#fff",
+  },
+};
+
+const tableHeadCellSx = {
+  py: 1.5,
+  color: "#475569",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: 0.7,
+  textTransform: "uppercase",
+  borderBottom: "1px solid #dbe3ee",
+};
+
+const getStatusChipSx = (status) => {
+  if (status === STATUS_FULL) {
+    return { bgcolor: "#ffedd5", color: "#9a3412", borderColor: "#fed7aa" };
+  }
+  if (status === STATUS_UNAVAILABLE) {
+    return { bgcolor: "#f1f5f9", color: "#475569", borderColor: "#cbd5e1" };
+  }
+  return { bgcolor: "#dcfce7", color: "#166534", borderColor: "#bbf7d0" };
 };
 
 const getPerformanceColor = (occupancy) => {
@@ -207,6 +234,17 @@ export default function RoomManagement({ showHeader = true }) {
   const belowAverage = underperforming
     ? Math.max(0, Math.round(baselineOccupancy - underperforming.occupancy))
     : 0;
+  const totalRoomCount = roomsWithStats.reduce((sum, room) => sum + (Number(room.total) || 0), 0);
+  const availableRoomCount = roomsWithStats.reduce((sum, room) => sum + (Number(room.available) || 0), 0);
+  const bookedRoomCount = Math.max(0, totalRoomCount - availableRoomCount);
+  const averageOccupancy = totalRoomCount ? Math.round((bookedRoomCount / totalRoomCount) * 100) : 0;
+
+  const metricCards = [
+    { label: "Total rooms", value: totalRoomCount, helper: `${roomsWithStats.length} room types`, tone: "#2563eb" },
+    { label: "Available", value: availableRoomCount, helper: "Ready to book", tone: "#0f766e" },
+    { label: "Booked", value: bookedRoomCount, helper: "Currently reserved", tone: "#c2410c" },
+    { label: "Occupancy", value: `${averageOccupancy}%`, helper: "Across inventory", tone: getPerformanceColor(averageOccupancy) },
+  ];
 
   const handleAddRoom = async () => {
     if (!userId || !form.type || !form.price || !form.total) return;
@@ -324,14 +362,57 @@ export default function RoomManagement({ showHeader = true }) {
         </Alert>
       )}
 
-      <Paper sx={{ ...cardStyle, mb: 2.5 }}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" },
+          gap: 2,
+          mb: 2.5,
+        }}
+      >
+        {metricCards.map((item) => (
+          <Paper
+            key={item.label}
+            sx={{
+              ...cardStyle,
+              p: 2,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              minHeight: 106,
+            }}
+          >
+            <Box>
+              <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>
+                {item.label}
+              </Typography>
+              <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 800, color: "#0f172a" }}>
+                {item.value}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "#64748b" }}>
+                {item.helper}
+              </Typography>
+            </Box>
+            <Box
+              sx={{
+                width: 10,
+                height: 58,
+                borderRadius: 999,
+                bgcolor: item.tone,
+                opacity: 0.9,
+              }}
+            />
+          </Paper>
+        ))}
+      </Box>
+
+      <Paper sx={{ ...cardStyle, p: 0, mb: 2.5, overflow: "hidden" }}>
         <Box
           sx={{
-            px: { xs: 2, md: 3 },
+            px: { xs: 2, md: 2.5 },
             py: 2,
             borderBottom: "1px solid #e2e8f0",
-            background: "linear-gradient(135deg, rgba(59,130,246,0.08), rgba(15,23,42,0.02))",
-            borderRadius: 3,
+            background: "linear-gradient(135deg, #f8fbff 0%, #eef4fb 100%)",
           }}
         >
           <Stack
@@ -360,16 +441,16 @@ export default function RoomManagement({ showHeader = true }) {
                 alignSelf: { xs: "flex-start", md: "center" },
                 borderRadius: 2,
                 px: 3,
+                minHeight: 42,
                 textTransform: "none",
                 color: "#fff",
-                fontWeight: 600,
+                fontWeight: 700,
                 letterSpacing: 0.2,
-                backgroundColor: "#0b0b0b",
-                boxShadow: "0 12px 24px rgba(15,23,42,0.25)",
+                background: "linear-gradient(135deg, #2563eb 0%, #0f766e 100%)",
+                boxShadow: "0 12px 24px rgba(37, 99, 235, 0.22)",
                 "& .MuiButton-startIcon": { color: "#fff" },
                 "&:hover": {
-                  backgroundColor: "#000",
-                  boxShadow: "0 16px 32px rgba(15,23,42,0.35)",
+                  boxShadow: "0 16px 32px rgba(15,23,42,0.24)",
                 },
               }}
             >
@@ -377,171 +458,188 @@ export default function RoomManagement({ showHeader = true }) {
             </Button>
           </Stack>
         </Box>
-        <Box sx={{ p: { xs: 2, md: 3 } }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <Box
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                  {t("roomManagement.sections.roomDetails")}
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label={t("roomManagement.fields.roomType")}
-                      fullWidth
-                      size="small"
-                      value={form.type}
-                      onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
-                      placeholder={t("roomManagement.fields.roomTypePlaceholder")}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label={t("roomManagement.fields.pricePerNight")}
-                      type="number"
-                      fullWidth
-                      size="small"
-                      value={form.price}
-                      onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))}
-                      inputProps={{ min: 0 }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment position="start">
-                            {t("roomManagement.currency.prefix")}
-                          </InputAdornment>
-                        ),
-                      }}
-                    />
-                  </Grid>
-                </Grid>
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <Box
-                sx={{
-                  p: 2,
-                  borderRadius: 2,
-                  bgcolor: "#f8fafc",
-                  border: "1px solid #e2e8f0",
-                  height: "100%",
-                }}
-              >
-                <Typography variant="subtitle2" fontWeight={700} mb={1}>
-                  {t("roomManagement.sections.inventoryStatus")}
-                </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label={t("roomManagement.fields.totalRooms")}
-                      type="number"
-                      fullWidth
-                      size="small"
-                      value={form.total}
-                      onChange={(event) => setForm((prev) => ({ ...prev, total: event.target.value }))}
-                      inputProps={{ min: 0 }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      label={t("roomManagement.fields.availableNow")}
-                      type="number"
-                      fullWidth
-                      size="small"
-                      value={form.available}
-                      onChange={(event) => setForm((prev) => ({ ...prev, available: event.target.value }))}
-                      inputProps={{ min: 0 }}
-                      helperText={t("roomManagement.fields.leaveEmpty")}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel>{t("roomManagement.fields.status")}</InputLabel>
-                      <Select
-                        label={t("roomManagement.fields.status")}
-                        value={form.status}
-                        onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
-                      >
-                        {statuses.filter((status) => status !== STATUS_ALL).map((status) => (
-                          <MenuItem key={status} value={status}>
-                            {getStatusLabel(status)}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              </Box>
-            </Grid>
-          </Grid>
-        </Box>
-      </Paper>
-
-      <Paper sx={{ ...cardStyle, mb: 2.5 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-          <FormControl size="small" sx={{ minWidth: 180 }}>
-            <InputLabel>{t("roomManagement.filters.status")}</InputLabel>
+        <Box
+          sx={{
+            p: { xs: 2, md: 2.5 },
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "1.25fr 1fr 1fr 1fr 0.9fr" },
+            gap: 2,
+            alignItems: "start",
+          }}
+        >
+          <TextField
+            label={t("roomManagement.fields.roomType")}
+            fullWidth
+            size="small"
+            value={form.type}
+            onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
+            placeholder={t("roomManagement.fields.roomTypePlaceholder")}
+            sx={inputSx}
+          />
+          <TextField
+            label={t("roomManagement.fields.pricePerNight")}
+            type="number"
+            fullWidth
+            size="small"
+            value={form.price}
+            onChange={(event) => setForm((prev) => ({ ...prev, price: event.target.value }))}
+            inputProps={{ min: 0 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  {t("roomManagement.currency.prefix")}
+                </InputAdornment>
+              ),
+            }}
+            sx={inputSx}
+          />
+          <TextField
+            label={t("roomManagement.fields.totalRooms")}
+            type="number"
+            fullWidth
+            size="small"
+            value={form.total}
+            onChange={(event) => setForm((prev) => ({ ...prev, total: event.target.value }))}
+            inputProps={{ min: 0 }}
+            sx={inputSx}
+          />
+          <TextField
+            label={t("roomManagement.fields.availableNow")}
+            type="number"
+            fullWidth
+            size="small"
+            value={form.available}
+            onChange={(event) => setForm((prev) => ({ ...prev, available: event.target.value }))}
+            inputProps={{ min: 0 }}
+            helperText={t("roomManagement.fields.leaveEmpty")}
+            sx={inputSx}
+          />
+          <FormControl fullWidth size="small" sx={inputSx}>
+            <InputLabel>{t("roomManagement.fields.status")}</InputLabel>
             <Select
-              value={statusFilter}
-              label={t("roomManagement.filters.status")}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              label={t("roomManagement.fields.status")}
+              value={form.status}
+              onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
             >
-              {statuses.map((status) => (
+              {statuses.filter((status) => status !== STATUS_ALL).map((status) => (
                 <MenuItem key={status} value={status}>
                   {getStatusLabel(status)}
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
-          <FormControl size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>{t("roomManagement.filters.roomType")}</InputLabel>
-            <Select
-              value={typeFilter}
-              label={t("roomManagement.filters.roomType")}
-              onChange={(event) => setTypeFilter(event.target.value)}
-            >
-              {roomTypes.map((type) => (
-                <MenuItem key={type} value={type}>
-                  {type === STATUS_ALL ? t("roomManagement.status.all") : type}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Stack>
+        </Box>
       </Paper>
 
       <Paper sx={{ ...cardStyle, mb: 2.5 }}>
-        <Typography variant="h6" fontWeight={700} mb={2}>
-          {t("roomManagement.table.title")}
-        </Typography>
-        <TableContainer>
-          <Table>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          spacing={2}
+          justifyContent="space-between"
+          alignItems={{ xs: "stretch", md: "center" }}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight={800} sx={{ color: "#0f172a" }}>
+              {t("roomManagement.table.title")}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {filteredRooms.length} of {roomsWithStats.length} room types shown
+            </Typography>
+          </Box>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
+            <FormControl size="small" sx={{ ...inputSx, minWidth: { xs: "100%", sm: 180 } }}>
+              <InputLabel>{t("roomManagement.filters.status")}</InputLabel>
+              <Select
+                value={statusFilter}
+                label={t("roomManagement.filters.status")}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                {statuses.map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {getStatusLabel(status)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ ...inputSx, minWidth: { xs: "100%", sm: 220 } }}>
+              <InputLabel>{t("roomManagement.filters.roomType")}</InputLabel>
+              <Select
+                value={typeFilter}
+                label={t("roomManagement.filters.roomType")}
+                onChange={(event) => setTypeFilter(event.target.value)}
+              >
+                {roomTypes.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type === STATUS_ALL ? t("roomManagement.status.all") : type}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+        </Stack>
+      </Paper>
+
+      <Paper sx={{ ...cardStyle, p: 0, mb: 2.5, overflow: "hidden" }}>
+        <Box
+          sx={{
+            px: { xs: 2, md: 2.5 },
+            py: 2,
+            borderBottom: "1px solid #e5edf5",
+            bgcolor: "#fbfdff",
+          }}
+        >
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={1.5}
+            justifyContent="space-between"
+            alignItems={{ xs: "flex-start", sm: "center" }}
+          >
+            <Box>
+              <Typography variant="h6" fontWeight={800} sx={{ color: "#0f172a" }}>
+                {t("roomManagement.table.title")}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Manage room types, pricing, and live availability.
+              </Typography>
+            </Box>
+            <Chip
+              label={`${availableRoomCount} available now`}
+              variant="outlined"
+              sx={{
+                borderRadius: 1.5,
+                fontWeight: 800,
+                bgcolor: "#f0fdfa",
+                color: "#0f766e",
+                borderColor: "#99f6e4",
+              }}
+            />
+          </Stack>
+        </Box>
+        <TableContainer sx={{ overflowX: "auto" }}>
+          <Table size="small" sx={{ minWidth: 900 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f8fafc" }}>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.roomType")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.price")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.status")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.vacantTotal")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.booked")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.occupancy")}</TableCell>
-                <TableCell sx={{ fontWeight: 700 }}>{t("roomManagement.table.columns.actions")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.roomType")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.price")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.status")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.vacantTotal")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.booked")}</TableCell>
+                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.occupancy")}</TableCell>
+                <TableCell align="right" sx={tableHeadCellSx}>{t("roomManagement.table.columns.actions")}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7}>{t("roomManagement.table.loading")}</TableCell>
+                  <TableCell colSpan={7} align="center" sx={{ py: 5, color: "text.secondary" }}>
+                    {t("roomManagement.table.loading")}
+                  </TableCell>
                 </TableRow>
               ) : filteredRooms.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7}>{t("roomManagement.table.noRooms")}</TableCell>
+                  <TableCell colSpan={7} align="center" sx={{ py: 5, color: "text.secondary" }}>
+                    {t("roomManagement.table.noRooms")}
+                  </TableCell>
                 </TableRow>
               ) : (
                 filteredRooms.map((room) => {
@@ -551,16 +649,29 @@ export default function RoomManagement({ showHeader = true }) {
                     ? Math.max(0, (Number(editForm.total) || 0) - (Number(editForm.available) || 0))
                     : Math.max(0, (Number(room.total) || 0) - (Number(room.available) || 0));
                   return (
-                    <TableRow key={room._id || room.number}>
+                    <TableRow
+                      key={room._id || room.number}
+                      sx={{
+                        "&:hover": { bgcolor: "#f8fafc" },
+                        "& td": {
+                          py: 1.5,
+                          borderBottom: "1px solid #eef2f7",
+                          color: "#0f172a",
+                        },
+                      }}
+                    >
                       <TableCell>
                         {isEditing ? (
                           <TextField
                             size="small"
                             value={editForm.type}
                             onChange={(event) => setEditForm((prev) => ({ ...prev, type: event.target.value }))}
+                            sx={{ ...inputSx, minWidth: 150 }}
                           />
                         ) : (
-                          room.type
+                          <Typography variant="body2" fontWeight={800}>
+                            {room.type}
+                          </Typography>
                         )}
                       </TableCell>
                       <TableCell>
@@ -571,14 +682,17 @@ export default function RoomManagement({ showHeader = true }) {
                             value={editForm.price}
                             onChange={(event) => setEditForm((prev) => ({ ...prev, price: event.target.value }))}
                             inputProps={{ min: 0 }}
+                            sx={{ ...inputSx, maxWidth: 130 }}
                           />
                         ) : (
-                          formatCurrency(room.price, i18n.resolvedLanguage)
+                          <Typography variant="body2" fontWeight={700}>
+                            {formatCurrency(room.price, i18n.resolvedLanguage)}
+                          </Typography>
                         )}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
-                          <FormControl size="small" sx={{ minWidth: 140 }}>
+                          <FormControl size="small" sx={{ ...inputSx, minWidth: 145 }}>
                             <Select
                               value={editForm.status}
                               onChange={(event) => setEditForm((prev) => ({ ...prev, status: event.target.value }))}
@@ -591,7 +705,17 @@ export default function RoomManagement({ showHeader = true }) {
                             </Select>
                           </FormControl>
                         ) : (
-                          getStatusLabel(room.status)
+                          <Chip
+                            label={getStatusLabel(room.status)}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              ...getStatusChipSx(room.status),
+                              borderRadius: 1.25,
+                              fontWeight: 800,
+                              minWidth: 92,
+                            }}
+                          />
                         )}
                       </TableCell>
                       <TableCell>
@@ -603,7 +727,7 @@ export default function RoomManagement({ showHeader = true }) {
                               value={editForm.available}
                               onChange={(event) => setEditForm((prev) => ({ ...prev, available: event.target.value }))}
                               inputProps={{ min: 0 }}
-                              sx={{ maxWidth: 90 }}
+                              sx={{ ...inputSx, maxWidth: 90 }}
                             />
                             <Typography variant="body2" color="text.secondary">
                               /
@@ -614,15 +738,17 @@ export default function RoomManagement({ showHeader = true }) {
                               value={editForm.total}
                               onChange={(event) => setEditForm((prev) => ({ ...prev, total: event.target.value }))}
                               inputProps={{ min: 0 }}
-                              sx={{ maxWidth: 90 }}
+                              sx={{ ...inputSx, maxWidth: 90 }}
                             />
                           </Stack>
                         ) : (
-                          `${room.available}/${room.total}`
+                          <Typography variant="body2" fontWeight={700}>
+                            {room.available}/{room.total}
+                          </Typography>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={600}>
+                        <Typography variant="body2" fontWeight={700}>
                           {bookedCount}
                         </Typography>
                       </TableCell>
@@ -630,8 +756,8 @@ export default function RoomManagement({ showHeader = true }) {
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Box
                             sx={{
-                              height: 8,
-                              width: 80,
+                              height: 9,
+                              width: 96,
                               borderRadius: 999,
                               bgcolor: "#e2e8f0",
                               overflow: "hidden",
@@ -650,8 +776,8 @@ export default function RoomManagement({ showHeader = true }) {
                           </Typography>
                         </Stack>
                       </TableCell>
-                      <TableCell>
-                        <Stack direction="row" spacing={1}>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={0.75} justifyContent="flex-end">
                           {isEditing ? (
                             <>
                               <IconButton
@@ -659,6 +785,7 @@ export default function RoomManagement({ showHeader = true }) {
                                 color="primary"
                                 onClick={() => saveEdit(room._id)}
                                 aria-label={t("roomManagement.buttons.save")}
+                                sx={{ bgcolor: "#eff6ff", "&:hover": { bgcolor: "#dbeafe" } }}
                               >
                                 <SaveOutlinedIcon />
                               </IconButton>
@@ -666,6 +793,7 @@ export default function RoomManagement({ showHeader = true }) {
                                 size="small"
                                 onClick={cancelEdit}
                                 aria-label={t("roomManagement.buttons.cancel")}
+                                sx={{ bgcolor: "#f8fafc", "&:hover": { bgcolor: "#e2e8f0" } }}
                               >
                                 <CloseIcon />
                               </IconButton>
@@ -676,6 +804,7 @@ export default function RoomManagement({ showHeader = true }) {
                                 size="small"
                                 onClick={() => startEdit(room)}
                                 aria-label={t("roomManagement.buttons.edit")}
+                                sx={{ color: "#2563eb", bgcolor: "#eff6ff", "&:hover": { bgcolor: "#dbeafe" } }}
                               >
                                 <EditOutlinedIcon />
                               </IconButton>
@@ -684,6 +813,7 @@ export default function RoomManagement({ showHeader = true }) {
                                 color="error"
                                 onClick={() => openDeleteDialog(room)}
                                 aria-label={t("roomManagement.buttons.delete")}
+                                sx={{ bgcolor: "#fef2f2", "&:hover": { bgcolor: "#fee2e2" } }}
                               >
                                 <DeleteOutlineIcon />
                               </IconButton>

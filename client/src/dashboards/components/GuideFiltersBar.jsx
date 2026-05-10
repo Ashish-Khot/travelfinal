@@ -27,13 +27,15 @@ export default function GuideFiltersBar({
   onMinRatingChange,
   maxPrice,
   onMaxPriceChange,
+  availabilityFilter = 'all',
+  onAvailabilityFilterChange = () => {},
   allLanguages,
   onClear,
   guideCount,
 }) {
   const [showFilters, setShowFilters] = React.useState(false);
   const [ratingValue, setRatingValue] = React.useState(minRating || 0);
-  const [priceValue, setPriceValue] = React.useState(maxPrice || 300);
+  const [priceValue, setPriceValue] = React.useState(maxPrice || 10000);
 
   const handleRatingChange = (event, value) => {
     setRatingValue(value);
@@ -49,8 +51,8 @@ export default function GuideFiltersBar({
     search && `Search: "${search}"`,
     language !== 'All Languages' && `Language: ${language}`,
     minRating && `Rating: ${minRating}★+`,
-    maxPrice && `Price: $0-${maxPrice}`,
-  ].filter(Boolean).length;
+    maxPrice && `Price: ₹0-${maxPrice}`,
+  ].filter(Boolean).length + (availabilityFilter !== 'all' ? 1 : 0);
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -119,6 +121,27 @@ export default function GuideFiltersBar({
               {lang}
             </MenuItem>
           ))}
+        </Select>
+
+        <Select
+          value={availabilityFilter}
+          onChange={(e) => onAvailabilityFilterChange(e.target.value)}
+          size="small"
+          sx={{
+            minWidth: 170,
+            borderRadius: 2,
+            backgroundColor: '#f8f9fa',
+            transition: 'all 0.3s ease',
+            '&:hover': { backgroundColor: '#f0f2f5' },
+            '&.Mui-focused': {
+              backgroundColor: '#fff',
+              boxShadow: '0 0 0 3px rgba(79, 138, 139, 0.1)',
+            },
+          }}
+        >
+          <MenuItem value="all">All Availability</MenuItem>
+          <MenuItem value="available">Available Now</MenuItem>
+          <MenuItem value="unavailable">Unavailable</MenuItem>
         </Select>
 
         {/* Toggle Filters Button */}
@@ -234,7 +257,7 @@ export default function GuideFiltersBar({
                   Maximum Price
                 </Typography>
                 <Chip
-                  label={`$0 - $${priceValue}/day`}
+                  label={`₹0 - ₹${priceValue}/day`}
                   size="small"
                   sx={{
                     backgroundColor: '#d1fae5',
@@ -247,15 +270,15 @@ export default function GuideFiltersBar({
                 value={priceValue}
                 onChange={handlePriceChange}
                 min={0}
-                max={500}
-                step={10}
+                max={10000}
+                step={100}
                 marks={[
-                  { value: 0, label: '$0' },
-                  { value: 250, label: '$250' },
-                  { value: 500, label: '$500' },
+                  { value: 0, label: '₹0' },
+                  { value: 5000, label: '₹5k' },
+                  { value: 10000, label: '₹10k' },
                 ]}
                 valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `$${value}`}
+                valueLabelFormat={(value) => `₹${value}`}
                 sx={{
                   '& .MuiSlider-thumb': {
                     backgroundColor: '#4F8A8B',

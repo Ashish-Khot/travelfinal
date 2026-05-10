@@ -14,12 +14,27 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 import io from 'socket.io-client';
 import api from '../../api';
 import PremiumAvatar from '../../components/PremiumAvatar';
+import { buildMediaUrl } from '../../utils/media';
 
 const SOCKET_URL = 'http://localhost:3001';
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
+const emojiList = [
+  '\u{1F600}',
+  '\u{1F60A}',
+  '\u{1F60D}',
+  '\u{1F44D}',
+  '\u{1F64F}',
+  '\u{1F389}',
+  '\u{1F642}',
+  '\u{1F525}',
+  '\u{2705}',
+  '\u{1F4CD}',
+];
 
 const getDateKey = (value) => {
   if (!value) return '';
@@ -61,7 +76,9 @@ export default function GuideChatPanel({ guideId }) {
   const [chatNotice, setChatNotice] = useState('');
   const [isInputDisabled, setIsInputDisabled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [error, setError] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState([]);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -92,16 +109,34 @@ export default function GuideChatPanel({ guideId }) {
     return rows;
   }, [messages]);
   const socketRef = useRef(null);
+  const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  // Fetch tourists who have bookings with this guide
+  // Fetch only tourists who have booked this guide.
   useEffect(() => {
     if (!guideId) return;
     setLoading(true);
-    api.get(`/booking/guide/${guideId}`).then(res => {
-      const touristsList = (res.data.bookings || [])
-        .map(b => b.touristId)
-        .filter((v, i, a) => v && a.findIndex(t => t._id === v._id) === i);
+    setError('');
+    api.get(`/chat/guide/${guideId}/tourists`).then(res => {
+      const touristsList = (res.data.tourists || [])
+        .map((item) => {
+          const tourist = item.tourist || item;
+          const id = tourist?._id || tourist?.id || tourist?.userId;
+          if (!id) return null;
+          return {
+            ...tourist,
+            _id: String(id),
+            name: tourist.name || tourist.fullName || tourist.email || 'Tourist',
+            email: tourist.email || '',
+            avatar: tourist.avatar || '',
+            country: tourist.country || tourist.nationality || '',
+            chatId: item.chatId || tourist.chatId || null,
+            bookingId: item.bookingId || tourist.bookingId || null,
+            unreadCount: item.unreadCount || tourist.unreadCount || 0,
+            lastMessage: item.lastMessage || tourist.lastMessage || null,
+          };
+        })
+        .filter(Boolean);
       setTourists(touristsList);
       setFilteredTourists(touristsList);
       setLoading(false);
@@ -125,6 +160,17 @@ export default function GuideChatPanel({ guideId }) {
       );
     }
   }, [search, tourists]);
+
+  useEffect(() => {
+    if (tourists.length === 0) {
+      setSelectedTourist(null);
+      return;
+    }
+
+    if (!selectedTourist || !tourists.some((tourist) => tourist._id === selectedTourist._id)) {
+      setSelectedTourist(tourists[0]);
+    }
+  }, [tourists, selectedTourist]);
 
   // Fetch or create chat and messages when tourist is selected
   useEffect(() => {
@@ -218,30 +264,40 @@ export default function GuideChatPanel({ guideId }) {
 
   // Prevent double send by debouncing handleSend
   const sendingRef = useRef(false);
+
+  const postMessage = async ({ content, messageType = 'TEXT', attachment }) => {
+    const payload = {
+      content,
+      messageType,
+      attachmentUrl: attachment?.url || '',
+      attachmentName: attachment?.name || '',
+      attachmentType: attachment?.type || '',
+      attachmentSize: attachment?.size || 0,
+    };
+
+    let resp;
+    // If this is a direct chat (bookingId is null), use the direct message endpoint
+    if (selectedTourist && chatId && tourists.find(t => t._id === selectedTourist._id)) {
+      resp = await api.post(`/chat/direct/${selectedTourist._id}/${guideId}/message`, payload);
+      // If chatId was just created, update it
+      if (resp.data.chatId && resp.data.chatId !== chatId) {
+        setChatId(resp.data.chatId);
+      }
+    } else {
+      // fallback for booking-based chat (should not happen in this panel)
+      resp = await api.post(`/chat/${chatId}/message`, payload);
+    }
+
+    return resp;
+  };
+
   const handleSend = async () => {
     if (sendingRef.current) return;
     if (!input.trim() || isInputDisabled || !chatId) return;
     sendingRef.current = true;
     setLoading(true);
     try {
-      let resp;
-      // If this is a direct chat (bookingId is null), use the direct message endpoint
-      if (selectedTourist && chatId && tourists.find(t => t._id === selectedTourist._id)) {
-        resp = await api.post(`/chat/direct/${selectedTourist._id}/${guideId}/message`, {
-          content: input,
-          messageType: 'TEXT'
-        });
-        // If chatId was just created, update it
-        if (resp.data.chatId && resp.data.chatId !== chatId) {
-          setChatId(resp.data.chatId);
-        }
-      } else {
-        // fallback for booking-based chat (should not happen in this panel)
-        resp = await api.post(`/chat/${chatId}/message`, {
-          content: input,
-          messageType: 'TEXT'
-        });
-      }
+      await postMessage({ content: input.trim(), messageType: 'TEXT' });
       // Do not update messages here; rely on socket event only
       setInput('');
     } catch (err) {
@@ -249,6 +305,34 @@ export default function GuideChatPanel({ guideId }) {
     }
     setLoading(false);
     setTimeout(() => { sendingRef.current = false; }, 250); // allow next send after short delay
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || isInputDisabled || !chatId) return;
+
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/chat/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const attachment = res.data;
+      const isImage = attachment.type?.startsWith('image/');
+      await postMessage({
+        content: isImage ? 'Image' : attachment.name || 'Attachment',
+        messageType: isImage ? 'IMAGE' : 'FILE',
+        attachment,
+      });
+    } catch (err) {
+      alert(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setUploadingAttachment(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   const isWithinDeleteWindow = (value) => {
@@ -365,6 +449,16 @@ export default function GuideChatPanel({ guideId }) {
           />
         </Box>
         <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 2 }}>
+          {!loading && filteredTourists.length === 0 && (
+            <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+              <Typography fontWeight={700} color="text.secondary">
+                No tourists found
+              </Typography>
+              <Typography fontSize={13} color="text.disabled" sx={{ mt: 0.5 }}>
+                Tourists will appear here after they book your guide service.
+              </Typography>
+            </Box>
+          )}
           {filteredTourists.map((tourist) => (
             <Box
               key={tourist._id}
@@ -381,6 +475,14 @@ export default function GuideChatPanel({ guideId }) {
                 '&:hover': { bgcolor: '#f0f7f4' }
               }}
               onClick={() => setSelectedTourist(tourist)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedTourist(tourist);
+                }
+              }}
             >
               <PremiumAvatar
                 src={tourist.avatar}
@@ -510,6 +612,7 @@ export default function GuideChatPanel({ guideId }) {
                 const senderAvatar = msg?.senderAvatar || msg?.senderId?.avatar || '';
                 const incomingAvatar = senderAvatar || selectedTourist?.avatar;
                 const outgoingAvatar = guideAvatar || senderAvatar;
+                const attachmentUrl = msg?.attachmentUrl ? buildMediaUrl(msg.attachmentUrl) : '';
                 return (
                   <Box key={row.id || idx} sx={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', mb: 1 }}>
                     {!isMe && (
@@ -556,16 +659,55 @@ export default function GuideChatPanel({ guideId }) {
                           }}
                         />
                       )}
-                      <Typography
-                        fontSize={15}
-                        sx={{
-                          wordBreak: 'break-word',
-                          fontStyle: msg.isDeleted ? 'italic' : 'normal',
-                          color: msg.isDeleted ? '#64748b' : '#222',
-                        }}
-                      >
-                        {msg.isDeleted ? 'This message was deleted' : msg.content}
-                      </Typography>
+                      {msg.isDeleted ? (
+                        <Typography
+                          fontSize={15}
+                          sx={{ wordBreak: 'break-word', fontStyle: 'italic', color: '#64748b' }}
+                        >
+                          This message was deleted
+                        </Typography>
+                      ) : msg.messageType === 'IMAGE' && attachmentUrl ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Box
+                            component="img"
+                            src={attachmentUrl}
+                            alt={msg.attachmentName || 'Image'}
+                            sx={{
+                              width: '100%',
+                              maxWidth: 240,
+                              maxHeight: 220,
+                              objectFit: 'cover',
+                              borderRadius: 2,
+                              display: 'block',
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ color: '#4b5563' }}>
+                            {msg.attachmentName || 'Image'}
+                          </Typography>
+                        </Box>
+                      ) : msg.messageType === 'FILE' && attachmentUrl ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.6 }}>
+                          <Typography fontSize={15} fontWeight={700} sx={{ wordBreak: 'break-word' }}>
+                            {msg.attachmentName || 'File'}
+                          </Typography>
+                          <Typography
+                            component="a"
+                            href={attachmentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
+                            fontSize={13}
+                            fontWeight={700}
+                            sx={{ color: '#1769aa', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } }}
+                          >
+                            Download file
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Typography fontSize={15} sx={{ wordBreak: 'break-word', color: '#222' }}>
+                          {msg.content}
+                        </Typography>
+                      )}
                       <Typography fontSize={11} sx={{ mt: 0.5, textAlign: 'right', opacity: 0.7 }}>
                         {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString() : ''}
                       </Typography>
@@ -588,43 +730,89 @@ export default function GuideChatPanel({ guideId }) {
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
             bgcolor: '#fafafa',
             p: 2,
             borderTop: '1.5px solid #e0e0e0',
             boxShadow: '0 1px 4px 0 rgba(76,175,80,0.04)',
             mt: 'auto',
+            flexDirection: 'column',
+            gap: 1,
           }}
         >
-          <TextField
-            fullWidth
-            placeholder="Type your message..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            variant="outlined"
-            size="medium"
-            sx={{ bgcolor: '#fff', borderRadius: 3, mr: 2, fontSize: 16 }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+          {emojiOpen && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, alignSelf: 'flex-start' }}>
+              {emojiList.map((emoji) => (
+                <IconButton
+                  key={emoji}
+                  size="small"
+                  onClick={() => setInput((prev) => `${prev}${emoji}`)}
+                  disabled={isInputDisabled || loading || !!error || !chatId}
+                >
+                  <span style={{ fontSize: 20 }}>{emoji}</span>
+                </IconButton>
+              ))}
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', minWidth: 0 }}>
+            <Tooltip title="Add emoji" arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => setEmojiOpen((prev) => !prev)}
+                  disabled={isInputDisabled || loading || !!error || !chatId}
+                >
+                  <EmojiEmotionsOutlinedIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title={uploadingAttachment ? 'Uploading file...' : 'Upload file'} arrow>
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isInputDisabled || loading || uploadingAttachment || !!error || !chatId}
+                >
+                  <AttachFileIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+              style={{ display: 'none' }}
+              onChange={handleFileUpload}
+            />
+            <TextField
+              fullWidth
+              placeholder={selectedTourist ? 'Type your message...' : 'Select a tourist to start chatting'}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              variant="outlined"
+              size="medium"
+              sx={{ bgcolor: '#fff', borderRadius: 3, fontSize: 16, minWidth: 0 }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              disabled={isInputDisabled || loading || uploadingAttachment || !!error || !chatId}
+              inputProps={{ style: { fontSize: 16, padding: '12px' } }}
+            />
+            <Button
+              variant="contained"
+              color="success"
+              sx={{ minWidth: 48, minHeight: 48, borderRadius: 2, fontWeight: 700, fontSize: 16, boxShadow: 'none', textTransform: 'none', flexShrink: 0 }}
+              onClick={e => {
                 e.preventDefault();
                 handleSend();
-              }
-            }}
-            disabled={isInputDisabled || loading || !!error || !chatId}
-            inputProps={{ style: { fontSize: 16, padding: '12px' } }}
-          />
-          <Button
-            variant="contained"
-            color="success"
-            sx={{ minWidth: 48, minHeight: 48, borderRadius: 2, fontWeight: 700, fontSize: 16, boxShadow: 'none', textTransform: 'none' }}
-            onClick={e => {
-              e.preventDefault();
-              handleSend();
-            }}
-            disabled={!input.trim() || isInputDisabled || loading || !!error || !chatId}
-          >
-            Send
-          </Button>
+              }}
+              disabled={!input.trim() || isInputDisabled || loading || uploadingAttachment || !!error || !chatId}
+            >
+              Send
+            </Button>
+          </Box>
         </Box>
       </Box>
       <Dialog open={bulkDeleteOpen} onClose={closeBulkDeleteDialog}>

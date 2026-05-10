@@ -5,7 +5,6 @@ const Booking = require('../models/Booking');
 const Guide = require('../models/Guide');
 const User = require('../models/User');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
-const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
@@ -36,10 +35,10 @@ router.patch('/status/:id', verifyToken, authorizeRoles('guide'), async (req, re
           setupSocket.ioInstance.to(`tourist_${booking.touristId.toString()}`).emit('bookingUpdate', { touristId: booking.touristId.toString(), booking });
         }
       }
-    } catch (e) { console.log('[DEBUG] Socket emit error (status update):', e); }
+    } catch (e) { console.warn('Socket booking status update failed:', e.message); }
     res.json({ message: 'Booking status updated', booking });
   } catch (err) {
-    console.log('[DEBUG] Error updating booking status:', err);
+    console.error('Error updating booking status:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -91,18 +90,6 @@ router.get('/tourist/:userId', async (req, res) => {
   }
 });
 
-// Helper: send email notification
-async function sendEmail(to, subject, text) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    }
-  });
-  await transporter.sendMail({ from: process.env.EMAIL_USER, to, subject, text });
-}
-
 // Tourist creates a booking
 // Socket emit helper
 const getIO = () => {
@@ -114,13 +101,31 @@ router.post('/book', verifyToken, authorizeRoles('tourist'), async (req, res) =>
   try {
     const { guideId, startDateTime, endDateTime, destination, price } = req.body;
     const touristId = req.user.userId;
-    console.log('[DEBUG] Booking creation:', { guideId, touristId, startDateTime, endDateTime, destination, price });
+
+    const start = new Date(startDateTime);
+    const end = new Date(endDateTime);
+
+    if (!guideId || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return res.status(400).json({ message: 'Valid guide, start time, and end time are required.' });
+    }
+
+    const existingBooking = await Booking.findOne({
+      guideId,
+      status: { $in: ['pending', 'confirmed'] },
+      startDateTime: { $lt: end },
+      endDateTime: { $gt: start }
+    });
+
+    if (existingBooking) {
+      return res.status(409).json({ message: 'This guide is already booked for the selected date and time.' });
+    }
+
     // Create booking
     const booking = new Booking({
       touristId,
       guideId,
-      startDateTime,
-      endDateTime,
+      startDateTime: start,
+      endDateTime: end,
       destination,
       price,
       status: 'pending',
@@ -128,22 +133,20 @@ router.post('/book', verifyToken, authorizeRoles('tourist'), async (req, res) =>
     });
     await booking.save();
     // Add booking to guide profile
-    const guideUpdate = await Guide.findOneAndUpdate(
+    await Guide.findOneAndUpdate(
       { userId: guideId },
       { $push: { bookings: booking._id } }
     );
-    console.log('[DEBUG] Guide update result:', guideUpdate);
     // Emit real-time update to guide
     try {
       const setupSocket = require('../socket/chat');
       if (setupSocket && setupSocket.ioInstance && setupSocket.ioInstance.emitBookingUpdate) {
         setupSocket.ioInstance.emitBookingUpdate(guideId, booking);
-        console.log('[DEBUG] Emitted bookingUpdate for guide:', guideId);
       }
-    } catch (e) { console.log('[DEBUG] Socket emit error:', e); }
+    } catch (e) { console.warn('Socket booking update failed:', e.message); }
     res.status(201).json({ message: 'Booking created.', booking });
   } catch (err) {
-    console.log('[DEBUG] Booking creation error:', err);
+    console.error('Booking creation error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -151,15 +154,13 @@ router.post('/book', verifyToken, authorizeRoles('tourist'), async (req, res) =>
 // Get all bookings for a specific guide
 router.get('/guide/:userId', async (req, res) => {
   try {
-    console.log('[DEBUG] Fetching bookings for guide:', req.params.userId);
     // Show all bookings for the guide dashboard (pending, confirmed, cancelled, completed)
     const bookings = await Booking.find({ guideId: req.params.userId })
       .populate('touristId', 'name email')
       .populate('guideId', 'name email');
-    console.log('[DEBUG] Bookings found:', bookings);
     res.json({ bookings });
   } catch (err) {
-    console.log('[DEBUG] Error fetching guide bookings:', err);
+    console.error('Error fetching guide bookings:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -168,24 +169,16 @@ router.get('/guide/:userId', async (req, res) => {
 router.post('/complete/:id', verifyToken, authorizeRoles('guide'), async (req, res) => {
   try {
     const { message } = req.body;
-    console.log('[BOOKING/COMPLETE] User:', { userId: req.user.userId, role: req.user.role, bookingId: req.params.id });
     
     const booking = await Booking.findById(req.params.id).populate('touristId').populate('guideId');
     
     if (!booking) {
-      console.log('[BOOKING/COMPLETE] Booking not found:', req.params.id);
       return res.status(404).json({ message: 'Booking not found' });
     }
-    
-    console.log('[BOOKING/COMPLETE] Booking found:', {
-      guideId: booking.guideId?._id?.toString(),
-      userId: req.user.userId
-    });
     
     // Verify this is the guide's booking
     const bookingGuideId = booking.guideId?._id?.toString() || booking.guideId?.toString();
     if (bookingGuideId !== req.user.userId) {
-      console.log('[BOOKING/COMPLETE] Authorization failed:', { bookingGuideId, userId: req.user.userId });
       return res.status(403).json({ message: 'Forbidden - You are not the guide for this booking' });
     }
     
@@ -195,8 +188,6 @@ router.post('/complete/:id', verifyToken, authorizeRoles('guide'), async (req, r
     booking.reviewRequestMessage = message || 'Thank you for completing this tour. Please leave a review!';
     booking.reviewRequestStatus = '';
     await booking.save();
-    
-    console.log('[BOOKING/COMPLETE] Booking marked as completed');
     
     // Also send a notification using the notifications API
     try {
@@ -220,14 +211,13 @@ router.post('/complete/:id', verifyToken, authorizeRoles('guide'), async (req, r
       };
       
       notifications.push(notification);
-      console.log('[BOOKING] Created and sent notification:', notification);
     } catch (e) {
-      console.log('[BOOKING] Could not create notification via module:', e.message);
+      console.warn('Could not create booking completion notification:', e.message);
     }
     
     res.json({ message: 'Tour marked as completed, review request sent', booking });
   } catch (err) {
-    console.log('[DEBUG] Error completing tour:', err);
+    console.error('Error completing tour:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });

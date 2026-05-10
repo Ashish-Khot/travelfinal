@@ -337,7 +337,7 @@ function TouristDashboard() {
             </Box>
           )}
           {selectedTab === 'Explore Destinations' && <ExploreDestinations />}
-          {selectedTab === 'Explore Guides' && <ExploreGuides />}
+          {selectedTab === 'Explore Guides' && <ExploreGuides refreshTrigger={reviewsRefreshTrigger} />}
           {selectedTab === 'Virtual Guide' && <VirtualGuide />}
           {selectedTab === 'Itinerary Planner' && <ItineraryPlannerModule />}
           {selectedTab === 'Hotel Booking' && (
@@ -355,7 +355,12 @@ function TouristDashboard() {
               onChatHandled={() => setChatTarget(null)}
             />
           )}
-          {selectedTab === 'Reviews' && <ReviewsPanel refreshTrigger={reviewsRefreshTrigger} />}
+          {selectedTab === 'Reviews' && (
+            <ReviewsPanel
+              refreshTrigger={reviewsRefreshTrigger}
+              onReviewSubmitted={handleReviewsRefresh}
+            />
+          )}
           {selectedTab === 'Travelogue' && (
             <Box>
               {/* Travelogue Hero */}

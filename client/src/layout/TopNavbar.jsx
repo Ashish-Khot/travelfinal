@@ -15,7 +15,6 @@ import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import MenuIcon from "@mui/icons-material/Menu";
 import { useTranslation } from "react-i18next";
-import LanguageSwitcher from "../components/LanguageSwitcher";
 
 export default function TopNavbar({
   onMenuClick,
@@ -61,22 +60,14 @@ export default function TopNavbar({
     <Box
       sx={{
         bgcolor: "#fff",
-        borderRadius: { xs: 2.5, md: 3 },
-        px: { xs: 2, md: 3 },
-        py: { xs: 1.5, md: 2 },
-        boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
-        border: "1px solid rgba(148, 163, 184, 0.35)",
+        borderRadius: 2.5,
+        px: { xs: 1.5, md: 2.25 },
+        py: { xs: 1.25, md: 1.5 },
+        boxShadow: "0 14px 36px rgba(15, 23, 42, 0.07)",
+        border: "1px solid var(--dash-border)",
         position: "relative",
         overflow: "hidden",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          height: 4,
-          background: "linear-gradient(90deg, #0ea5e9 0%, #6366f1 50%, #22c55e 100%)",
-        },
+        backdropFilter: "blur(18px)",
       }}
     >
       <Stack
@@ -85,25 +76,24 @@ export default function TopNavbar({
         justifyContent="space-between"
         spacing={2}
       >
-        <Stack direction="row" alignItems="flex-start" spacing={1.5}>
+        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ minWidth: 0 }}>
           <IconButton
             onClick={onMenuClick}
-            sx={{ display: { xs: "inline-flex", md: "none" }, mt: 0.5 }}
+            sx={{
+              display: { xs: "inline-flex", md: "none" },
+              bgcolor: "#f1f5f9",
+              borderRadius: 1.5,
+              "&:hover": { bgcolor: "#e2e8f0" },
+            }}
             size="small"
           >
             <MenuIcon />
           </IconButton>
-          <Box>
-            <Typography
-              variant="overline"
-              sx={{ color: "#64748b", letterSpacing: 1.8, fontWeight: 700 }}
-            >
-              {t("topNavbar.commandCenter")}
-            </Typography>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: "#0f172a" }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" sx={{ fontWeight: 900, color: "#0f172a", lineHeight: 1.15 }} noWrap>
               {t("topNavbar.welcomeBack", { name: displayName })}
             </Typography>
-            <Typography variant="body2" sx={{ color: "#64748b" }}>
+            <Typography variant="body2" sx={{ color: "#64748b", display: { xs: "none", sm: "block" } }}>
               {t("topNavbar.subtitle")}
             </Typography>
           </Box>
@@ -111,16 +101,18 @@ export default function TopNavbar({
         <Stack
           direction="row"
           alignItems="center"
-          spacing={1.25}
+          spacing={1}
           flexWrap="wrap"
           justifyContent={{ xs: "flex-start", md: "flex-end" }}
         >
-          <LanguageSwitcher compact />
           <IconButton
             sx={{
-              bgcolor: "rgba(148, 163, 184, 0.16)",
-              borderRadius: 2,
-              "&:hover": { bgcolor: "rgba(148, 163, 184, 0.3)" },
+              bgcolor: "#f8fafc",
+              border: "1px solid var(--dash-border)",
+              borderRadius: 1.5,
+              width: 42,
+              height: 42,
+              "&:hover": { bgcolor: "#eef2f7" },
             }}
           >
             <Badge variant="dot" color="error">
@@ -132,21 +124,37 @@ export default function TopNavbar({
             endIcon={<KeyboardArrowDownIcon />}
             sx={{
               textTransform: "none",
-              fontWeight: 600,
+              fontWeight: 800,
               color: "#0f172a",
-              bgcolor: "rgba(255, 255, 255, 0.9)",
-              borderRadius: 2,
-              px: 1.5,
-              border: "1px solid rgba(148, 163, 184, 0.35)",
-              boxShadow: "0 10px 25px rgba(15, 23, 42, 0.08)",
+              bgcolor: "#fff",
+              borderRadius: 1.5,
+              px: 1.25,
+              height: 44,
+              border: "1px solid var(--dash-border)",
+              boxShadow: "none",
+              "&:hover": { bgcolor: "#f8fafc", boxShadow: "none" },
             }}
           >
-            <Avatar sx={{ width: 28, height: 28, mr: 1, bgcolor: "var(--dash-accent)" }}>
+            <Avatar sx={{ width: 30, height: 30, mr: 1, bgcolor: "var(--dash-accent)", fontWeight: 900 }}>
               {initial}
             </Avatar>
-            {displayName}
+            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+              {displayName}
+            </Box>
           </Button>
-          <Menu anchorEl={profileAnchor} open={Boolean(profileAnchor)} onClose={handleProfileClose}>
+          <Menu
+            anchorEl={profileAnchor}
+            open={Boolean(profileAnchor)}
+            onClose={handleProfileClose}
+            PaperProps={{
+              sx: {
+                mt: 1,
+                borderRadius: 2,
+                border: "1px solid var(--dash-border)",
+                boxShadow: "0 18px 42px rgba(15, 23, 42, 0.14)",
+              },
+            }}
+          >
             <Box sx={{ px: 2.5, py: 2, maxWidth: 260 }}>
               <Stack direction="row" spacing={1.5} alignItems="center">
                 <Avatar sx={{ width: 44, height: 44, bgcolor: "var(--dash-accent)" }}>

@@ -18,7 +18,7 @@ export default function TourCard({ image, title, price, duration, status, onEdit
           <Chip label={status} color={status === 'Active' ? 'success' : 'warning'} size="small" />
         </Box>
         <Typography variant="subtitle1" color="primary" fontWeight={600}>
-          ${price}
+          ₹{price}
         </Typography>
         <Button variant="outlined" size="small" sx={{ mt: 2 }} onClick={onEdit} fullWidth>Edit</Button>
       </CardContent>

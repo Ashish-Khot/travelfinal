@@ -1,36 +1,203 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const fs = require("fs");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const path = require("path");
 const User = require("../models/User");
 const Guide = require("../models/Guide");
 const { verifyToken } = require("../middleware/auth");
 
 const router = express.Router();
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const PHONE_REGEX = /^\d{10}$/;
+const PASSWORD_MIN_LENGTH = 6;
+const IDENTITY_PROOF_MAX_SIZE = 8 * 1024 * 1024;
+const IDENTITY_PROOF_UPLOAD_DIR = path.join(__dirname, "../uploads/identity-proofs");
+const IDENTITY_PROOF_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif"
+]);
+const IDENTITY_PROOF_EXTENSIONS = new Set([".pdf", ".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+
+fs.mkdirSync(IDENTITY_PROOF_UPLOAD_DIR, { recursive: true });
+
+function normalizePhoneNumber(phone) {
+  return String(phone || "").replace(/\D/g, "");
+}
+
+function normalizeAmenities(amenities) {
+  if (Array.isArray(amenities)) {
+    return amenities
+      .map((amenity) => String(amenity || "").trim())
+      .filter(Boolean);
+  }
+
+  return String(amenities || "")
+    .split(/[,\n]/)
+    .map((amenity) => amenity.trim())
+    .filter(Boolean);
+}
+
+function removeUploadedFile(file) {
+  if (!file?.path) return;
+  fs.promises.unlink(file.path).catch(() => {});
+}
+
+function normalizeGuideLanguages(languages) {
+  let rawLanguages = [];
+
+  if (Array.isArray(languages)) {
+    rawLanguages = languages;
+  } else if (typeof languages === "string") {
+    rawLanguages = languages
+      .split(/[,\n]/)
+      .map((language) => language.trim())
+      .filter(Boolean);
+  }
+
+  return rawLanguages
+    .map((language) => {
+      if (typeof language === "string") {
+        return { name: language.trim(), level: "Fluent" };
+      }
+      if (language && typeof language === "object" && language.name) {
+        const level = ["Fluent", "Intermediate", "Basic"].includes(language.level)
+          ? language.level
+          : "Fluent";
+        return { name: String(language.name).trim(), level };
+      }
+      return null;
+    })
+    .filter((language) => language?.name);
+}
+
+const identityProofUpload = multer({
+  storage: multer.diskStorage({
+    destination(req, file, cb) {
+      cb(null, IDENTITY_PROOF_UPLOAD_DIR);
+    },
+    filename(req, file, cb) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      cb(null, `identity_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`);
+    }
+  }),
+  limits: { fileSize: IDENTITY_PROOF_MAX_SIZE },
+  fileFilter(req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (IDENTITY_PROOF_MIME_TYPES.has(file.mimetype) || IDENTITY_PROOF_EXTENSIONS.has(ext)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Identity proof must be a PDF or image file"));
+  }
+});
+
+function handleIdentityProofUpload(req, res, next) {
+  identityProofUpload.single("identityProof")(req, res, (err) => {
+    if (!err) {
+      next();
+      return;
+    }
+
+    if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({ message: "Identity proof must be 8 MB or smaller" });
+    }
+
+    return res.status(400).json({ message: err.message || "Invalid identity proof upload" });
+  });
+}
 
 // =================== REGISTER ===================
-router.post("/register", async (req, res) => {
+router.post("/register", handleIdentityProofUpload, async (req, res) => {
   try {
     const {
       name,
       email,
       password,
       phone,
-      country,
       interests,
-      role
+      role,
+      hotelName,
+      hotelAddress,
+      cityState,
+      hotelType,
+      amenities
     } = req.body;
     const normalizedEmail = (email || "").toLowerCase().trim();
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const normalizedRole = role || "tourist";
+    const normalizedAmenities = normalizeAmenities(amenities);
+    const fail = (status, message, extra = {}) => {
+      removeUploadedFile(req.file);
+      return res.status(status).json({ message, ...extra });
+    };
 
     // Validate
-    if (!name || !email || !password || !phone || !country) {
-      return res.status(400).json({ message: "All required fields must be filled" });
+    if (!name || !email || !password || !phone) {
+      return fail(400, "All required fields must be filled");
+    }
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return fail(400, "Enter a valid email address");
+    }
+    if (!PHONE_REGEX.test(normalizedPhone)) {
+      return fail(400, "Enter a 10-digit mobile number");
+    }
+    if (String(password).length < PASSWORD_MIN_LENGTH) {
+      return fail(400, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`);
+    }
+
+    const normalizedLanguages = normalizeGuideLanguages(req.body.languages);
+    const experienceYearsNumber = Number(req.body.experienceYears);
+    if (normalizedRole === "guide") {
+      if (!String(req.body.bio || "").trim()) {
+        return fail(400, "Bio is required for guide accounts");
+      }
+      if (
+        String(req.body.experienceYears ?? "").trim() === "" ||
+        !Number.isFinite(experienceYearsNumber) ||
+        experienceYearsNumber < 0
+      ) {
+        return fail(400, "Enter valid years of experience");
+      }
+      if (!normalizedLanguages.length) {
+        return fail(400, "Enter at least one language");
+      }
+      if (!req.file) {
+        return fail(400, "Identity proof is required for guide registration");
+      }
+    }
+
+    if (normalizedRole === "hotel") {
+      if (!String(hotelName || "").trim()) {
+        return fail(400, "Hotel name is required");
+      }
+      if (!String(hotelAddress || "").trim()) {
+        return fail(400, "Hotel address is required");
+      }
+      if (!String(cityState || "").trim()) {
+        return fail(400, "City/state is required");
+      }
+      if (!String(hotelType || "").trim()) {
+        return fail(400, "Hotel type is required");
+      }
+      if (!normalizedAmenities.length) {
+        return fail(400, "Enter at least one amenity");
+      }
     }
 
     // Check if user exists
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) {
-      return res.status(400).json({ message: "Email already exists" });
+      return fail(400, "Email already exists");
     }
+
+    const sanitizedInterests = normalizedRole === "tourist"
+      ? String(interests || "").trim()
+      : "";
 
 
 
@@ -39,57 +206,47 @@ router.post("/register", async (req, res) => {
       name,
       email: normalizedEmail,
       password,
-      phone,
-      country,
-      interests,
-      role
+      phone: normalizedPhone,
+      country: "",
+      interests: sanitizedInterests,
+      role: normalizedRole
     };
-    if (role === 'hotel') {
-      userData.address = '';
-      userData.amenities = [];
+    if (normalizedRole === 'hotel') {
+      userData.address = String(hotelAddress || '').trim();
+      userData.amenities = normalizedAmenities;
       userData.hotelImages = [];
     }
     const user = await User.create(userData);
 
     // If registering as a hotel, create Hotel profile
-    if (role === 'hotel') {
+    if (normalizedRole === 'hotel') {
       const Hotel = require('../models/Hotel');
       await Hotel.create({
         user: user._id,
-        name: user.name,
+        ownerName: user.name,
+        name: String(hotelName || '').trim(),
         email: user.email,
         phone: user.phone,
-        address: '',
-        amenities: [],
+        country: '',
+        address: String(hotelAddress || '').trim(),
+        cityState: String(cityState || '').trim(),
+        hotelType: String(hotelType || '').trim(),
+        businessLicenseProof: '',
+        amenities: normalizedAmenities,
         images: []
       });
     }
 
     // If registering as a guide, also create Guide profile
-    if (role === 'guide') {
-      const rawLanguages = Array.isArray(req.body.languages) ? req.body.languages : [];
-      const normalizedLanguages = rawLanguages
-        .map((language) => {
-          if (typeof language === 'string') {
-            const trimmed = language.trim();
-            return trimmed ? { name: trimmed, level: 'Fluent' } : null;
-          }
-          if (language && typeof language === 'object' && language.name) {
-            const level = ['Fluent', 'Intermediate', 'Basic'].includes(language.level)
-              ? language.level
-              : 'Fluent';
-            return { name: String(language.name).trim(), level };
-          }
-          return null;
-        })
-        .filter(Boolean);
-
+    if (normalizedRole === 'guide') {
       await Guide.create({
         userId: user._id,
-        bio: req.body.bio || '',
-        experienceYears: Number(req.body.experienceYears) || 0,
+        bio: String(req.body.bio || '').trim(),
+        experienceYears: experienceYearsNumber,
         languages: normalizedLanguages,
+        identityProof: `/uploads/identity-proofs/${req.file.filename}`,
         phone: user.phone,
+        currency: 'INR',
         approved: false
       });
     }
@@ -102,12 +259,12 @@ router.post("/register", async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        country: user.country,
         interests: user.interests
       }
     });
 
   } catch (err) {
+    removeUploadedFile(req.file);
     console.error("REGISTER ERROR:", err);
     if (err?.name === "ValidationError" || err?.name === "CastError") {
       return res.status(400).json({ message: "Invalid registration data", error: err.message });
@@ -125,11 +282,27 @@ router.post("/register", async (req, res) => {
 // Login Route
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const normalizedEmail = (email || '').toLowerCase();
+    const { email, password, role } = req.body;
+    const normalizedEmail = (email || '').toLowerCase().trim();
+    if (!normalizedEmail || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      return res.status(400).json({ message: 'Enter a valid email address' });
+    }
+    if (String(password).length < PASSWORD_MIN_LENGTH) {
+      return res.status(400).json({
+        message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`
+      });
+    }
     const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
+    }
+    if (role && user.role !== role) {
+      return res.status(403).json({
+        message: `This account belongs to ${user.role}. Select ${user.role} to continue.`
+      });
     }
     if (!user.password) {
       return res.status(400).json({ message: 'Password login not available for this user' });
@@ -159,6 +332,14 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone,
+        country: user.country || '',
+        interests: user.interests || '',
+        address: user.address || '',
+        amenities: user.amenities || [],
+        hotelImages: user.hotelImages || [],
+        nationality: user.nationality || '',
+        language: user.language || '',
         avatar: user.avatar,
         isVerified: user.isVerified
       },

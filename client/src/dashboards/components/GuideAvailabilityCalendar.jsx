@@ -3,20 +3,39 @@ import { Box, Typography, Tooltip } from '@mui/material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
+import { PickersDay } from '@mui/x-date-pickers/PickersDay';
 import dayjs from 'dayjs';
 
-const BOOKED_COLOR = '#ffb3b3';
-const PARTIAL_COLOR = '#ffe299';
-const AVAILABLE_COLOR = '#b3ffb3';
+const BOOKED_STYLES = {
+  bgcolor: '#fee2e2',
+  color: '#991b1b',
+  borderColor: '#ef4444',
+};
+const PARTIAL_STYLES = {
+  bgcolor: '#fef3c7',
+  color: '#92400e',
+  borderColor: '#f59e0b',
+};
+const AVAILABLE_STYLES = {
+  bgcolor: '#ecfdf5',
+  color: '#065f46',
+  borderColor: '#a7f3d0',
+};
+
+const ACTIVE_BOOKING_STATUSES = new Set(['pending', 'confirmed', 'accepted']);
+
+const isBusyBooking = (booking) => ACTIVE_BOOKING_STATUSES.has(booking?.status || 'pending');
 
 // bookings: array of { startDateTime, endDateTime }
-export default function GuideAvailabilityCalendar({ guideId, onSelectDate, selectedDate, bookings = [] }) {
+export default function GuideAvailabilityCalendar({ rateType = 'hourly', onSelectDate, selectedDate, bookings = [] }) {
+  const busyBookings = bookings.filter(isBusyBooking);
+
   // Helper: get day status (full, partial, free) and available hours
   function getDayStatus(date) {
     const dayStart = dayjs(date).startOf('day');
     const dayEnd = dayjs(date).endOf('day');
     let busyHours = Array(24).fill(false);
-    bookings.forEach(b => {
+    busyBookings.forEach(b => {
       const bStart = dayjs(b.startDateTime);
       const bEnd = dayjs(b.endDateTime);
       // If booking overlaps this day
@@ -27,62 +46,107 @@ export default function GuideAvailabilityCalendar({ guideId, onSelectDate, selec
     });
     const busyCount = busyHours.filter(Boolean).length;
     let status = 'free';
-    if (busyCount === 24) status = 'full';
+    if (rateType !== 'hourly' && busyCount > 0) status = 'full';
+    else if (busyCount === 24) status = 'full';
     else if (busyCount > 0) status = 'partial';
     const availableHours = busyHours.map((b, i) => !b ? i : null).filter(v => v !== null);
     return { status, availableHours };
   }
 
-  // Custom day renderer
-  function renderDay(day, _value, DayComponentProps) {
-    const { status, availableHours } = getDayStatus(day);
-    let color = AVAILABLE_COLOR;
-    if (status === 'full') color = BOOKED_COLOR;
-    else if (status === 'partial') color = PARTIAL_COLOR;
-    const showTooltip = status === 'partial';
-    const tooltipTitle = showTooltip
-      ? `Available hours: ${availableHours.length > 0 ? availableHours.map(h => `${h}:00`).join(', ') : 'None'}`
-      : '';
-    const box = (
-      <Box
-        {...DayComponentProps}
-        sx={{
-          bgcolor: color,
-          borderRadius: '50%',
-          width: 36,
-          height: 36,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: status === 'full' ? 'not-allowed' : 'pointer',
-          opacity: status === 'full' ? 0.5 : 1,
-        }}
-        onClick={status === 'full' ? undefined : () => onSelectDate(day)}
-      >
-        <Typography variant="body2">{day.date()}</Typography>
-      </Box>
-    );
-    return showTooltip ? <Tooltip title={tooltipTitle} arrow>{box}</Tooltip> : box;
+  function getStatusStyles(status) {
+    if (status === 'full') return BOOKED_STYLES;
+    if (status === 'partial') return PARTIAL_STYLES;
+    return AVAILABLE_STYLES;
   }
+
+  function AvailabilityDay(props) {
+    const { day, outsideCurrentMonth, disabled, ...other } = props;
+    const { status, availableHours } = getDayStatus(day);
+    const statusStyles = getStatusStyles(status);
+    const isFull = status === 'full';
+    const tooltipTitle = isFull
+      ? 'Booked all day'
+      : status === 'partial'
+        ? `Partly booked. Free hours: ${availableHours.length > 0 ? availableHours.map(h => `${h}:00`).join(', ') : 'None'}`
+        : 'Available';
+
+    return (
+      <Tooltip title={tooltipTitle} arrow>
+        <span>
+          <PickersDay
+            {...other}
+            day={day}
+            outsideCurrentMonth={outsideCurrentMonth}
+            disabled={disabled || isFull}
+            sx={{
+              borderRadius: 1.5,
+              border: outsideCurrentMonth ? '1px solid transparent' : `1px solid ${statusStyles.borderColor}`,
+              backgroundColor: outsideCurrentMonth ? 'transparent' : statusStyles.bgcolor,
+              color: outsideCurrentMonth ? 'text.disabled' : statusStyles.color,
+              fontWeight: status === 'free' ? 600 : 800,
+              textDecoration: isFull ? 'line-through' : 'none',
+              '&:hover': {
+                backgroundColor: status === 'full'
+                  ? BOOKED_STYLES.bgcolor
+                  : status === 'partial'
+                    ? '#fde68a'
+                    : '#d1fae5',
+              },
+              '&.Mui-selected': {
+                backgroundColor: '#2563eb',
+                color: '#fff',
+                borderColor: '#2563eb',
+                '&:hover': { backgroundColor: '#1d4ed8' },
+              },
+              '&.Mui-disabled': {
+                opacity: outsideCurrentMonth ? 0.35 : 1,
+                backgroundColor: outsideCurrentMonth ? 'transparent' : statusStyles.bgcolor,
+                color: outsideCurrentMonth ? 'text.disabled' : statusStyles.color,
+              },
+            }}
+          />
+        </span>
+      </Tooltip>
+    );
+  }
+
+  const legendItems = [
+    { label: 'Busy', styles: BOOKED_STYLES },
+    { label: 'Partly booked', styles: PARTIAL_STYLES },
+    { label: 'Available', styles: AVAILABLE_STYLES },
+  ];
 
   return (
     <Box>
-      <Typography variant="subtitle1" mb={1}>Guide Availability</Typography>
+      <Typography variant="subtitle1" mb={1} sx={{ fontWeight: 700, color: '#1f2937' }}>
+        Guide Availability
+      </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <StaticDatePicker
           displayStaticWrapperAs="desktop"
-          value={selectedDate}
-          onChange={onSelectDate}
-          renderDay={renderDay}
+          value={selectedDate ? dayjs(selectedDate) : null}
+          onChange={(date) => onSelectDate?.(date)}
+          shouldDisableDate={(date) => getDayStatus(date).status === 'full'}
+          slots={{ day: AvailabilityDay }}
         />
       </LocalizationProvider>
-      <Box mt={2} display="flex" gap={2} alignItems="center">
-        <Box width={16} height={16} bgcolor={BOOKED_COLOR} borderRadius={2} />
-        <Typography variant="caption">Booked</Typography>
-        <Box width={16} height={16} bgcolor={PARTIAL_COLOR} borderRadius={2} />
-        <Typography variant="caption">Partially Booked</Typography>
-        <Box width={16} height={16} bgcolor={AVAILABLE_COLOR} borderRadius={2} />
-        <Typography variant="caption">Available</Typography>
+      <Box mt={2} display="flex" gap={1.5} alignItems="center" flexWrap="wrap">
+        {legendItems.map((item) => (
+          <Box key={item.label} display="flex" alignItems="center" gap={0.75}>
+            <Box
+              width={16}
+              height={16}
+              borderRadius={1}
+              sx={{
+                bgcolor: item.styles.bgcolor,
+                border: `1px solid ${item.styles.borderColor}`,
+              }}
+            />
+            <Typography variant="caption" sx={{ color: '#4b5563', fontWeight: 600 }}>
+              {item.label}
+            </Typography>
+          </Box>
+        ))}
       </Box>
     </Box>
   );

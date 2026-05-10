@@ -24,8 +24,8 @@ const GuideSchema = new mongoose.Schema({
   },
   currency: {
     type: String,
-    enum: ['USD', 'INR'],
-    default: 'USD'
+    enum: ['INR'],
+    default: 'INR'
   },
   rateType: {
     type: String,
@@ -64,6 +64,11 @@ const GuideSchema = new mongoose.Schema({
   // New professional fields
   guideVideo: {
     type: String,
+    default: ''
+  },
+  identityProof: {
+    type: String,
+    trim: true,
     default: ''
   },
   cancelPolicy: {

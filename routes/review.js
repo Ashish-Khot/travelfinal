@@ -64,8 +64,22 @@ router.post('/', verifyToken, authorizeRoles('tourist'), async (req, res) => {
     // Mark review as submitted in booking
     booking.reviewSubmitted = true;
     await booking.save();
-    
-    res.status(201).json({ message: 'Review submitted for moderation', review });
+
+    const approvedReviews = await Review.find({
+      guideId,
+      status: 'approved',
+      isHidden: false,
+      isDeleted: false
+    });
+    const avgRating = approvedReviews.length > 0
+      ? approvedReviews.reduce((sum, item) => sum + item.rating, 0) / approvedReviews.length
+      : 0;
+    await Guide.findOneAndUpdate(
+      { userId: guideId },
+      { ratings: Number(avgRating.toFixed(1)) }
+    );
+
+    res.status(201).json({ message: 'Review submitted successfully', review });
   } catch (err) {
     console.error('[REVIEW] Error posting review:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
