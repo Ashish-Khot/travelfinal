@@ -1,9 +1,12 @@
 const mongoose = require('mongoose');
 const { generateItinerary } = require('../services/itineraryService');
 const { buildItineraryPdf } = require('../services/pdfService');
+const SocialContentService = require('../services/socialContentService');
 const TouristItinerary = require('../models/TouristItinerary');
 const User = require('../models/User');
 const Booking = require('../models/Booking');
+
+const socialContentService = new SocialContentService();
 
 const normalizeInterests = (value) => {
   if (Array.isArray(value)) {
@@ -353,6 +356,29 @@ const downloadPdf = async (req, res) => {
   }
 };
 
+const getSocialContent = async (req, res) => {
+  try {
+    const destination = String(req.query?.destination || '').trim();
+    const stopName = String(req.query?.stopName || '').trim();
+    const limit = Number(req.query?.limit);
+
+    if (!destination && !stopName) {
+      return res.status(400).json({ message: 'Destination or stop name is required.' });
+    }
+
+    const payload = await socialContentService.getSocialContent({
+      destination,
+      stopName,
+      limit: Number.isFinite(limit) ? limit : undefined,
+    });
+
+    return res.json(payload);
+  } catch (error) {
+    console.error('[Itinerary] social content error:', error.message);
+    return res.status(500).json({ message: 'Unable to load social content right now.' });
+  }
+};
+
 module.exports = {
   generate,
   saveGenerated,
@@ -362,5 +388,6 @@ module.exports = {
   deleteSaved,
   getPreferences,
   downloadPdf,
+  getSocialContent,
 };
 

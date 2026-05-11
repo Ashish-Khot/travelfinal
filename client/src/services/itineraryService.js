@@ -10,6 +10,17 @@ export const getItineraryPreferences = async () => {
   return response.data;
 };
 
+export const getItinerarySocialContent = async ({ destination = '', stopName = '', limit = 6 } = {}) => {
+  const response = await api.get('/itinerary/social-content', {
+    params: {
+      destination,
+      stopName,
+      limit,
+    },
+  });
+  return response.data;
+};
+
 export const listSavedItineraries = async () => {
   const response = await api.get('/itinerary/saved');
   return response.data;

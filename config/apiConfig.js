@@ -158,10 +158,34 @@ module.exports = {
     BASE_URL: 'https://wft-geo-db.p.rapidapi.com/v1/geo',
   },
 
+  // Geoapify API - Geocoding + map-friendly place context
+  GEOAPIFY: {
+    API_KEY: process.env.GEOAPIFY_API_KEY || '',
+    BASE_URL: 'https://api.geoapify.com/v1',
+  },
+
+  // Foursquare Places API - POI, hotels, cafes, restaurants
+  FOURSQUARE: {
+    API_KEY: process.env.FOURSQUARE_API_KEY || process.env.FSQ_API_KEY || '',
+    BASE_URL: 'https://api.foursquare.com/v3',
+  },
+
   // Unsplash API - Free images
   UNSPLASH: {
-    API_KEY: process.env.UNSPLASH_API_KEY || 'your-unsplash-key',
+    API_KEY:
+      process.env.UNSPLASH_API_KEY ||
+      process.env.UNSPLASH_ACCESS_KEY ||
+      process.env.VITE_UNSPLASH_ACCESS_KEY ||
+      '',
     BASE_URL: 'https://api.unsplash.com',
+  },
+
+  // YouTube Data API - destination videos/shorts for itinerary insights
+  YOUTUBE: {
+    API_KEY: process.env.YOUTUBE_API_KEY || '',
+    BASE_URL: 'https://www.googleapis.com/youtube/v3',
+    DEFAULT_RESULTS: Number(process.env.YOUTUBE_DEFAULT_RESULTS || 6),
+    CACHE_TTL_MS: Number(process.env.YOUTUBE_CACHE_TTL_MS || 20 * 60 * 1000),
   },
 
   // Wikipedia API - Free info & images

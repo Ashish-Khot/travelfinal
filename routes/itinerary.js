@@ -9,11 +9,13 @@ const {
   deleteSaved,
   getPreferences,
   downloadPdf,
+  getSocialContent,
 } = require('../controllers/itineraryController');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
 
 router.use(verifyToken, authorizeRoles('tourist'));
 router.get('/preferences', getPreferences);
+router.get('/social-content', getSocialContent);
 router.get('/saved', listSaved);
 router.get('/saved/:id', getSavedById);
 router.post('/generate', generate);

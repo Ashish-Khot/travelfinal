@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, CircularProgress, Snackbar } from '@mui/material';
 import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
@@ -15,6 +15,7 @@ import {
   downloadItineraryPdf,
   generateItinerary,
   getItineraryPreferences,
+  getItinerarySocialContent,
   getSavedItineraryById,
   listSavedItineraries,
   saveGeneratedItinerary,
@@ -153,6 +154,13 @@ const formatDateLabel = (startDate, endDate) => {
   const startLabel = start && !Number.isNaN(start.getTime()) ? start.toLocaleDateString('en-IN', options) : '-';
   const endLabel = end && !Number.isNaN(end.getTime()) ? end.toLocaleDateString('en-IN', options) : '-';
   return `${startLabel} - ${endLabel}`;
+};
+
+const formatPublishedLabel = (value) => {
+  if (!value) return 'Recent';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Recent';
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const calcTripDays = (startDate, endDate) => {
@@ -424,7 +432,11 @@ export default function ItineraryPlannerModule() {
   const [loadingProgress, setLoadingProgress] = useState(8);
   const [weather, setWeather] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
+  const [socialContent, setSocialContent] = useState(null);
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [socialError, setSocialError] = useState('');
   const [notification, setNotification] = useState({ message: '', severity: 'success' });
+  const socialCacheRef = useRef(new Map());
 
   const selectedDay = useMemo(() => {
     if (!currentPlan?.days?.length) return null;
@@ -516,6 +528,21 @@ export default function ItineraryPlannerModule() {
   const weatherPreviewDays = useMemo(
     () => (Array.isArray(weather?.daily) ? weather.daily.slice(0, 3) : []),
     [weather?.daily]
+  );
+
+  const socialVideos = useMemo(
+    () => (Array.isArray(socialContent?.videos) ? socialContent.videos : []),
+    [socialContent?.videos]
+  );
+
+  const socialShorts = useMemo(
+    () => (Array.isArray(socialContent?.shorts) ? socialContent.shorts : []),
+    [socialContent?.shorts]
+  );
+
+  const socialQuickLinks = useMemo(
+    () => (Array.isArray(socialContent?.quickLinks) ? socialContent.quickLinks : []),
+    [socialContent?.quickLinks]
   );
 
   const notify = (message, severity = 'success') => {
@@ -701,6 +728,62 @@ export default function ItineraryPlannerModule() {
 
     fetchWeather();
   }, [selectedDay?.id, selectedDay?.stops, currentPlan?.days?.length]);
+
+  useEffect(() => {
+    const destination = String(currentPlan?.destination || '').trim();
+    const stopName = String(activeDayStop?.name || '').trim();
+
+    if (!destination && !stopName) {
+      setSocialContent(null);
+      setSocialError('');
+      setSocialLoading(false);
+      return;
+    }
+
+    const cacheKey = `${destination.toLowerCase()}|${stopName.toLowerCase()}`;
+    const cached = socialCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSocialContent(cached);
+      setSocialError('');
+      setSocialLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchTimer = setTimeout(async () => {
+      setSocialLoading(true);
+      setSocialError('');
+      try {
+        const response = await getItinerarySocialContent({
+          destination,
+          stopName,
+          limit: 6,
+        });
+
+        if (cancelled) return;
+
+        setSocialContent(response || null);
+        socialCacheRef.current.set(cacheKey, response || null);
+        if (socialCacheRef.current.size > 80) {
+          const oldestKey = socialCacheRef.current.keys().next().value;
+          socialCacheRef.current.delete(oldestKey);
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setSocialError(error?.response?.data?.message || 'Unable to load social content right now.');
+        setSocialContent(null);
+      } finally {
+        if (!cancelled) {
+          setSocialLoading(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(fetchTimer);
+    };
+  }, [currentPlan?.destination, activeDayStop?.name]);
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -1696,6 +1779,116 @@ export default function ItineraryPlannerModule() {
                   ) : (
                     <p className="emptyText">No activities available for this day.</p>
                   )}
+
+                  <div className="socialContentBlock">
+                    <div className="panelHeaderSplit socialContentHeader">
+                      <h4>YouTube Travel Content</h4>
+                      <span className="smallText">
+                        {socialContent?.location?.label || currentPlan.destination}
+                      </span>
+                    </div>
+
+                    {socialLoading ? (
+                      <div className="inlineLoader">
+                        <CircularProgress size={18} />
+                        <span>Loading videos and shorts...</span>
+                      </div>
+                    ) : socialError ? (
+                      <p className="emptyText">{socialError}</p>
+                    ) : (
+                      <>
+                        {socialVideos.length > 0 && (
+                          <div className="socialBlockSection">
+                            <p className="socialSectionLabel">Videos</p>
+                            <div className="socialVideoGrid">
+                              {socialVideos.slice(0, 4).map((video) => (
+                                <a
+                                  key={`video-${video.id}`}
+                                  href={video.watchUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="socialVideoCard"
+                                >
+                                  <div className="socialThumbWrap">
+                                    {video.thumbnail ? (
+                                      <img src={video.thumbnail} alt={video.title || 'YouTube video'} />
+                                    ) : (
+                                      <div className="socialThumbFallback">No preview</div>
+                                    )}
+                                  </div>
+                                  <div className="socialVideoMeta">
+                                    <strong>{video.title || 'Untitled video'}</strong>
+                                    <span>{video.channelTitle || 'YouTube channel'}</span>
+                                    <small>
+                                      {video.durationLabel || 'Watch'}
+                                      {' | '}
+                                      {formatPublishedLabel(video.publishedAt)}
+                                    </small>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {socialShorts.length > 0 && (
+                          <div className="socialBlockSection">
+                            <p className="socialSectionLabel">Shorts</p>
+                            <div className="socialVideoGrid">
+                              {socialShorts.slice(0, 4).map((video) => (
+                                <a
+                                  key={`short-${video.id}`}
+                                  href={video.watchUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="socialVideoCard shortsCard"
+                                >
+                                  <div className="socialThumbWrap">
+                                    {video.thumbnail ? (
+                                      <img src={video.thumbnail} alt={video.title || 'YouTube short'} />
+                                    ) : (
+                                      <div className="socialThumbFallback">No preview</div>
+                                    )}
+                                  </div>
+                                  <div className="socialVideoMeta">
+                                    <strong>{video.title || 'Untitled short'}</strong>
+                                    <span>{video.channelTitle || 'YouTube channel'}</span>
+                                    <small>
+                                      {video.durationLabel || 'Short'}
+                                      {' | '}
+                                      {formatPublishedLabel(video.publishedAt)}
+                                    </small>
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {!socialVideos.length && !socialShorts.length && (
+                          <p className="emptyText">
+                            No direct video matches found yet. Use quick YouTube search links below.
+                          </p>
+                        )}
+
+                        {socialQuickLinks.length > 0 && (
+                          <div className="socialQuickLinks">
+                            {socialQuickLinks.map((item, index) => (
+                              <a
+                                key={`${item.url}-${index}`}
+                                href={item.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="socialQuickLink"
+                              >
+                                {item.label}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
 
                   <div className="dayActivityTimeline">
                     {selectedDayTimeline.map((stop, index) => (
