@@ -425,7 +425,7 @@ export default function ItineraryPlannerModule() {
       if (bStart == null) return -1;
       return aStart - bStart;
     });
-  }, [selectedDay?.id, selectedDay?.stops]);
+  }, [selectedDay?.stops]);
 
   const activeDayStop = useMemo(() => {
     if (!selectedDayTimeline.length) return null;
@@ -815,6 +815,7 @@ export default function ItineraryPlannerModule() {
       setSelectedSavedId('');
       setSelectedDayId('');
       setSelectedStop(null);
+      setOpenDayIds([]);
       return;
     }
 
@@ -830,6 +831,7 @@ export default function ItineraryPlannerModule() {
         setSelectedSavedId('');
         setSelectedDayId('');
         setSelectedStop(null);
+        setOpenDayIds([]);
       }
     } catch (error) {
       notify(error?.response?.data?.message || 'Unable to delete itinerary.', 'error');
@@ -887,11 +889,23 @@ export default function ItineraryPlannerModule() {
     });
   };
 
-  const toggleDayOpen = (dayId) => {
-    setOpenDayIds((prev) => (prev.includes(dayId) ? prev.filter((id) => id !== dayId) : [...prev, dayId]));
-    setSelectedDayId(dayId);
+  const selectDay = (dayId) => {
     const day = currentPlan?.days?.find((item) => item.id === dayId);
+    if (!day) return;
+    setOpenDayIds([dayId]);
+    setSelectedDayId(dayId);
     setSelectedStop(day?.stops?.[0] || null);
+  };
+
+  const selectStopInDay = (dayId, stop) => {
+    if (!dayId) return;
+    setOpenDayIds([dayId]);
+    setSelectedDayId(dayId);
+    setSelectedStop(stop || null);
+  };
+
+  const toggleDayOpen = (dayId) => {
+    selectDay(dayId);
   };
 
   const renderStepContent = () => {
@@ -1308,6 +1322,7 @@ export default function ItineraryPlannerModule() {
                   setCurrentPlan(null);
                   setSelectedDayId('');
                   setSelectedStop(null);
+                  setOpenDayIds([]);
                 }}
               >
                 Plan New Trip
@@ -1413,9 +1428,7 @@ export default function ItineraryPlannerModule() {
                   className="selectField compactSelect"
                   value={selectedDay?.id || ''}
                   onChange={(event) => {
-                    setSelectedDayId(event.target.value);
-                    const day = currentPlan.days.find((item) => item.id === event.target.value);
-                    setSelectedStop(day?.stops?.[0] || null);
+                    selectDay(event.target.value);
                   }}
                 >
                   {currentPlan.days.map((day) => (
@@ -1432,8 +1445,7 @@ export default function ItineraryPlannerModule() {
                     type="button"
                     className={`pillButton ${selectedDay?.id === day.id ? 'active' : ''}`}
                     onClick={() => {
-                      setSelectedDayId(day.id);
-                      setSelectedStop(day.stops[0] || null);
+                      selectDay(day.id);
                     }}
                   >
                     {day.label}
@@ -1501,11 +1513,14 @@ export default function ItineraryPlannerModule() {
           </section>
 
           <section className="resultTimelineGalleryGrid">
-            <article className="resultPanel">
+            <article className="resultPanel itineraryTimelinePanel">
               <header className="panelHeaderSplit">
                 <h3><AutoAwesomeRoundedIcon /> Day-wise Itinerary</h3>
                 <span className="smallText">{currentPlan.days.length} days</span>
               </header>
+              <p className="emptyText timelineHelperText">
+                Click any day to expand it. Selected day and activity details update instantly on the right panel.
+              </p>
               {!currentPlan.days.length ? (
                 <p className="emptyText">No generated day plan available.</p>
               ) : (
@@ -1513,11 +1528,13 @@ export default function ItineraryPlannerModule() {
                   {currentPlan.days.map((day) => {
                     const isOpen = openDayIds.includes(day.id);
                     return (
-                      <div key={day.id} className="dayCard">
+                      <div key={day.id} className={`dayCard ${selectedDay?.id === day.id ? 'selected' : ''}`}>
                         <button
                           type="button"
                           className="dayCardHead"
                           onClick={() => toggleDayOpen(day.id)}
+                          aria-expanded={isOpen}
+                          aria-controls={`day-stops-${day.id}`}
                         >
                           <div>
                             <strong>{day.label}</strong>
@@ -1531,15 +1548,14 @@ export default function ItineraryPlannerModule() {
                           </div>
                         </button>
                         {isOpen && (
-                          <div className="dayStops">
+                          <div className="dayStops" id={`day-stops-${day.id}`}>
                             {day.stops.map((stop, index) => (
                               <button
                                 type="button"
                                 key={stop.id}
                                 className={`stopRow ${selectedStop?.id === stop.id ? 'active' : ''}`}
                                 onClick={() => {
-                                  setSelectedStop(stop);
-                                  setSelectedDayId(day.id);
+                                  selectStopInDay(day.id, stop);
                                 }}
                               >
                                 <div>
@@ -1562,7 +1578,7 @@ export default function ItineraryPlannerModule() {
               )}
             </article>
 
-            <article className="resultPanel">
+            <article className="resultPanel itineraryInsightPanel">
               <header className="panelHeaderSplit">
                 <h3><PlaceRoundedIcon /> Day Activity Insights</h3>
                 <span className="smallText">{selectedDay?.label || 'Select a day'}</span>
@@ -1634,7 +1650,7 @@ export default function ItineraryPlannerModule() {
                         key={`${selectedDay.id}-${stop.id}`}
                         type="button"
                         className={`activityTimelineRow ${activeDayStop?.id === stop.id ? 'active' : ''}`}
-                        onClick={() => setSelectedStop(stop)}
+                        onClick={() => selectStopInDay(selectedDay.id, stop)}
                       >
                         <div className="activityTimelineTime">
                           <strong>{stop.start || '--'}</strong>
