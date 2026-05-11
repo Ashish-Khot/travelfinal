@@ -23,6 +23,147 @@ const CATEGORY_BASE_COST = {
   sightseeing: 1200,
 };
 
+const CATEGORY_ACTIVITY_DETAIL = {
+  food: {
+    bestFor: ['Food Lovers', 'Local Experience', 'Couples'],
+    crowdTip: 'Try to arrive before peak meal hours for shorter queues.',
+    openingHours: '10:00 - 22:00',
+    detail: 'Explore local specialties, signature dishes, and neighborhood culinary culture.',
+  },
+  shopping: {
+    bestFor: ['Shopping', 'Families', 'Local Crafts'],
+    crowdTip: 'Visit in late morning for better movement and store availability.',
+    openingHours: '10:00 - 21:00',
+    detail: 'Browse popular stores, local markets, and handcrafted finds unique to the city.',
+  },
+  nature: {
+    bestFor: ['Photography', 'Relaxation', 'Families'],
+    crowdTip: 'Early morning or sunset usually offers the best light and fewer crowds.',
+    openingHours: '06:00 - 19:00',
+    detail: 'Enjoy scenic viewpoints, open-air walks, and a calmer pace away from city rush.',
+  },
+  culture: {
+    bestFor: ['History', 'Culture', 'Photography'],
+    crowdTip: 'Arrive early to avoid guided-group rush windows.',
+    openingHours: '09:00 - 18:00',
+    detail: 'Discover heritage stories, architecture, and local traditions connected to this place.',
+  },
+  adventure: {
+    bestFor: ['Adventure', 'Active Travelers', 'Friends'],
+    crowdTip: 'Carry water and keep buffer time for activity preparation.',
+    openingHours: '08:00 - 18:00',
+    detail: 'Plan for active exploration with practical prep for weather and movement.',
+  },
+  entertainment: {
+    bestFor: ['Friends', 'Nightlife', 'Couples'],
+    crowdTip: 'Weekday slots are typically more comfortable than weekend peaks.',
+    openingHours: '11:00 - 23:00',
+    detail: 'Great for lively experiences, social spaces, and evening city energy.',
+  },
+  relaxation: {
+    bestFor: ['Relaxation', 'Couples', 'Wellness'],
+    crowdTip: 'Keep this as a lower-intensity block between two busy activities.',
+    openingHours: '09:00 - 20:00',
+    detail: 'Use this stop to slow down, reset energy, and enjoy a gentle travel rhythm.',
+  },
+  sightseeing: {
+    bestFor: ['First-time Visitors', 'Photography', 'General Travelers'],
+    crowdTip: 'Start early and keep 15-20 minutes buffer for transfers and entry lines.',
+    openingHours: '09:00 - 19:00',
+    detail: 'A classic city highlight that helps you understand local character and landmarks.',
+  },
+};
+
+const CURATED_DESTINATION_PLACES = {
+  kolhapur: [
+    { name: 'Mahalakshmi Temple, Kolhapur', category: 'culture', address: 'Mahalakshmi Mandir, Kolhapur', lat: 16.7007, lng: 74.2439 },
+    { name: 'Rankala Lake', category: 'nature', address: 'Rankala Lake, Kolhapur', lat: 16.6848, lng: 74.2162 },
+    { name: 'New Palace Museum', category: 'culture', address: 'New Palace, Kolhapur', lat: 16.7089, lng: 74.2396 },
+    { name: 'Jyotiba Temple', category: 'culture', address: 'Wadi Ratnagiri, near Kolhapur', lat: 16.8284, lng: 74.1645 },
+    { name: 'Panhala Fort', category: 'culture', address: 'Panhala, Kolhapur district', lat: 16.8124, lng: 74.1109 },
+    { name: 'Siddhagiri Gramjivan Museum (Kaneri Math)', category: 'culture', address: 'Kaneri, Kolhapur', lat: 16.6136, lng: 74.2901 },
+    { name: 'Shalini Palace', category: 'sightseeing', address: 'Rankala Lake West Bank, Kolhapur', lat: 16.6881, lng: 74.2148 },
+    { name: 'Bhavani Mandap', category: 'culture', address: 'Old City, Kolhapur', lat: 16.6955, lng: 74.2318 },
+    { name: 'Town Hall Museum', category: 'culture', address: 'Dasara Chowk, Kolhapur', lat: 16.6951, lng: 74.2296 },
+    { name: 'Radhanagari Wildlife Sanctuary', category: 'nature', address: 'Radhanagari, Kolhapur district', lat: 16.3972, lng: 73.9958 },
+    { name: 'Local Kolhapuri Food Street', category: 'food', address: 'Central Kolhapur food market area', lat: 16.6998, lng: 74.2336 },
+    { name: 'Kolhapuri Chappal Market', category: 'shopping', address: 'Laxmipuri, Kolhapur', lat: 16.7019, lng: 74.2274 },
+    { name: 'Binkhambi Ganesh Mandir', category: 'culture', address: 'Shivaji Peth, Kolhapur', lat: 16.6985, lng: 74.2278 },
+    { name: 'Khasbag Wrestling Stadium', category: 'sightseeing', address: 'Khasbag, Kolhapur', lat: 16.6942, lng: 74.2382 },
+    { name: 'Temblai Devi Temple', category: 'culture', address: 'Temblai Hill, Kolhapur', lat: 16.7182, lng: 74.2672 },
+    { name: 'Teen Darwaza, Panhala', category: 'culture', address: 'Panhala Fort area', lat: 16.8097, lng: 74.1096 },
+    { name: 'Sajja Kothi', category: 'culture', address: 'Panhala Fort area', lat: 16.812, lng: 74.1086 },
+    { name: 'Kopeshwar Temple', category: 'culture', address: 'Khidrapur, Kolhapur region', lat: 16.5281, lng: 74.5982 },
+    { name: 'Narsobawadi Dattatreya Temple', category: 'culture', address: 'Narsobawadi, near Kolhapur', lat: 16.7426, lng: 74.6097 },
+    { name: 'Kalamba Lake', category: 'nature', address: 'Kalamba, Kolhapur', lat: 16.7578, lng: 74.2025 },
+    { name: 'Dajipur Wildlife Sanctuary', category: 'nature', address: 'Near Radhanagari, Kolhapur', lat: 16.3562, lng: 73.8848 },
+    { name: 'Vishalgad Fort Viewpoint', category: 'adventure', address: 'Vishalgad route, Kolhapur side', lat: 16.9545, lng: 73.7385 },
+  ],
+};
+
+function getCuratedPlacesForDestination(destination = '') {
+  const normalized = sanitizeKeyPart(destination);
+  if (!normalized) return [];
+
+  if (CURATED_DESTINATION_PLACES[normalized]) {
+    return CURATED_DESTINATION_PLACES[normalized];
+  }
+
+  const entry = Object.entries(CURATED_DESTINATION_PLACES).find(([key]) =>
+    normalized.includes(key) || key.includes(normalized)
+  );
+
+  return entry ? entry[1] : [];
+}
+
+function assessFallbackQuality(itinerary, input) {
+  const days = Array.isArray(itinerary?.days) ? itinerary.days : [];
+  const requestedDays = resolveRequestedDays(input);
+  if (!days.length || days.length < requestedDays) return { ok: false, reason: 'insufficient-day-count' };
+
+  const allStops = days.flatMap((day) => (Array.isArray(day?.stops) ? day.stops : []));
+  if (!allStops.length) return { ok: false, reason: 'no-stops' };
+
+  const names = allStops.map((stop) => sanitizeKeyPart(stop?.name || '')).filter(Boolean);
+  const uniqueNames = new Set(names);
+  const uniqueRatio = names.length ? uniqueNames.size / names.length : 0;
+
+  const coordCount = allStops.filter((stop) => hasValidCoordinates(stop?.location)).length;
+  const coordRatio = allStops.length ? coordCount / allStops.length : 0;
+
+  const templatePatterns = [
+    'historic district walk',
+    'local food trail',
+    'waterfront sunset point',
+  ];
+  const templateCount = names.filter((name) => templatePatterns.some((pattern) => name.includes(pattern))).length;
+  const templateRatio = allStops.length ? templateCount / allStops.length : 1;
+
+  const veryShortDescCount = allStops.filter(
+    (stop) => String(stop?.description || '').trim().length < 60
+  ).length;
+  const descriptionQualityRatio = allStops.length
+    ? (allStops.length - veryShortDescCount) / allStops.length
+    : 0;
+
+  const lowDayCoverage = days.some((day) => (Array.isArray(day?.stops) ? day.stops.length : 0) < 3);
+  if (lowDayCoverage) return { ok: false, reason: 'low-day-coverage' };
+  if (coordRatio < 0.75) return { ok: false, reason: 'low-coordinate-coverage' };
+  if (uniqueRatio < 0.82) return { ok: false, reason: 'low-uniqueness' };
+  if (templateRatio > 0.35) return { ok: false, reason: 'template-heavy' };
+  if (descriptionQualityRatio < 0.8) return { ok: false, reason: 'low-description-quality' };
+
+  return {
+    ok: true,
+    meta: {
+      coordRatio: Number(coordRatio.toFixed(2)),
+      uniqueRatio: Number(uniqueRatio.toFixed(2)),
+      templateRatio: Number(templateRatio.toFixed(2)),
+      descriptionQualityRatio: Number(descriptionQualityRatio.toFixed(2)),
+    },
+  };
+}
+
 function normalizeCategory(value) {
   const category = String(value || '').trim().toLowerCase();
   if (!category) return 'sightseeing';
@@ -56,32 +197,111 @@ function hasValidCoordinates(location) {
   return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
 }
 
+function sanitizeKeyPart(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildStopIdentity(stop) {
+  const nameKey = sanitizeKeyPart(stop?.name || 'unknown-stop');
+  const lat = Number(stop?.location?.lat);
+  const lng = Number(stop?.location?.lng);
+  const coordKey =
+    Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0
+      ? `${lat.toFixed(3)}:${lng.toFixed(3)}`
+      : '';
+  return coordKey ? `${nameKey}|${coordKey}` : nameKey;
+}
+
 function toSafeNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function enrichStopNarrative(stop, input) {
+  const category = normalizeCategory(stop?.category);
+  const detailPack = CATEGORY_ACTIVITY_DETAIL[category] || CATEGORY_ACTIVITY_DETAIL.sightseeing;
+
+  if (!Array.isArray(stop.bestFor) || !stop.bestFor.length) {
+    stop.bestFor = detailPack.bestFor.slice(0, 3);
+  }
+
+  if (!String(stop.crowdTip || '').trim()) {
+    stop.crowdTip = detailPack.crowdTip;
+  }
+
+  if (!String(stop.openingHours || '').trim()) {
+    stop.openingHours = detailPack.openingHours;
+  }
+
+  const existingDescription = String(stop.description || '').trim();
+  if (existingDescription.length >= 80) return stop;
+
+  const areaHint = stop.address
+    ? `around ${stop.address}`
+    : `in ${input.destination}`;
+  const timeHint = stop.arrivalTime
+    ? `Best visited around ${stop.arrivalTime}.`
+    : '';
+
+  stop.description = `${stop.name} is a popular ${category} experience ${areaHint}. ${detailPack.detail} ${timeHint}`
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return stop;
+}
+
+function isLowQualityPlaceName(name, destination = '') {
+  const normalized = sanitizeKeyPart(name);
+  const destinationNorm = sanitizeKeyPart(destination);
+  if (!normalized) return true;
+
+  const blockedTerms = [
+    'list of',
+    'tourism in',
+    'district',
+    'municipal',
+    'city corporation',
+    'state of',
+    'wikipedia',
+    'category',
+    'history of',
+    'culture of',
+    'geography of',
+    'economy of',
+  ];
+
+  if (blockedTerms.some((term) => normalized.includes(term))) return true;
+  if (destinationNorm && normalized === destinationNorm) return true;
+  if (normalized.length < 4) return true;
+  return false;
 }
 
 function defaultCityDayStops({ destination, dayNumber, center, budget, startMinutes }) {
   const lat = Number(center?.lat || 0);
   const lng = Number(center?.lon || 0);
   const delta = 0.012;
+  const dayLabel = `Day ${dayNumber}`;
   const templates = [
     {
-      name: `${destination} Historic District Walk`,
+      name: `${destination} Historic District Walk (${dayLabel})`,
       category: 'culture',
       description: 'Explore iconic streets, architecture, and public squares at a comfortable pace.',
       bestFor: ['Culture', 'Walking'],
       crowdTip: 'Start early to avoid peak footfall.',
     },
     {
-      name: `${destination} Local Food Trail`,
+      name: `${destination} Local Food Trail (${dayLabel})`,
       category: 'food',
       description: 'Taste regional specialties and discover neighborhood cafes and markets.',
       bestFor: ['Food', 'Local Experience'],
       crowdTip: 'Reserve lunch slots in advance where possible.',
     },
     {
-      name: `${destination} Waterfront & Sunset Point`,
+      name: `${destination} Waterfront & Sunset Point (${dayLabel})`,
       category: 'nature',
       description: 'Relax with scenic views and light exploration during golden hour.',
       bestFor: ['Photography', 'Relaxation'],
@@ -193,6 +413,12 @@ async function enrichStopCoordinates(destination, stop) {
     return stop;
   }
 
+  // When place APIs are not configured, avoid repeated geocode calls per stop.
+  // Day-level coordinate fallback logic will still keep map rendering usable.
+  if (!placesService.hasApiKey()) {
+    return stop;
+  }
+
   const query = stop.address || `${stop.name}, ${destination}`;
   const coords = await placesService.getCoordinatesForDestination(query);
   if (coords) {
@@ -242,11 +468,40 @@ async function getSupplementalPlaces(destination, neededCount, excludedNames = n
   const pushCandidate = (item) => {
     const name = String(item?.name || '').trim();
     if (!name) return;
+    if (isLowQualityPlaceName(name, destination)) return;
+    const normalizedName = sanitizeKeyPart(name);
+    const destinationFirstToken = sanitizeKeyPart(destination).split(' ')[0] || '';
+    const isWiki = String(item?.source || '').toLowerCase() === 'wikipedia';
+    if (isWiki) {
+      const tokenCount = normalizedName.split(' ').filter(Boolean).length;
+      if (tokenCount <= 1 && destinationFirstToken && !normalizedName.includes(destinationFirstToken)) {
+        return;
+      }
+    }
     const key = name.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
     candidates.push(item);
   };
+
+  const curatedSeed = getCuratedPlacesForDestination(destination);
+  curatedSeed.forEach((entry) =>
+    pushCandidate({
+      name: entry.name,
+      category: entry.category,
+      location: {
+        coordinates: {
+          latitude: entry.lat,
+          longitude: entry.lng,
+        },
+        address: entry.address,
+      },
+      description: '',
+      openingHours: '',
+      rating: 4.2,
+      source: 'curated',
+    })
+  );
 
   const popularPlaces = await placesService.getPopularAttractions(
     destination,
@@ -364,6 +619,8 @@ Rules:
 - Include realistic arrivalTime and departureTime for each stop in 24h HH:MM format.
 - Include 3-6 stops per day.
 - Include popular real places in ${input.destination}.
+- Respect interests but keep itinerary balanced: include iconic highlights plus preference-based stops.
+- Avoid repeating the same attraction name across days (case-insensitive).
 - Include location lat/lng if known, else 0.
 - Keep travel realistic and non-overlapping.
 - Include short address.
@@ -418,6 +675,14 @@ async function validateAndEnhanceItinerary(raw, input) {
   const requestedDays = resolveRequestedDays(input);
   const draftedDays = await buildSupplementalDayDrafts(raw?.days, input, requestedDays);
   const destinationCenter = await placesService.getCoordinatesForDestination(input.destination);
+  const preferredStopsPerDay = getStopsPerDayForPace(input.pace);
+  const replacementPlaces = await getSupplementalPlaces(
+    input.destination,
+    Math.max(24, requestedDays * (preferredStopsPerDay + 2)),
+    new Set()
+  );
+  let replacementCursor = 0;
+  const globalStopKeys = new Set();
   const resultDays = [];
   let overallDistanceKm = 0;
   let overallTravelMinutes = 0;
@@ -441,7 +706,6 @@ async function validateAndEnhanceItinerary(raw, input) {
     const enriched = [];
     let dayDistanceKm = 0;
     let dayTravelMinutes = 0;
-    let dayEstimatedCost = 0;
 
     for (const stop of stops) {
       const fixed = await enrichStopCoordinates(input.destination, stop);
@@ -449,34 +713,105 @@ async function validateAndEnhanceItinerary(raw, input) {
       if (!Number.isFinite(Number(fixed.estimatedCost)) || Number(fixed.estimatedCost) <= 0) {
         fixed.estimatedCost = estimateStopCost(fixed.category, input.budget);
       }
+      enrichStopNarrative(fixed, input);
       enriched.push(fixed);
-      dayEstimatedCost += Number(fixed.estimatedCost || 0);
     }
 
-    const hasAnyCoords = enriched.some((stop) => hasValidCoordinates(stop.location));
+    const dayStopKeys = new Set();
+    let uniqueStops = [];
+    for (const stop of enriched) {
+      const key = buildStopIdentity(stop);
+      if (globalStopKeys.has(key) || dayStopKeys.has(key)) {
+        continue;
+      }
+      dayStopKeys.add(key);
+      globalStopKeys.add(key);
+      uniqueStops.push(stop);
+    }
+
+    const targetStopCount = Math.max(3, preferredStopsPerDay);
+    while (uniqueStops.length < targetStopCount && replacementCursor < replacementPlaces.length) {
+      const place = replacementPlaces[replacementCursor];
+      replacementCursor += 1;
+      const candidate = mapPlaceToDraftStop(place, input, uniqueStops.length);
+      const fixedCandidate = await enrichStopCoordinates(input.destination, candidate);
+      fixedCandidate.category = normalizeCategory(fixedCandidate.category);
+      if (!Number.isFinite(Number(fixedCandidate.estimatedCost)) || Number(fixedCandidate.estimatedCost) <= 0) {
+        fixedCandidate.estimatedCost = estimateStopCost(fixedCandidate.category, input.budget);
+      }
+      enrichStopNarrative(fixedCandidate, input);
+      const key = buildStopIdentity(fixedCandidate);
+      if (globalStopKeys.has(key) || dayStopKeys.has(key)) {
+        continue;
+      }
+      dayStopKeys.add(key);
+      globalStopKeys.add(key);
+      uniqueStops.push(fixedCandidate);
+    }
+
+    if (!uniqueStops.length) {
+      uniqueStops = defaultCityDayStops({
+        destination: input.destination,
+        dayNumber,
+        center: destinationCenter,
+        budget: input.budget,
+        startMinutes: fallbackStart,
+      }).map((stop) => {
+        const normalized = normalizeStop(stop);
+        enrichStopNarrative(normalized, input);
+        return normalized;
+      });
+      uniqueStops.forEach((stop) => {
+        const key = buildStopIdentity(stop);
+        dayStopKeys.add(key);
+        globalStopKeys.add(key);
+      });
+    }
+
+    const hasAnyCoords = uniqueStops.some((stop) => hasValidCoordinates(stop.location));
     if (!hasAnyCoords && destinationCenter?.lat && destinationCenter?.lon) {
       const anchorLat = Number(destinationCenter.lat);
       const anchorLng = Number(destinationCenter.lon);
       const delta = 0.01;
-      enriched.forEach((stop, index) => {
+      uniqueStops.forEach((stop, index) => {
         stop.location.lat = Number((anchorLat + delta * Math.cos(index + dayNumber)).toFixed(6));
         stop.location.lng = Number((anchorLng + delta * Math.sin(index + dayNumber)).toFixed(6));
       });
     }
 
-    for (let i = 0; i < enriched.length; i += 1) {
-      const current = enriched[i];
+    const fallbackAnchor = (() => {
+      const fromStop = uniqueStops.find((stop) => hasValidCoordinates(stop.location));
+      if (fromStop) {
+        return { lat: Number(fromStop.location.lat), lng: Number(fromStop.location.lng) };
+      }
+      if (destinationCenter?.lat && destinationCenter?.lon) {
+        return { lat: Number(destinationCenter.lat), lng: Number(destinationCenter.lon) };
+      }
+      return null;
+    })();
+
+    if (fallbackAnchor) {
+      uniqueStops.forEach((stop, index) => {
+        if (hasValidCoordinates(stop.location)) return;
+        const delta = 0.0045 + index * 0.0007;
+        stop.location.lat = Number((fallbackAnchor.lat + delta * Math.cos(index + dayNumber)).toFixed(6));
+        stop.location.lng = Number((fallbackAnchor.lng + delta * Math.sin(index + dayNumber)).toFixed(6));
+      });
+    }
+
+    for (let i = 0; i < uniqueStops.length; i += 1) {
+      const current = uniqueStops[i];
       const arr = toMinutes(current.arrivalTime);
       const dep = toMinutes(current.departureTime);
       if (arr == null || dep == null || dep <= arr) {
-        const fallbackArr = i === 0 ? toMinutes(input.dailyStartTime) || 540 : (toMinutes(enriched[i - 1].departureTime) || 540) + 20;
+        const fallbackArr = i === 0 ? toMinutes(input.dailyStartTime) || 540 : (toMinutes(uniqueStops[i - 1].departureTime) || 540) + 20;
         const fallbackDep = fallbackArr + Math.max(45, current.durationMinutes || 90);
         current.arrivalTime = minutesToTime(fallbackArr);
         current.departureTime = minutesToTime(fallbackDep);
       }
 
       if (i > 0) {
-        const prev = enriched[i - 1];
+        const prev = uniqueStops[i - 1];
         const distKm = (prev.location.lat && prev.location.lng && current.location.lat && current.location.lng)
           ? haversineKm(prev.location.lat, prev.location.lng, current.location.lat, current.location.lng)
           : 3;
@@ -501,6 +836,11 @@ async function validateAndEnhanceItinerary(raw, input) {
       }
     }
 
+    const dayEstimatedCost = uniqueStops.reduce(
+      (sum, stop) => sum + Number(stop.estimatedCost || 0),
+      0
+    );
+
     resultDays.push({
       day: dayNumber,
       title: String(day?.title || `Day ${dayNumber}`).trim(),
@@ -509,7 +849,7 @@ async function validateAndEnhanceItinerary(raw, input) {
         movingTimeMinutes: dayTravelMinutes,
         estimatedCost: Math.round(dayEstimatedCost),
       },
-      stops: enriched,
+      stops: uniqueStops,
     });
 
     overallDistanceKm += dayDistanceKm;
@@ -528,6 +868,27 @@ async function validateAndEnhanceItinerary(raw, input) {
     },
     days: resultDays,
   };
+}
+
+async function buildDeterministicFallbackItinerary(input) {
+  const requestedDays = resolveRequestedDays(input);
+  const fallbackSeed = {
+    destination: input.destination,
+    summary: `Curated ${requestedDays}-day plan for ${input.destination}`,
+    days: [],
+  };
+  const itinerary = await validateAndEnhanceItinerary(fallbackSeed, input);
+  const qualityCheck = assessFallbackQuality(itinerary, input);
+  if (!qualityCheck.ok) {
+    throw new Error(`Fallback data quality too weak: ${qualityCheck.reason}`);
+  }
+  itinerary.meta = {
+    ...(itinerary.meta || {}),
+    generationMode: 'deterministic-fallback',
+    aiFailed: true,
+    fallbackQuality: qualityCheck.meta || null,
+  };
+  return itinerary;
 }
 
 async function generateItinerary(input) {
@@ -553,7 +914,13 @@ async function generateItinerary(input) {
     return itinerary;
   } catch (error) {
     console.warn('[Itinerary] generation failed:', error.message);
-    throw new Error('Unable to generate itinerary right now. Please try again later.');
+    try {
+      console.warn('[Itinerary] attempting deterministic fallback itinerary...');
+      return await buildDeterministicFallbackItinerary(input);
+    } catch (fallbackError) {
+      console.warn('[Itinerary] deterministic fallback failed:', fallbackError.message);
+      throw new Error('Unable to generate itinerary right now. Please try again later.');
+    }
   }
 }
 

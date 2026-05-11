@@ -27,6 +27,7 @@ class PlacesService {
     const knownCoordinates = {
       'paris': { lat: 48.8566, lon: 2.3522 },
       'london': { lat: 51.5074, lon: -0.1278 },
+      'amsterdam': { lat: 52.3676, lon: 4.9041 },
       'new york': { lat: 40.7128, lon: -74.006 },
       'tokyo': { lat: 35.6762, lon: 139.6503 },
       'dubai': { lat: 25.2048, lon: 55.2708 },
@@ -76,6 +77,10 @@ class PlacesService {
     const fallbackQuery = String(raw).split(',')[0].trim();
     const normalized = fallbackQuery.toLowerCase();
     const fallback = this.getKnownCoordinates(normalized);
+
+    if (fallback) {
+      return fallback;
+    }
 
     if (this.hasApiKey()) {
       try {

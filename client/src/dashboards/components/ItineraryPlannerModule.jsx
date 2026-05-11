@@ -1618,7 +1618,7 @@ export default function ItineraryPlannerModule() {
                                 </div>
                                 <div className="stopTiming">
                                   <span>{stop.start || '--'} to {stop.end || '--'}</span>
-                                  <small>{formatMoney(stop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</small>
+                                  <small>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'Start point'}</small>
                                 </div>
                               </button>
                             ))}
@@ -1662,7 +1662,7 @@ export default function ItineraryPlannerModule() {
                       <div className="selectedActivityStats">
                         <span>{activeDayStop.start || '--'} to {activeDayStop.end || '--'}</span>
                         <span>{activeDayStop.duration || 'Flexible duration'}</span>
-                        <span>{formatMoney(activeDayStop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</span>
+                        <span>{activeDayStop.openingHours || 'Hours vary by day'}</span>
                       </div>
                       {activeDayStop.address && (
                         <p className="selectedActivityAddress">{activeDayStop.address}</p>
@@ -1715,8 +1715,8 @@ export default function ItineraryPlannerModule() {
                           <small>{stop.address || 'Address unavailable'}</small>
                         </div>
                         <div className="activityTimelineMeta">
-                          <strong>{formatMoney(stop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</strong>
-                          <span>{stop.duration || 'Flexible'}</span>
+                          <strong>{stop.duration || 'Flexible'}</strong>
+                          <span>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'No transfer'}</span>
                         </div>
                       </button>
                     ))}
@@ -1730,7 +1730,7 @@ export default function ItineraryPlannerModule() {
               <div className="activityHint">
                 <AutoAwesomeRoundedIcon fontSize="small" />
                 <span>
-                  Select any stop from day-wise itinerary to inspect timing, logistics, cost, and quick travel tips.
+                  Select any stop from day-wise itinerary to inspect timing, logistics, and quick travel tips.
                 </span>
               </div>
             </article>
