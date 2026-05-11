@@ -9,6 +9,8 @@ import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import ItineraryRouteMap from './ItineraryRouteMap';
 import {
   deleteSavedItinerary,
@@ -435,6 +437,7 @@ export default function ItineraryPlannerModule() {
   const [socialContent, setSocialContent] = useState(null);
   const [socialLoading, setSocialLoading] = useState(false);
   const [socialError, setSocialError] = useState('');
+  const [videoPreview, setVideoPreview] = useState(null);
   const [notification, setNotification] = useState({ message: '', severity: 'success' });
   const socialCacheRef = useRef(new Map());
 
@@ -469,6 +472,19 @@ export default function ItineraryPlannerModule() {
   useEffect(() => {
     setInsightTab('details');
   }, [selectedDay?.id]);
+
+  useEffect(() => {
+    if (!videoPreview) return undefined;
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setVideoPreview(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [videoPreview]);
 
   const tripDays = calcTripDays(form.startDate, form.endDate);
   const budgetLevel = currentPlan?.tripRequest?.budget || form.budget;
@@ -549,6 +565,42 @@ export default function ItineraryPlannerModule() {
     [socialContent?.quickLinks]
   );
 
+  const buildYouTubeEmbedUrl = (rawUrl, fallbackId = '') => {
+    const safeRawUrl = String(rawUrl || '').trim();
+    const safeId = String(fallbackId || '').trim();
+    const base = safeRawUrl || (safeId ? `https://www.youtube.com/embed/${safeId}` : '');
+    if (!base) return '';
+
+    try {
+      const parsed = new URL(base);
+      parsed.searchParams.set('autoplay', '1');
+      parsed.searchParams.set('rel', '0');
+      parsed.searchParams.set('modestbranding', '1');
+      parsed.searchParams.set('playsinline', '1');
+      return parsed.toString();
+    } catch {
+      return base;
+    }
+  };
+
+  const openVideoPreview = (video) => {
+    const embedUrl = buildYouTubeEmbedUrl(video?.embedUrl, video?.id);
+    if (!embedUrl) {
+      if (video?.watchUrl) {
+        window.open(video.watchUrl, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
+    setVideoPreview({
+      id: String(video?.id || ''),
+      title: String(video?.title || 'YouTube video'),
+      channelTitle: String(video?.channelTitle || ''),
+      embedUrl,
+      watchUrl: String(video?.watchUrl || ''),
+    });
+  };
+
   const notify = (message, severity = 'success') => {
     setNotification({ message, severity });
   };
@@ -621,6 +673,7 @@ export default function ItineraryPlannerModule() {
       });
 
       setCurrentPlan(nextPlan);
+      setVideoPreview(null);
       setSelectedSavedId(id);
       setSelectedDayId(nextPlan.days[0]?.id || '');
       setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
@@ -863,6 +916,7 @@ export default function ItineraryPlannerModule() {
       });
 
       setCurrentPlan(nextPlan);
+      setVideoPreview(null);
       setSelectedSavedId('');
       setSelectedDayId(nextPlan.days[0]?.id || '');
       setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
@@ -952,6 +1006,7 @@ export default function ItineraryPlannerModule() {
   const handleDeleteCurrent = async () => {
     if (!currentPlan?.id) {
       setCurrentPlan(null);
+      setVideoPreview(null);
       setSelectedSavedId('');
       setSelectedDayId('');
       setSelectedStop(null);
@@ -967,6 +1022,7 @@ export default function ItineraryPlannerModule() {
         await loadSavedDetail(nextId);
       } else {
         setCurrentPlan(null);
+        setVideoPreview(null);
         setSelectedSavedId('');
         setSelectedDayId('');
         setSelectedStop(null);
@@ -1452,6 +1508,7 @@ export default function ItineraryPlannerModule() {
                 className="outlineButton"
                 onClick={() => {
                   setCurrentPlan(null);
+                  setVideoPreview(null);
                   setSelectedDayId('');
                   setSelectedStop(null);
                 }}
@@ -1844,12 +1901,11 @@ export default function ItineraryPlannerModule() {
                               <p className="socialSectionLabel">Videos</p>
                               <div className="socialVideoGrid">
                                 {socialVideos.slice(0, 4).map((video) => (
-                                  <a
+                                  <button
+                                    type="button"
                                     key={`video-${video.id}`}
-                                    href={video.watchUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="socialVideoCard"
+                                    className="socialVideoCard socialVideoButton"
+                                    onClick={() => openVideoPreview(video)}
                                   >
                                     <div className="socialThumbWrap">
                                       {video.thumbnail ? (
@@ -1867,7 +1923,7 @@ export default function ItineraryPlannerModule() {
                                         {formatPublishedLabel(video.publishedAt)}
                                       </small>
                                     </div>
-                                  </a>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -1878,12 +1934,11 @@ export default function ItineraryPlannerModule() {
                               <p className="socialSectionLabel">Shorts</p>
                               <div className="socialVideoGrid">
                                 {socialShorts.slice(0, 4).map((video) => (
-                                  <a
+                                  <button
+                                    type="button"
                                     key={`short-${video.id}`}
-                                    href={video.watchUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="socialVideoCard shortsCard"
+                                    className="socialVideoCard socialVideoButton shortsCard"
+                                    onClick={() => openVideoPreview(video)}
                                   >
                                     <div className="socialThumbWrap">
                                       {video.thumbnail ? (
@@ -1901,7 +1956,7 @@ export default function ItineraryPlannerModule() {
                                         {formatPublishedLabel(video.publishedAt)}
                                       </small>
                                     </div>
-                                  </a>
+                                  </button>
                                 ))}
                               </div>
                             </div>
@@ -2019,6 +2074,47 @@ export default function ItineraryPlannerModule() {
             </article>
           </section>
         </>
+      )}
+
+      {videoPreview && (
+        <section className="floatingVideoPlayer" role="dialog" aria-label="YouTube video player">
+          <header className="floatingVideoHead">
+            <div className="floatingVideoTitleBlock">
+              <strong>{videoPreview.title || 'YouTube video'}</strong>
+              <span>{videoPreview.channelTitle || 'YouTube'}</span>
+            </div>
+            <div className="floatingVideoActions">
+              {videoPreview.watchUrl && (
+                <a
+                  href={videoPreview.watchUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="floatingVideoOpenLink"
+                >
+                  <OpenInNewRoundedIcon fontSize="inherit" />
+                  Open YouTube
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => setVideoPreview(null)}
+                className="floatingVideoClose"
+                aria-label="Close video preview"
+              >
+                <CloseRoundedIcon fontSize="inherit" />
+              </button>
+            </div>
+          </header>
+          <div className="floatingVideoFrameWrap">
+            <iframe
+              key={`${videoPreview.id}-${videoPreview.embedUrl}`}
+              src={videoPreview.embedUrl}
+              title={videoPreview.title || 'YouTube video preview'}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
+        </section>
       )}
 
       <Snackbar
