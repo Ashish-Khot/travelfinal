@@ -74,6 +74,27 @@ const budgetCaps = {
   high: 260000,
 };
 
+const budgetNightlyRates = {
+  low: 2600,
+  mid: 5200,
+  high: 9800,
+};
+
+const budgetDailyPerTraveler = {
+  low: 3200,
+  mid: 6200,
+  high: 11500,
+};
+
+const transportPerKmRates = {
+  walk: 0,
+  bike: 8,
+  car: 24,
+  train: 16,
+  metro: 12,
+  taxi: 28,
+};
+
 const tripStyleToPace = {
   relaxed: 'relaxed',
   balanced: 'balanced',
@@ -433,35 +454,69 @@ export default function ItineraryPlannerModule() {
     return selectedDayTimeline.find((stop) => stop.id === selectedStop.id) || selectedDayTimeline[0];
   }, [selectedDayTimeline, selectedStop?.id]);
 
-  const totalEstimated = useMemo(() => {
-    return allStops.reduce((sum, stop) => sum + Number(stop.estimatedSpend || 0), 0);
-  }, [allStops]);
-
+  const tripDays = calcTripDays(form.startDate, form.endDate);
   const budgetLevel = currentPlan?.tripRequest?.budget || form.budget;
-  const budgetTarget = budgetCaps[budgetLevel] || budgetCaps.mid;
-  const budgetPercent = budgetTarget > 0 ? Math.min(100, Math.round((totalEstimated / budgetTarget) * 100)) : 0;
+  const tripTravelers = Math.max(
+    1,
+    Number(currentPlan?.tripRequest?.travelers || (Number(form.travelers.adults || 0) + Number(form.travelers.children || 0) || 1))
+  );
+  const tripDayCount = Math.max(1, Number(currentPlan?.days?.length || tripDays || 1));
+  const tripNights = Math.max(0, tripDayCount - 1);
+  const tripRooms = Math.max(1, Math.ceil(tripTravelers / 2));
+  const transportRatePerKm = transportPerKmRates[currentPlan?.tripRequest?.transportMode || form.transportPreference] ?? 24;
 
   const budgetRows = useMemo(() => {
-    const transport = allStops.reduce((sum, stop) => {
-      const distance = Number(stop?.transportFromPrev?.distanceKm || 0);
-      return sum + distance * 35;
-    }, 0);
-    const activities = totalEstimated * 0.4;
-    const stay = totalEstimated * 0.35;
-    const food = totalEstimated * 0.25;
+    let food = 0;
+    let activities = 0;
+    let transport = 0;
+
+    allStops.forEach((stop) => {
+      const spend = Number(stop.estimatedSpend || 0);
+      const category = String(stop?.category || '').toLowerCase();
+      if (category.includes('food')) {
+        food += spend;
+      } else {
+        activities += spend;
+      }
+
+      const distanceKm = Number(stop?.transportFromPrev?.distanceKm || 0);
+      if (distanceKm > 0) {
+        transport += distanceKm * transportRatePerKm;
+      }
+    });
+
+    const nightlyRate = budgetNightlyRates[budgetLevel] || budgetNightlyRates.mid;
+    const hotels = tripNights * tripRooms * nightlyRate;
+
     return [
-      { name: 'Hotels', value: Math.max(1, Math.round(stay)), colorClass: 'budgetHotels' },
-      { name: 'Food', value: Math.max(1, Math.round(food)), colorClass: 'budgetFood' },
-      { name: 'Transport', value: Math.max(1, Math.round(transport || totalEstimated * 0.15)), colorClass: 'budgetTransport' },
-      { name: 'Activities', value: Math.max(1, Math.round(activities)), colorClass: 'budgetActivities' },
+      { name: 'Hotels', value: Math.max(0, Math.round(hotels)), colorClass: 'budgetHotels' },
+      { name: 'Food', value: Math.max(0, Math.round(food)), colorClass: 'budgetFood' },
+      { name: 'Transport', value: Math.max(0, Math.round(transport)), colorClass: 'budgetTransport' },
+      { name: 'Activities', value: Math.max(0, Math.round(activities)), colorClass: 'budgetActivities' },
     ];
-  }, [allStops, totalEstimated]);
+  }, [allStops, budgetLevel, transportRatePerKm, tripNights, tripRooms]);
+
+  const totalEstimated = useMemo(
+    () => budgetRows.reduce((sum, row) => sum + Number(row.value || 0), 0),
+    [budgetRows]
+  );
+
+  const budgetTarget = useMemo(() => {
+    const perTraveler = budgetDailyPerTraveler[budgetLevel] || budgetDailyPerTraveler.mid;
+    const dynamicTarget = Math.round(perTraveler * tripTravelers * tripDayCount);
+    return Math.max(dynamicTarget, budgetCaps[budgetLevel] || budgetCaps.mid);
+  }, [budgetLevel, tripDayCount, tripTravelers]);
+
+  const budgetPercent = budgetTarget > 0 ? Math.min(100, Math.round((totalEstimated / budgetTarget) * 100)) : 0;
 
   const completedChecklist = currentPlan?.checklist?.filter((item) => item.done).length || 0;
   const checklistTotal = currentPlan?.checklist?.length || 0;
 
   const weatherTips = useMemo(() => weatherTipsFromCondition(weather?.condition), [weather?.condition]);
-  const tripDays = calcTripDays(form.startDate, form.endDate);
+  const weatherPreviewDays = useMemo(
+    () => (Array.isArray(weather?.daily) ? weather.daily.slice(0, 3) : []),
+    [weather?.daily]
+  );
 
   const notify = (message, severity = 'success') => {
     setNotification({ message, severity });
@@ -617,7 +672,7 @@ export default function ItineraryPlannerModule() {
     const fetchWeather = async () => {
       setWeatherLoading(true);
       try {
-        const forecastDays = Math.max(1, Math.min(7, currentPlan?.days?.length || 3));
+        const forecastDays = Math.max(1, Math.min(3, currentPlan?.days?.length || 3));
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${leadStop.lat}&longitude=${leadStop.lon}&current=temperature_2m,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max&timezone=auto&forecast_days=${forecastDays}`;
         const response = await fetch(url);
         const data = await response.json();
@@ -1457,14 +1512,16 @@ export default function ItineraryPlannerModule() {
                   stops={selectedDay?.stops || []}
                   selectedStopId={selectedStop?.id || ''}
                   onStopClick={(stop) => setSelectedStop(stop)}
+                  transportMode={currentPlan.tripRequest.transportMode || form.transportPreference}
                   height={420}
                 />
               </div>
             </article>
 
             <article className="resultPanel weatherPanel">
-              <header>
+              <header className="panelHeaderSplit">
                 <h3><WbSunnyRoundedIcon /> Weather</h3>
+                <span className="smallText">3-day outlook</span>
               </header>
               {weatherLoading ? (
                 <div className="inlineLoader">
@@ -1492,7 +1549,7 @@ export default function ItineraryPlannerModule() {
                     </div>
                   </div>
                   <div className="weatherDays">
-                    {(weather.daily || []).map((entry, index) => (
+                    {weatherPreviewDays.map((entry, index) => (
                       <div key={`${entry.date}-${index}`}>
                         <span>{entry.date ? new Date(entry.date).toLocaleDateString('en-IN', { weekday: 'short' }) : `Day ${index + 1}`}</span>
                         <strong>{entry.max} / {entry.min} C</strong>
@@ -1500,11 +1557,7 @@ export default function ItineraryPlannerModule() {
                       </div>
                     ))}
                   </div>
-                  <div className="tipsList">
-                    {weatherTips.map((tip) => (
-                      <p key={tip}>{tip}</p>
-                    ))}
-                  </div>
+                  {weatherTips[0] && <p className="weatherQuickTip">{weatherTips[0]}</p>}
                 </>
               ) : (
                 <p className="emptyText">Weather appears once map coordinates are available in selected day stops.</p>

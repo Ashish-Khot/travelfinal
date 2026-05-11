@@ -1,8 +1,118 @@
 const GeminiService = require('./geminiService');
 const PlacesService = require('./placesService');
+const WikipediaService = require('./wikipediaService');
 
 const geminiService = new GeminiService({ scope: 'itinerary' });
 const placesService = new PlacesService();
+const wikipediaService = new WikipediaService();
+
+const BUDGET_MULTIPLIER = {
+  low: 0.78,
+  mid: 1,
+  high: 1.55,
+};
+
+const CATEGORY_BASE_COST = {
+  food: 1100,
+  shopping: 2500,
+  nature: 900,
+  culture: 1300,
+  adventure: 1700,
+  entertainment: 1500,
+  relaxation: 1400,
+  sightseeing: 1200,
+};
+
+function normalizeCategory(value) {
+  const category = String(value || '').trim().toLowerCase();
+  if (!category) return 'sightseeing';
+  if (category.includes('food')) return 'food';
+  if (category.includes('shop')) return 'shopping';
+  if (category.includes('nature')) return 'nature';
+  if (category.includes('culture')) return 'culture';
+  if (category.includes('adventure')) return 'adventure';
+  if (category.includes('entertainment')) return 'entertainment';
+  if (category.includes('relax')) return 'relaxation';
+  return 'sightseeing';
+}
+
+function estimateStopCost(category, budgetLevel = 'mid') {
+  const normalizedCategory = normalizeCategory(category);
+  const base = CATEGORY_BASE_COST[normalizedCategory] || CATEGORY_BASE_COST.sightseeing;
+  const multiplier = BUDGET_MULTIPLIER[String(budgetLevel || '').toLowerCase()] || BUDGET_MULTIPLIER.mid;
+  return Math.max(250, Math.round(base * multiplier));
+}
+
+function getStopsPerDayForPace(pace = 'balanced') {
+  const normalized = String(pace || '').toLowerCase();
+  if (normalized === 'fast') return 5;
+  if (normalized === 'relaxed') return 3;
+  return 4;
+}
+
+function hasValidCoordinates(location) {
+  const lat = Number(location?.lat);
+  const lng = Number(location?.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0;
+}
+
+function toSafeNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function defaultCityDayStops({ destination, dayNumber, center, budget, startMinutes }) {
+  const lat = Number(center?.lat || 0);
+  const lng = Number(center?.lon || 0);
+  const delta = 0.012;
+  const templates = [
+    {
+      name: `${destination} Historic District Walk`,
+      category: 'culture',
+      description: 'Explore iconic streets, architecture, and public squares at a comfortable pace.',
+      bestFor: ['Culture', 'Walking'],
+      crowdTip: 'Start early to avoid peak footfall.',
+    },
+    {
+      name: `${destination} Local Food Trail`,
+      category: 'food',
+      description: 'Taste regional specialties and discover neighborhood cafes and markets.',
+      bestFor: ['Food', 'Local Experience'],
+      crowdTip: 'Reserve lunch slots in advance where possible.',
+    },
+    {
+      name: `${destination} Waterfront & Sunset Point`,
+      category: 'nature',
+      description: 'Relax with scenic views and light exploration during golden hour.',
+      bestFor: ['Photography', 'Relaxation'],
+      crowdTip: 'Carry a light jacket for evening breeze.',
+    },
+  ];
+
+  return templates.map((item, index) => {
+    const arrival = startMinutes + index * 140;
+    const departure = arrival + 95;
+    return {
+      name: item.name,
+      address: destination,
+      description: item.description,
+      arrivalTime: minutesToTime(arrival),
+      departureTime: minutesToTime(departure),
+      durationMinutes: 95,
+      category: item.category,
+      openingHours: '',
+      estimatedCost: estimateStopCost(item.category, budget),
+      rating: 4.2,
+      image: '',
+      bestFor: item.bestFor,
+      crowdTip: item.crowdTip,
+      location: {
+        lat: lat ? Number((lat + delta * Math.cos(index + dayNumber)).toFixed(6)) : 0,
+        lng: lng ? Number((lng + delta * Math.sin(index + dayNumber)).toFixed(6)) : 0,
+      },
+    };
+  });
+}
 
 function toMinutes(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return null;
@@ -53,6 +163,8 @@ function resolveRequestedDays(input = {}) {
 }
 
 function normalizeStop(stop) {
+  const normalizedCategory = normalizeCategory(stop?.category);
+  const parsedEstimatedCost = Number(stop?.estimatedCost);
   return {
     name: String(stop?.name || 'Unknown destination').trim(),
     address: String(stop?.address || '').trim(),
@@ -60,9 +172,9 @@ function normalizeStop(stop) {
     arrivalTime: String(stop?.arrivalTime || '').trim(),
     departureTime: String(stop?.departureTime || '').trim(),
     durationMinutes: Number(stop?.durationMinutes || 90),
-    category: String(stop?.category || 'sightseeing').trim(),
+    category: normalizedCategory,
     openingHours: String(stop?.openingHours || '').trim(),
-    estimatedCost: Number(stop?.estimatedCost || 0),
+    estimatedCost: Number.isFinite(parsedEstimatedCost) ? parsedEstimatedCost : 0,
     rating: Number(stop?.rating || 0),
     image: String(stop?.image || '').trim(),
     bestFor: Array.isArray(stop?.bestFor)
@@ -88,6 +200,158 @@ async function enrichStopCoordinates(destination, stop) {
     stop.location.lng = Number(coords.lon);
   }
   return stop;
+}
+
+function mapPlaceToDraftStop(place, input, index = 0) {
+  const name = String(place?.name || `Attraction ${index + 1}`).trim();
+  const description = String(place?.description || '').trim();
+  const category = normalizeCategory(place?.category || place?.kinds || 'sightseeing');
+  const lat = toSafeNumber(
+    place?.location?.coordinates?.latitude ?? place?.location?.lat ?? place?.lat,
+    0
+  );
+  const lng = toSafeNumber(
+    place?.location?.coordinates?.longitude ?? place?.location?.lng ?? place?.lon,
+    0
+  );
+
+  return normalizeStop({
+    name,
+    address: String(place?.location?.address || input.destination || '').trim(),
+    description: description || `Visit ${name} while exploring ${input.destination}.`,
+    arrivalTime: '',
+    departureTime: '',
+    durationMinutes: category === 'food' ? 75 : 90,
+    category,
+    openingHours: String(place?.openingHours || '').trim(),
+    estimatedCost: estimateStopCost(category, input.budget),
+    rating: Number(place?.rating || 0),
+    image: String(place?.imageUrl || place?.image || '').trim(),
+    bestFor: [],
+    crowdTip: '',
+    location: { lat, lng },
+  });
+}
+
+async function getSupplementalPlaces(destination, neededCount, excludedNames = new Set()) {
+  const candidates = [];
+  const seen = new Set(
+    [...excludedNames].map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
+  );
+
+  const pushCandidate = (item) => {
+    const name = String(item?.name || '').trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    candidates.push(item);
+  };
+
+  const popularPlaces = await placesService.getPopularAttractions(
+    destination,
+    Math.min(50, Math.max(neededCount * 3, 18))
+  );
+  popularPlaces.forEach(pushCandidate);
+
+  if (candidates.length < neededCount) {
+    const wikiByTitle = await wikipediaService.getPlacesByTitle(
+      `${destination} tourist attractions`,
+      Math.min(24, Math.max(neededCount * 2, 12))
+    );
+    wikiByTitle.forEach(pushCandidate);
+  }
+
+  if (candidates.length < neededCount) {
+    const center = await placesService.getCoordinatesForDestination(destination);
+    if (center?.lat && center?.lon) {
+      const nearbyWiki = await wikipediaService.getNearbyPlaces(
+        Number(center.lat),
+        Number(center.lon),
+        Math.min(24, Math.max(neededCount * 2, 12))
+      );
+      nearbyWiki.forEach(pushCandidate);
+    }
+  }
+
+  return candidates;
+}
+
+async function buildSupplementalDayDrafts(rawDays, input, requestedDays) {
+  const perDayStops = getStopsPerDayForPace(input.pace);
+  const parsedDays = Array.isArray(rawDays) ? rawDays : [];
+
+  const dayMap = new Map();
+  parsedDays.forEach((day, index) => {
+    const dayNumber = Number(day?.day || index + 1);
+    if (!Number.isFinite(dayNumber) || dayNumber < 1 || dayNumber > requestedDays) return;
+    if (!dayMap.has(dayNumber)) {
+      dayMap.set(dayNumber, day);
+    }
+  });
+
+  const usedNames = new Set();
+  dayMap.forEach((day) => {
+    const stops = Array.isArray(day?.stops) ? day.stops : [];
+    stops.forEach((stop) => {
+      const name = String(stop?.name || '').trim().toLowerCase();
+      if (name) usedNames.add(name);
+    });
+  });
+
+  const missingSlots = [];
+  for (let dayNumber = 1; dayNumber <= requestedDays; dayNumber += 1) {
+    const existing = dayMap.get(dayNumber);
+    const hasStops = Array.isArray(existing?.stops) && existing.stops.length > 0;
+    if (!hasStops) {
+      missingSlots.push(dayNumber);
+    }
+  }
+
+  if (!missingSlots.length) {
+    return Array.from({ length: requestedDays }).map((_, index) => dayMap.get(index + 1));
+  }
+
+  const supplementalPlaces = await getSupplementalPlaces(
+    input.destination,
+    missingSlots.length * perDayStops,
+    usedNames
+  );
+  const destinationCenter = await placesService.getCoordinatesForDestination(input.destination);
+  let pointer = 0;
+
+  missingSlots.forEach((dayNumber) => {
+    const draftedStops = [];
+    while (draftedStops.length < perDayStops && pointer < supplementalPlaces.length) {
+      const nextPlace = supplementalPlaces[pointer];
+      pointer += 1;
+      draftedStops.push(mapPlaceToDraftStop(nextPlace, input, draftedStops.length));
+    }
+
+    if (!draftedStops.length) {
+      const fallbackStart = toMinutes(input.dailyStartTime) || 540;
+      dayMap.set(dayNumber, {
+        day: dayNumber,
+        title: `Day ${dayNumber} Highlights`,
+        stops: defaultCityDayStops({
+          destination: input.destination,
+          dayNumber,
+          center: destinationCenter,
+          budget: input.budget,
+          startMinutes: fallbackStart,
+        }),
+      });
+      return;
+    }
+
+    dayMap.set(dayNumber, {
+      day: dayNumber,
+      title: `Day ${dayNumber} City Highlights`,
+      stops: draftedStops,
+    });
+  });
+
+  return Array.from({ length: requestedDays }).map((_, index) => dayMap.get(index + 1));
 }
 
 function buildPrompt(input) {
@@ -143,30 +407,37 @@ function validateRawItineraryShape(raw) {
     return 'Generated payload is not an object.';
   }
 
-  if (!Array.isArray(raw.days) || raw.days.length === 0) {
-    return 'Generated payload has no day plans.';
-  }
-
-  const hasAtLeastOneStop = raw.days.some(
-    (day) => Array.isArray(day?.stops) && day.stops.length > 0
-  );
-  if (!hasAtLeastOneStop) {
-    return 'Generated payload has no itinerary stops.';
+  if (raw.days != null && !Array.isArray(raw.days)) {
+    return 'Generated payload has invalid day plans.';
   }
 
   return true;
 }
 
 async function validateAndEnhanceItinerary(raw, input) {
-  const days = Array.isArray(raw?.days) ? raw.days : [];
   const requestedDays = resolveRequestedDays(input);
+  const draftedDays = await buildSupplementalDayDrafts(raw?.days, input, requestedDays);
+  const destinationCenter = await placesService.getCoordinatesForDestination(input.destination);
   const resultDays = [];
   let overallDistanceKm = 0;
   let overallTravelMinutes = 0;
   let overallEstimatedCost = 0;
 
-  for (const day of days) {
-    const stops = (Array.isArray(day?.stops) ? day.stops : []).map(normalizeStop);
+  for (let dayIndex = 0; dayIndex < requestedDays; dayIndex += 1) {
+    const dayNumber = dayIndex + 1;
+    const day = draftedDays?.[dayIndex] || {};
+    const fallbackStart = toMinutes(input.dailyStartTime) || 540;
+
+    const fallbackStops = defaultCityDayStops({
+      destination: input.destination,
+      dayNumber,
+      center: destinationCenter,
+      budget: input.budget,
+      startMinutes: fallbackStart,
+    });
+
+    const rawStops = Array.isArray(day?.stops) && day.stops.length ? day.stops : fallbackStops;
+    const stops = rawStops.map(normalizeStop);
     const enriched = [];
     let dayDistanceKm = 0;
     let dayTravelMinutes = 0;
@@ -174,8 +445,23 @@ async function validateAndEnhanceItinerary(raw, input) {
 
     for (const stop of stops) {
       const fixed = await enrichStopCoordinates(input.destination, stop);
+      fixed.category = normalizeCategory(fixed.category);
+      if (!Number.isFinite(Number(fixed.estimatedCost)) || Number(fixed.estimatedCost) <= 0) {
+        fixed.estimatedCost = estimateStopCost(fixed.category, input.budget);
+      }
       enriched.push(fixed);
       dayEstimatedCost += Number(fixed.estimatedCost || 0);
+    }
+
+    const hasAnyCoords = enriched.some((stop) => hasValidCoordinates(stop.location));
+    if (!hasAnyCoords && destinationCenter?.lat && destinationCenter?.lon) {
+      const anchorLat = Number(destinationCenter.lat);
+      const anchorLng = Number(destinationCenter.lon);
+      const delta = 0.01;
+      enriched.forEach((stop, index) => {
+        stop.location.lat = Number((anchorLat + delta * Math.cos(index + dayNumber)).toFixed(6));
+        stop.location.lng = Number((anchorLng + delta * Math.sin(index + dayNumber)).toFixed(6));
+      });
     }
 
     for (let i = 0; i < enriched.length; i += 1) {
@@ -216,8 +502,8 @@ async function validateAndEnhanceItinerary(raw, input) {
     }
 
     resultDays.push({
-      day: Number(day?.day || resultDays.length + 1),
-      title: String(day?.title || `Day ${resultDays.length + 1}`).trim(),
+      day: dayNumber,
+      title: String(day?.title || `Day ${dayNumber}`).trim(),
       summary: {
         distanceKm: Number(dayDistanceKm.toFixed(1)),
         movingTimeMinutes: dayTravelMinutes,
@@ -229,43 +515,6 @@ async function validateAndEnhanceItinerary(raw, input) {
     overallDistanceKm += dayDistanceKm;
     overallTravelMinutes += dayTravelMinutes;
     overallEstimatedCost += dayEstimatedCost;
-  }
-
-  // Keep result length aligned with requested trip duration.
-  if (resultDays.length > requestedDays) {
-    resultDays.length = requestedDays;
-  }
-
-  while (resultDays.length < requestedDays) {
-    const dayNumber = resultDays.length + 1;
-    const fallbackStart = toMinutes(input.dailyStartTime) ?? 540;
-    const fallbackEnd = fallbackStart + 150;
-    resultDays.push({
-      day: dayNumber,
-      title: `Day ${dayNumber}`,
-      summary: {
-        distanceKm: 0,
-        movingTimeMinutes: 0,
-        estimatedCost: 0,
-      },
-      stops: [
-        normalizeStop({
-          name: `${input.destination} local exploration`,
-          address: input.destination,
-          description: 'Flexible day reserved for local exploration and rest.',
-          arrivalTime: minutesToTime(fallbackStart),
-          departureTime: minutesToTime(fallbackEnd),
-          durationMinutes: 150,
-          category: 'sightseeing',
-          openingHours: '',
-          estimatedCost: 0,
-          rating: 0,
-          bestFor: ['Leisure'],
-          crowdTip: 'Keep this day flexible based on local conditions.',
-          location: { lat: 0, lng: 0 },
-        }),
-      ],
-    });
   }
 
   return {

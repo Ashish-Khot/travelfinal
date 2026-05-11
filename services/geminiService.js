@@ -210,7 +210,7 @@ class GeminiService {
       return this.aiService.callOpenRouterChat({
         prompt,
         temperature: Math.min(temperature, 0.15),
-        maxTokens: Math.max(1800, Math.min(maxOutputTokens, 4200)),
+        maxTokens: Math.max(2200, Math.min(maxOutputTokens, 8000)),
         responseFormat: 'json_object',
       });
     }
@@ -228,7 +228,7 @@ class GeminiService {
       return this.aiService.callGroqChat({
         prompt,
         temperature: Math.min(temperature, 0.35),
-        maxTokens: Math.max(1800, Math.min(maxOutputTokens, 4200)),
+        maxTokens: Math.max(2200, Math.min(maxOutputTokens, 7000)),
         responseFormat: 'json_object',
       });
     }
