@@ -36,6 +36,22 @@ function estimateTransit(distanceKm, mode = 'car') {
   return mins;
 }
 
+function resolveRequestedDays(input = {}) {
+  const explicit = Number(input.days);
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return Math.max(1, Math.round(explicit));
+  }
+
+  const start = new Date(input.startDate || '');
+  const end = new Date(input.endDate || '');
+  if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end >= start) {
+    const dayMs = 24 * 60 * 60 * 1000;
+    return Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+  }
+
+  return 3;
+}
+
 function normalizeStop(stop) {
   return {
     name: String(stop?.name || 'Unknown destination').trim(),
@@ -75,9 +91,12 @@ async function enrichStopCoordinates(destination, stop) {
 }
 
 function buildPrompt(input) {
+  const requestedDays = resolveRequestedDays(input);
   return `You are a strict travel planner. Create a realistic itinerary JSON for ${input.destination}.
 Rules:
 - Respect daily start time ${input.dailyStartTime} and end time ${input.dailyEndTime}
+- Generate exactly ${requestedDays} day plans in the "days" array (no fewer, no extra).
+- Day numbers must be sequential from 1 to ${requestedDays}.
 - Include realistic arrivalTime and departureTime for each stop in 24h HH:MM format.
 - Include 3-6 stops per day.
 - Include popular real places in ${input.destination}.
@@ -140,6 +159,7 @@ function validateRawItineraryShape(raw) {
 
 async function validateAndEnhanceItinerary(raw, input) {
   const days = Array.isArray(raw?.days) ? raw.days : [];
+  const requestedDays = resolveRequestedDays(input);
   const resultDays = [];
   let overallDistanceKm = 0;
   let overallTravelMinutes = 0;
@@ -211,9 +231,46 @@ async function validateAndEnhanceItinerary(raw, input) {
     overallEstimatedCost += dayEstimatedCost;
   }
 
+  // Keep result length aligned with requested trip duration.
+  if (resultDays.length > requestedDays) {
+    resultDays.length = requestedDays;
+  }
+
+  while (resultDays.length < requestedDays) {
+    const dayNumber = resultDays.length + 1;
+    const fallbackStart = toMinutes(input.dailyStartTime) ?? 540;
+    const fallbackEnd = fallbackStart + 150;
+    resultDays.push({
+      day: dayNumber,
+      title: `Day ${dayNumber}`,
+      summary: {
+        distanceKm: 0,
+        movingTimeMinutes: 0,
+        estimatedCost: 0,
+      },
+      stops: [
+        normalizeStop({
+          name: `${input.destination} local exploration`,
+          address: input.destination,
+          description: 'Flexible day reserved for local exploration and rest.',
+          arrivalTime: minutesToTime(fallbackStart),
+          departureTime: minutesToTime(fallbackEnd),
+          durationMinutes: 150,
+          category: 'sightseeing',
+          openingHours: '',
+          estimatedCost: 0,
+          rating: 0,
+          bestFor: ['Leisure'],
+          crowdTip: 'Keep this day flexible based on local conditions.',
+          location: { lat: 0, lng: 0 },
+        }),
+      ],
+    });
+  }
+
   return {
     destination: raw?.destination || input.destination,
-    summary: raw?.summary || `Personalized ${resultDays.length}-day plan for ${input.destination}`,
+    summary: raw?.summary || `Personalized ${requestedDays}-day plan for ${input.destination}`,
     meta: {
       overallDistanceKm: Number(overallDistanceKm.toFixed(1)),
       overallTravelMinutes,
@@ -226,10 +283,12 @@ async function validateAndEnhanceItinerary(raw, input) {
 
 async function generateItinerary(input) {
   const prompt = buildPrompt(input);
+  const requestedDays = resolveRequestedDays(input);
+  const dynamicMaxOutputTokens = Math.min(12000, Math.max(3200, requestedDays * 1400));
   try {
     const raw = await geminiService.generateStructuredJson({
       prompt,
-      maxOutputTokens: 3200,
+      maxOutputTokens: dynamicMaxOutputTokens,
       temperature: 0.35,
       validateJson: validateRawItineraryShape,
     });

@@ -48,6 +48,23 @@ const buildDefaultChecklist = (destination) => {
   ];
 };
 
+const resolveTripDays = (startDate, endDate, explicitDays) => {
+  const parsedExplicitDays = Number(explicitDays);
+  if (Number.isFinite(parsedExplicitDays) && parsedExplicitDays > 0) {
+    return Math.max(1, Math.round(parsedExplicitDays));
+  }
+
+  if (!startDate || !endDate) return 3;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return 3;
+  }
+
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+};
+
 const buildInput = (body = {}) => ({
   // Keep numeric handling safe against invalid text payloads.
   travelers: (() => {
@@ -65,6 +82,7 @@ const buildInput = (body = {}) => ({
   dailyEndTime: String(body.dailyEndTime || '21:00').trim(),
   specialRequirements: String(body.specialRequirements || '').trim(),
   currency: String(body.currency || 'INR').trim().toUpperCase(),
+  days: resolveTripDays(body.startDate, body.endDate, body.days),
 });
 
 const resolveUserInterests = async (userId) => {

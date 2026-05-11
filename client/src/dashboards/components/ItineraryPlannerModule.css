@@ -909,48 +909,174 @@ button:disabled {
   justify-items: end;
 }
 
-.placeGallery {
-  display: grid;
+.dayInsightHeader {
+  border: 1px solid #d4e2e8;
+  border-radius: 11px;
+  padding: 11px 12px;
+  background: #f8fcfd;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 10px;
 }
 
-.placeCard {
-  border: 1px solid #d4e1e7;
+.dayInsightHeader strong {
+  display: block;
+  font-size: 0.93rem;
+}
+
+.dayInsightHeader span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: #365a6b;
+}
+
+.dayInsightHeader small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--planner-muted);
+}
+
+.selectedActivityCard {
+  border: 1px solid #d4e2e8;
   border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
+  padding: 12px;
+  background: #ffffff;
   display: grid;
-  grid-template-columns: 118px 1fr;
+  gap: 9px;
 }
 
-.placeCard img {
-  width: 118px;
-  height: 100%;
-  min-height: 92px;
-  object-fit: cover;
+.selectedActivityTop strong {
+  display: block;
+  font-size: 0.94rem;
 }
 
-.placeCard div {
+.selectedActivityTop span {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.79rem;
+  color: #365b6c;
+}
+
+.selectedActivityStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.selectedActivityStats span,
+.selectedActivityFacts span {
+  border: 1px solid #cadde4;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  color: #365b6c;
+  background: #f4fafb;
+}
+
+.selectedActivityAddress,
+.selectedActivityDescription,
+.selectedActivityTip {
+  margin: 0;
+  font-size: 0.79rem;
+  color: #345666;
+}
+
+.selectedActivityFacts {
+  display: grid;
+  gap: 6px;
+}
+
+.selectedActivityTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.selectedActivityTags span {
+  border: 1px solid #d0dfe6;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.71rem;
+  color: #345666;
+  background: #fbfeff;
+}
+
+.dayActivityTimeline {
+  display: grid;
+  gap: 8px;
+}
+
+.activityTimelineRow {
+  border: 1px solid #d4e1e7;
+  border-radius: 10px;
+  background: #fff;
+  width: 100%;
   padding: 10px;
   display: grid;
-  gap: 3px;
+  grid-template-columns: 78px minmax(0, 1fr) auto;
+  gap: 10px;
+  text-align: left;
+  align-items: start;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.placeCard strong {
-  font-size: 0.86rem;
+.activityTimelineRow.active,
+.activityTimelineRow:hover {
+  border-color: rgba(15, 138, 134, 0.45);
+  background: #f0f9f9;
 }
 
-.placeCard span {
+.activityTimelineTime strong {
+  display: block;
+  font-size: 0.84rem;
+}
+
+.activityTimelineTime span {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.73rem;
+  color: var(--planner-muted);
+}
+
+.activityTimelineInfo strong {
+  display: block;
+  font-size: 0.84rem;
+}
+
+.activityTimelineInfo span {
+  display: block;
+  margin-top: 2px;
   font-size: 0.75rem;
-  color: #3a5f70;
+  color: #375c6d;
 }
 
-.placeCard small {
+.activityTimelineInfo small {
+  display: block;
+  margin-top: 3px;
   font-size: 0.71rem;
   color: var(--planner-muted);
 }
 
-.restaurantHint {
+.activityTimelineMeta {
+  text-align: right;
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.activityTimelineMeta strong {
+  font-size: 0.8rem;
+}
+
+.activityTimelineMeta span {
+  font-size: 0.72rem;
+  color: var(--planner-muted);
+}
+
+.activityHint {
   border: 1px dashed #c7d9e1;
   border-radius: 10px;
   padding: 9px 10px;
@@ -1120,13 +1246,13 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .placeCard {
+  .activityTimelineRow {
     grid-template-columns: 1fr;
   }
 
-  .placeCard img {
-    width: 100%;
-    height: 120px;
+  .activityTimelineMeta {
+    justify-items: start;
+    text-align: left;
   }
 
   .dayCardHead {

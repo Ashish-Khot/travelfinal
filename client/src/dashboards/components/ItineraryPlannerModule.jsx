@@ -4,8 +4,6 @@ import PlaceRoundedIcon from '@mui/icons-material/PlaceRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
 import RouteRoundedIcon from '@mui/icons-material/RouteRounded';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import HotelRoundedIcon from '@mui/icons-material/HotelRounded';
-import RestaurantRoundedIcon from '@mui/icons-material/RestaurantRounded';
 import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
 import ShareRoundedIcon from '@mui/icons-material/ShareRounded';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
@@ -22,7 +20,6 @@ import {
   saveGeneratedItinerary,
   updateSavedItinerary,
 } from '../../services/itineraryService';
-import { isUnsplashConfigured, searchUnsplashPlacePhotos } from '../../services/unsplashService';
 import './ItineraryPlannerModule.css';
 
 const plannerSteps = [
@@ -88,17 +85,6 @@ const paceToTripStyle = {
   balanced: 'balanced',
   fast: 'packed',
 };
-
-const fallbackGalleryImages = [
-  'https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1467269204594-9661b134dd2b?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1530789253388-582c481c54b0?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1501555088652-021faa106b9b?auto=format&fit=crop&w=800&q=80',
-  'https://images.unsplash.com/photo-1526772662000-3f88f10405ff?auto=format&fit=crop&w=800&q=80',
-];
 
 const trendingDestinations = ['Goa', 'Bali', 'Kyoto', 'Swiss Alps', 'Dubai', 'Singapore', 'Istanbul'];
 
@@ -258,6 +244,7 @@ const buildPayloadFromForm = (form) => {
     destination: String(form.destination || '').trim(),
     startDate: normalizeDate(form.startDate),
     endDate: normalizeDate(form.endDate),
+    days: calcTripDays(form.startDate, form.endDate),
     interests: Array.isArray(form.interests) ? form.interests.map((item) => item.toLowerCase()) : [],
     budget: form.budget,
     pace: tripStyleToPace[form.tripStyle] || 'balanced',
@@ -416,8 +403,6 @@ export default function ItineraryPlannerModule() {
   const [loadingProgress, setLoadingProgress] = useState(8);
   const [weather, setWeather] = useState(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
-  const [placePhotos, setPlacePhotos] = useState({});
-  const [photosLoading, setPhotosLoading] = useState(false);
   const [notification, setNotification] = useState({ message: '', severity: 'success' });
 
   const selectedDay = useMemo(() => {
@@ -430,15 +415,23 @@ export default function ItineraryPlannerModule() {
     return currentPlan.days.flatMap((day) => (Array.isArray(day.stops) ? day.stops : []));
   }, [currentPlan]);
 
-  const allStopsWithDay = useMemo(() => {
-    if (!currentPlan?.days?.length) return [];
-    return currentPlan.days.flatMap((day) =>
-      (Array.isArray(day.stops) ? day.stops : []).map((stop) => ({
-        ...stop,
-        dayLabel: day.label,
-      }))
-    );
-  }, [currentPlan]);
+  const selectedDayTimeline = useMemo(() => {
+    if (!Array.isArray(selectedDay?.stops) || !selectedDay.stops.length) return [];
+    return [...selectedDay.stops].sort((a, b) => {
+      const aStart = toTimeMinutes(a?.start);
+      const bStart = toTimeMinutes(b?.start);
+      if (aStart == null && bStart == null) return 0;
+      if (aStart == null) return 1;
+      if (bStart == null) return -1;
+      return aStart - bStart;
+    });
+  }, [selectedDay?.id, selectedDay?.stops]);
+
+  const activeDayStop = useMemo(() => {
+    if (!selectedDayTimeline.length) return null;
+    if (!selectedStop?.id) return selectedDayTimeline[0];
+    return selectedDayTimeline.find((stop) => stop.id === selectedStop.id) || selectedDayTimeline[0];
+  }, [selectedDayTimeline, selectedStop?.id]);
 
   const totalEstimated = useMemo(() => {
     return allStops.reduce((sum, stop) => sum + Number(stop.estimatedSpend || 0), 0);
@@ -466,18 +459,6 @@ export default function ItineraryPlannerModule() {
 
   const completedChecklist = currentPlan?.checklist?.filter((item) => item.done).length || 0;
   const checklistTotal = currentPlan?.checklist?.length || 0;
-
-  const placeHighlights = useMemo(() => {
-    const used = new Set();
-    return allStopsWithDay
-      .filter((stop) => {
-        const key = `${String(stop.name || '').trim().toLowerCase()}|${stop.dayLabel}`;
-        if (!stop.name || used.has(key)) return false;
-        used.add(key);
-        return true;
-      })
-      .slice(0, 12);
-  }, [allStopsWithDay]);
 
   const weatherTips = useMemo(() => weatherTipsFromCondition(weather?.condition), [weather?.condition]);
   const tripDays = calcTripDays(form.startDate, form.endDate);
@@ -665,48 +646,6 @@ export default function ItineraryPlannerModule() {
 
     fetchWeather();
   }, [selectedDay?.id, selectedDay?.stops, currentPlan?.days?.length]);
-
-  useEffect(() => {
-    if (!currentPlan || !allStops.length) {
-      setPlacePhotos({});
-      return;
-    }
-
-    if (!isUnsplashConfigured()) {
-      return;
-    }
-
-    let active = true;
-    const uniqueQueries = [...new Set(allStops.map((stop) => String(stop.name || '').trim()).filter(Boolean))].slice(0, 10);
-    if (!uniqueQueries.length) return;
-
-    const fetchPlacePhotos = async () => {
-      setPhotosLoading(true);
-      try {
-        const photoResults = await Promise.all(
-          uniqueQueries.map(async (query) => {
-            const photos = await searchUnsplashPlacePhotos(`${query} ${currentPlan.destination}`, 1);
-            return [query, photos[0]?.imageUrl || ''];
-          })
-        );
-        if (!active) return;
-        const photoMap = photoResults.reduce((acc, [query, imageUrl]) => {
-          if (imageUrl) acc[query] = imageUrl;
-          return acc;
-        }, {});
-        setPlacePhotos(photoMap);
-      } finally {
-        if (active) {
-          setPhotosLoading(false);
-        }
-      }
-    };
-
-    fetchPlacePhotos();
-    return () => {
-      active = false;
-    };
-  }, [allStops, currentPlan]);
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -1251,7 +1190,7 @@ export default function ItineraryPlannerModule() {
           <p className="plannerEyebrow">AI Planner</p>
           <h1>Plan Your Trip Step by Step</h1>
           <p>
-            Start with inputs only. After you generate, we will show itinerary, map, weather, and place images.
+            Start with inputs only. After you generate, we will show itinerary, map, weather, and activity insights.
           </p>
           {profileInfo?.name && (
             <p className="plannerProfileHint">
@@ -1605,7 +1544,7 @@ export default function ItineraryPlannerModule() {
                               >
                                 <div>
                                   <strong>{index + 1}. {stop.name}</strong>
-                                  <span>{stop.category} • {stop.segment}</span>
+                                  <span>{stop.category} | {stop.segment}</span>
                                   <small>{stop.address || 'Address unavailable'}</small>
                                 </div>
                                 <div className="stopTiming">
@@ -1625,32 +1564,105 @@ export default function ItineraryPlannerModule() {
 
             <article className="resultPanel">
               <header className="panelHeaderSplit">
-                <h3><HotelRoundedIcon /> Places & Images</h3>
-                {photosLoading && <span className="smallText">Loading images...</span>}
+                <h3><PlaceRoundedIcon /> Day Activity Insights</h3>
+                <span className="smallText">{selectedDay?.label || 'Select a day'}</span>
               </header>
-              {!placeHighlights.length ? (
-                <p className="emptyText">No place highlights available yet.</p>
+              {!selectedDay ? (
+                <p className="emptyText">Select a day to review activity insights.</p>
               ) : (
-                <div className="placeGallery">
-                  {placeHighlights.map((stop, index) => (
-                    <div key={`${stop.id}-${index}`} className="placeCard">
-                      <img
-                        src={stop.image || placePhotos[stop.name] || fallbackGalleryImages[index % fallbackGalleryImages.length]}
-                        alt={stop.name}
-                      />
-                      <div>
-                        <strong>{stop.name}</strong>
-                        <span>{stop.dayLabel}</span>
-                        <small>{stop.category}</small>
-                      </div>
+                <>
+                  <div className="dayInsightHeader">
+                    <div>
+                      <strong>{selectedDay.label}</strong>
+                      <span>{selectedDay.title}</span>
+                      <small>{selectedDay.date || 'Date not available'}</small>
                     </div>
-                  ))}
-                </div>
+                    <div className="dayMeta">
+                      <span>{selectedDay.summary.distanceKm} km</span>
+                      <span>{selectedDay.summary.movingTime}</span>
+                      <span>{selectedDay.summary.pace}</span>
+                    </div>
+                  </div>
+
+                  {activeDayStop ? (
+                    <div className="selectedActivityCard">
+                      <div className="selectedActivityTop">
+                        <strong>{activeDayStop.name}</strong>
+                        <span>{activeDayStop.category} | {activeDayStop.segment}</span>
+                      </div>
+                      <div className="selectedActivityStats">
+                        <span>{activeDayStop.start || '--'} to {activeDayStop.end || '--'}</span>
+                        <span>{activeDayStop.duration || 'Flexible duration'}</span>
+                        <span>{formatMoney(activeDayStop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</span>
+                      </div>
+                      {activeDayStop.address && (
+                        <p className="selectedActivityAddress">{activeDayStop.address}</p>
+                      )}
+                      {activeDayStop.description && (
+                        <p className="selectedActivityDescription">{activeDayStop.description}</p>
+                      )}
+                      <div className="selectedActivityFacts">
+                        {activeDayStop.openingHours && <span>Hours: {activeDayStop.openingHours}</span>}
+                        {Number.isFinite(activeDayStop.rating) && activeDayStop.rating > 0 && (
+                          <span>Rating: {activeDayStop.rating.toFixed(1)}</span>
+                        )}
+                        {activeDayStop.transportFromPrev?.mode && (
+                          <span>
+                            Reach: {activeDayStop.transportFromPrev.mode}
+                            {activeDayStop.transportFromPrev.time ? ` | ${activeDayStop.transportFromPrev.time}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      {Array.isArray(activeDayStop.bestFor) && activeDayStop.bestFor.length > 0 && (
+                        <div className="selectedActivityTags">
+                          {activeDayStop.bestFor.slice(0, 5).map((item) => (
+                            <span key={`${activeDayStop.id}-${item}`}>{item}</span>
+                          ))}
+                        </div>
+                      )}
+                      {activeDayStop.crowdTip && (
+                        <p className="selectedActivityTip">Tip: {activeDayStop.crowdTip}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="emptyText">No activities available for this day.</p>
+                  )}
+
+                  <div className="dayActivityTimeline">
+                    {selectedDayTimeline.map((stop, index) => (
+                      <button
+                        key={`${selectedDay.id}-${stop.id}`}
+                        type="button"
+                        className={`activityTimelineRow ${activeDayStop?.id === stop.id ? 'active' : ''}`}
+                        onClick={() => setSelectedStop(stop)}
+                      >
+                        <div className="activityTimelineTime">
+                          <strong>{stop.start || '--'}</strong>
+                          <span>{stop.end || '--'}</span>
+                        </div>
+                        <div className="activityTimelineInfo">
+                          <strong>{index + 1}. {stop.name}</strong>
+                          <span>{stop.category} | {stop.segment}</span>
+                          <small>{stop.address || 'Address unavailable'}</small>
+                        </div>
+                        <div className="activityTimelineMeta">
+                          <strong>{formatMoney(stop.estimatedSpend, currentPlan.tripRequest.currency || form.currency)}</strong>
+                          <span>{stop.duration || 'Flexible'}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
 
-              <div className="restaurantHint">
-                <RestaurantRoundedIcon fontSize="small" />
-                <span>Food and stay recommendations are embedded in day stops and budget estimation.</span>
+              {!selectedDay?.stops?.length && (
+                <p className="emptyText">No activities found for the selected day.</p>
+              )}
+              <div className="activityHint">
+                <AutoAwesomeRoundedIcon fontSize="small" />
+                <span>
+                  Select any stop from day-wise itinerary to inspect timing, logistics, cost, and quick travel tips.
+                </span>
               </div>
             </article>
           </section>
@@ -1718,3 +1730,4 @@ export default function ItineraryPlannerModule() {
     </div>
   );
 }
+
