@@ -593,6 +593,9 @@ button:disabled {
 .itineraryTimelinePanel {
   max-height: 78vh;
   overflow: hidden;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  min-height: 0;
 }
 
 .itineraryInsightPanel {
@@ -837,60 +840,75 @@ button:disabled {
   color: #345666;
 }
 
-.dayTimeline {
-  display: grid;
-  gap: 10px;
-  overflow-y: auto;
-  max-height: calc(78vh - 150px);
-  padding-right: 4px;
-}
-
 .timelineHelperText {
   margin-top: -2px;
 }
 
-.dayCard {
-  border: 1px solid #d5e2e8;
-  border-radius: 13px;
-  background: #fbfdfe;
+.dayTopTabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.dayTopTab {
+  border: 1px solid #cadde4;
+  border-radius: 11px;
+  background: #f8fcfd;
+  color: #2f5363;
+  min-width: 124px;
+  padding: 9px 11px;
+  text-align: left;
+  display: grid;
+  gap: 4px;
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.dayCard.selected {
-  border-color: rgba(15, 138, 134, 0.48);
-  background: #f3fbfb;
+.dayTopTab strong {
+  font-size: 0.84rem;
 }
 
-.dayCardHead {
-  width: 100%;
-  border: 0;
-  background: none;
+.dayTopTab small {
+  font-size: 0.72rem;
+  color: #567483;
+}
+
+.dayTopTab:hover {
+  border-color: #9fbecb;
+}
+
+.dayTopTab.active {
+  border-color: rgba(15, 138, 134, 0.55);
+  background: #e8f6f6;
+  color: #144f53;
+}
+
+.daySummaryCard {
+  border: 1px solid #d5e2e8;
+  border-radius: 13px;
+  background: #f8fcfd;
   padding: 12px;
   display: flex;
   justify-content: space-between;
   align-items: start;
   text-align: left;
   gap: 10px;
-  transition: background 0.2s ease;
 }
 
-.dayCardHead:hover {
-  background: #f3f8fa;
-}
-
-.dayCardHead strong {
+.daySummaryCard strong {
   display: block;
   font-size: 0.97rem;
 }
 
-.dayCardHead span {
+.daySummaryCard span {
   display: block;
   margin-top: 2px;
   font-size: 0.81rem;
   color: #355767;
 }
 
-.dayCardHead small {
+.daySummaryCard small {
   display: block;
   margin-top: 4px;
   font-size: 0.74rem;
@@ -912,11 +930,37 @@ button:disabled {
   background: #f4fafb;
 }
 
-.dayStops {
-  border-top: 1px solid #d5e2e8;
-  padding: 8px;
+.dayStopsList {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid #dce8ed;
+  padding-top: 10px;
+  padding-right: 4px;
+  scrollbar-width: thin;
+}
+
+.dayStopsList::-webkit-scrollbar,
+.dayTopTabs::-webkit-scrollbar {
+  height: 7px;
+  width: 7px;
+}
+
+.dayStopsList::-webkit-scrollbar-thumb,
+.dayTopTabs::-webkit-scrollbar-thumb {
+  background: #c3d4dc;
+  border-radius: 999px;
+}
+
+.dayStopsList::-webkit-scrollbar-track,
+.dayTopTabs::-webkit-scrollbar-track {
+  background: #edf4f7;
+  border-radius: 999px;
+}
+
+.dayStopsList .stopRow {
+  margin-right: 1px;
 }
 
 .stopRow {
@@ -993,6 +1037,33 @@ button:disabled {
   margin-top: 4px;
   font-size: 0.72rem;
   color: var(--planner-muted);
+}
+
+.insightTabsRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.insightTabButton {
+  border: 1px solid #c7d9e1;
+  border-radius: 999px;
+  background: #f7fcfd;
+  color: #355a6b;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 7px 11px;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.insightTabButton:hover {
+  border-color: #9fbac7;
+}
+
+.insightTabButton.active {
+  border-color: rgba(15, 138, 134, 0.56);
+  background: #e4f4f4;
+  color: #124f53;
 }
 
 .selectedActivityCard {
@@ -1388,7 +1459,7 @@ button:disabled {
     position: static;
   }
 
-  .dayTimeline,
+  .dayStopsList,
   .dayActivityTimeline {
     max-height: none;
     overflow: visible;
@@ -1473,7 +1544,7 @@ button:disabled {
     text-align: left;
   }
 
-  .dayCardHead {
+  .daySummaryCard {
     flex-direction: column;
   }
 }

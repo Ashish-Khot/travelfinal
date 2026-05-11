@@ -422,7 +422,7 @@ export default function ItineraryPlannerModule() {
   const [currentPlan, setCurrentPlan] = useState(null);
   const [selectedDayId, setSelectedDayId] = useState('');
   const [selectedStop, setSelectedStop] = useState(null);
-  const [openDayIds, setOpenDayIds] = useState([]);
+  const [insightTab, setInsightTab] = useState('details');
   const [currentStep, setCurrentStep] = useState(0);
   const [loadingInit, setLoadingInit] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -465,6 +465,10 @@ export default function ItineraryPlannerModule() {
     if (!selectedStop?.id) return selectedDayTimeline[0];
     return selectedDayTimeline.find((stop) => stop.id === selectedStop.id) || selectedDayTimeline[0];
   }, [selectedDayTimeline, selectedStop?.id]);
+
+  useEffect(() => {
+    setInsightTab('details');
+  }, [selectedDay?.id]);
 
   const tripDays = calcTripDays(form.startDate, form.endDate);
   const budgetLevel = currentPlan?.tripRequest?.budget || form.budget;
@@ -620,7 +624,6 @@ export default function ItineraryPlannerModule() {
       setSelectedSavedId(id);
       setSelectedDayId(nextPlan.days[0]?.id || '');
       setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
-      setOpenDayIds(nextPlan.days[0] ? [nextPlan.days[0].id] : []);
       hydrateFormFromTripRequest(nextPlan.tripRequest || {});
       notify('Saved itinerary loaded.');
     } catch (error) {
@@ -863,7 +866,6 @@ export default function ItineraryPlannerModule() {
       setSelectedSavedId('');
       setSelectedDayId(nextPlan.days[0]?.id || '');
       setSelectedStop(nextPlan.days[0]?.stops?.[0] || null);
-      setOpenDayIds(nextPlan.days[0] ? [nextPlan.days[0].id] : []);
       notify('Your itinerary is ready.');
     } catch (error) {
       notify(
@@ -953,7 +955,6 @@ export default function ItineraryPlannerModule() {
       setSelectedSavedId('');
       setSelectedDayId('');
       setSelectedStop(null);
-      setOpenDayIds([]);
       return;
     }
 
@@ -969,7 +970,6 @@ export default function ItineraryPlannerModule() {
         setSelectedSavedId('');
         setSelectedDayId('');
         setSelectedStop(null);
-        setOpenDayIds([]);
       }
     } catch (error) {
       notify(error?.response?.data?.message || 'Unable to delete itinerary.', 'error');
@@ -1030,20 +1030,14 @@ export default function ItineraryPlannerModule() {
   const selectDay = (dayId) => {
     const day = currentPlan?.days?.find((item) => item.id === dayId);
     if (!day) return;
-    setOpenDayIds([dayId]);
     setSelectedDayId(dayId);
     setSelectedStop(day?.stops?.[0] || null);
   };
 
   const selectStopInDay = (dayId, stop) => {
     if (!dayId) return;
-    setOpenDayIds([dayId]);
     setSelectedDayId(dayId);
     setSelectedStop(stop || null);
-  };
-
-  const toggleDayOpen = (dayId) => {
-    selectDay(dayId);
   };
 
   const renderStepContent = () => {
@@ -1460,7 +1454,6 @@ export default function ItineraryPlannerModule() {
                   setCurrentPlan(null);
                   setSelectedDayId('');
                   setSelectedStop(null);
-                  setOpenDayIds([]);
                 }}
               >
                 Plan New Trip
@@ -1655,62 +1648,76 @@ export default function ItineraryPlannerModule() {
                 <span className="smallText">{currentPlan.days.length} days</span>
               </header>
               <p className="emptyText timelineHelperText">
-                Click any day to expand it. Selected day and activity details update instantly on the right panel.
+                Pick a day from the top bar, then choose any activity to inspect details on the right panel.
               </p>
               {!currentPlan.days.length ? (
                 <p className="emptyText">No generated day plan available.</p>
               ) : (
-                <div className="dayTimeline">
-                  {currentPlan.days.map((day) => {
-                    const isOpen = openDayIds.includes(day.id);
-                    return (
-                      <div key={day.id} className={`dayCard ${selectedDay?.id === day.id ? 'selected' : ''}`}>
-                        <button
-                          type="button"
-                          className="dayCardHead"
-                          onClick={() => toggleDayOpen(day.id)}
-                          aria-expanded={isOpen}
-                          aria-controls={`day-stops-${day.id}`}
-                        >
-                          <div>
-                            <strong>{day.label}</strong>
-                            <span>{day.title}</span>
-                            <small>{day.date || 'Date not available'}</small>
-                          </div>
-                          <div className="dayMeta">
-                            <span>{day.summary.distanceKm} km</span>
-                            <span>{day.summary.movingTime}</span>
-                            <span>{day.summary.pace}</span>
-                          </div>
-                        </button>
-                        {isOpen && (
-                          <div className="dayStops" id={`day-stops-${day.id}`}>
-                            {day.stops.map((stop, index) => (
-                              <button
-                                type="button"
-                                key={stop.id}
-                                className={`stopRow ${selectedStop?.id === stop.id ? 'active' : ''}`}
-                                onClick={() => {
-                                  selectStopInDay(day.id, stop);
-                                }}
-                              >
-                                <div>
-                                  <strong>{index + 1}. {stop.name}</strong>
-                                  <span>{stop.category} | {stop.segment}</span>
-                                  <small>{stop.address || 'Address unavailable'}</small>
-                                </div>
-                                <div className="stopTiming">
-                                  <span>{stop.start || '--'} to {stop.end || '--'}</span>
-                                  <small>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'Start point'}</small>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                <>
+                  <div className="dayTopTabs" role="tablist" aria-label="Select itinerary day">
+                    {currentPlan.days.map((day) => (
+                      <button
+                        key={day.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedDay?.id === day.id}
+                        className={`dayTopTab ${selectedDay?.id === day.id ? 'active' : ''}`}
+                        onClick={() => {
+                          selectDay(day.id);
+                        }}
+                      >
+                        <strong>{day.label}</strong>
+                        <small>{day.date || 'Date TBA'}</small>
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedDay ? (
+                    <>
+                      <div className="daySummaryCard">
+                        <div>
+                          <strong>{selectedDay.label}</strong>
+                          <span>{selectedDay.title}</span>
+                          <small>{selectedDay.date || 'Date not available'}</small>
+                        </div>
+                        <div className="dayMeta">
+                          <span>{selectedDay.summary.distanceKm} km</span>
+                          <span>{selectedDay.summary.movingTime}</span>
+                          <span>{selectedDay.summary.pace}</span>
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {selectedDayTimeline.length ? (
+                        <div className="dayStopsList">
+                          {selectedDayTimeline.map((stop, index) => (
+                            <button
+                              type="button"
+                              key={`${selectedDay.id}-${stop.id}`}
+                              className={`stopRow ${activeDayStop?.id === stop.id ? 'active' : ''}`}
+                              onClick={() => {
+                                selectStopInDay(selectedDay.id, stop);
+                              }}
+                            >
+                              <div>
+                                <strong>{index + 1}. {stop.name}</strong>
+                                <span>{stop.category} | {stop.segment}</span>
+                                <small>{stop.address || 'Address unavailable'}</small>
+                              </div>
+                              <div className="stopTiming">
+                                <span>{stop.start || '--'} to {stop.end || '--'}</span>
+                                <small>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'Start point'}</small>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="emptyText">No activities available for this day yet.</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="emptyText">Select a day to view planned activities.</p>
+                  )}
+                </>
               )}
             </article>
 
@@ -1736,184 +1743,222 @@ export default function ItineraryPlannerModule() {
                     </div>
                   </div>
 
-                  {activeDayStop ? (
-                    <div className="selectedActivityCard">
-                      <div className="selectedActivityTop">
-                        <strong>{activeDayStop.name}</strong>
-                        <span>{activeDayStop.category} | {activeDayStop.segment}</span>
-                      </div>
-                      <div className="selectedActivityStats">
-                        <span>{activeDayStop.start || '--'} to {activeDayStop.end || '--'}</span>
-                        <span>{activeDayStop.duration || 'Flexible duration'}</span>
-                        <span>{activeDayStop.openingHours || 'Hours vary by day'}</span>
-                      </div>
-                      {activeDayStop.address && (
-                        <p className="selectedActivityAddress">{activeDayStop.address}</p>
-                      )}
-                      {activeDayStop.description && (
-                        <p className="selectedActivityDescription">{activeDayStop.description}</p>
-                      )}
-                      <div className="selectedActivityFacts">
-                        {activeDayStop.openingHours && <span>Hours: {activeDayStop.openingHours}</span>}
-                        {Number.isFinite(activeDayStop.rating) && activeDayStop.rating > 0 && (
-                          <span>Rating: {activeDayStop.rating.toFixed(1)}</span>
-                        )}
-                        {activeDayStop.transportFromPrev?.mode && (
-                          <span>
-                            Reach: {activeDayStop.transportFromPrev.mode}
-                            {activeDayStop.transportFromPrev.time ? ` | ${activeDayStop.transportFromPrev.time}` : ''}
-                          </span>
-                        )}
-                      </div>
-                      {Array.isArray(activeDayStop.bestFor) && activeDayStop.bestFor.length > 0 && (
-                        <div className="selectedActivityTags">
-                          {activeDayStop.bestFor.slice(0, 5).map((item) => (
-                            <span key={`${activeDayStop.id}-${item}`}>{item}</span>
-                          ))}
+                  <div className="insightTabsRow" role="tablist" aria-label="Day insight sections">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={insightTab === 'details'}
+                      className={`insightTabButton ${insightTab === 'details' ? 'active' : ''}`}
+                      onClick={() => setInsightTab('details')}
+                    >
+                      Activity
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={insightTab === 'youtube'}
+                      className={`insightTabButton ${insightTab === 'youtube' ? 'active' : ''}`}
+                      onClick={() => setInsightTab('youtube')}
+                    >
+                      YouTube
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={insightTab === 'timeline'}
+                      className={`insightTabButton ${insightTab === 'timeline' ? 'active' : ''}`}
+                      onClick={() => setInsightTab('timeline')}
+                    >
+                      Timeline ({selectedDayTimeline.length})
+                    </button>
+                  </div>
+
+                  {insightTab === 'details' && (
+                    <>
+                      {activeDayStop ? (
+                        <div className="selectedActivityCard">
+                          <div className="selectedActivityTop">
+                            <strong>{activeDayStop.name}</strong>
+                            <span>{activeDayStop.category} | {activeDayStop.segment}</span>
+                          </div>
+                          <div className="selectedActivityStats">
+                            <span>{activeDayStop.start || '--'} to {activeDayStop.end || '--'}</span>
+                            <span>{activeDayStop.duration || 'Flexible duration'}</span>
+                            <span>{activeDayStop.openingHours || 'Hours vary by day'}</span>
+                          </div>
+                          {activeDayStop.address && (
+                            <p className="selectedActivityAddress">{activeDayStop.address}</p>
+                          )}
+                          {activeDayStop.description && (
+                            <p className="selectedActivityDescription">{activeDayStop.description}</p>
+                          )}
+                          <div className="selectedActivityFacts">
+                            {activeDayStop.openingHours && <span>Hours: {activeDayStop.openingHours}</span>}
+                            {Number.isFinite(activeDayStop.rating) && activeDayStop.rating > 0 && (
+                              <span>Rating: {activeDayStop.rating.toFixed(1)}</span>
+                            )}
+                            {activeDayStop.transportFromPrev?.mode && (
+                              <span>
+                                Reach: {activeDayStop.transportFromPrev.mode}
+                                {activeDayStop.transportFromPrev.time ? ` | ${activeDayStop.transportFromPrev.time}` : ''}
+                              </span>
+                            )}
+                          </div>
+                          {Array.isArray(activeDayStop.bestFor) && activeDayStop.bestFor.length > 0 && (
+                            <div className="selectedActivityTags">
+                              {activeDayStop.bestFor.slice(0, 5).map((item) => (
+                                <span key={`${activeDayStop.id}-${item}`}>{item}</span>
+                              ))}
+                            </div>
+                          )}
+                          {activeDayStop.crowdTip && (
+                            <p className="selectedActivityTip">Tip: {activeDayStop.crowdTip}</p>
+                          )}
                         </div>
+                      ) : (
+                        <p className="emptyText">No activities available for this day.</p>
                       )}
-                      {activeDayStop.crowdTip && (
-                        <p className="selectedActivityTip">Tip: {activeDayStop.crowdTip}</p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="emptyText">No activities available for this day.</p>
+                    </>
                   )}
 
-                  <div className="socialContentBlock">
-                    <div className="panelHeaderSplit socialContentHeader">
-                      <h4>YouTube Travel Content</h4>
-                      <span className="smallText">
-                        {socialContent?.location?.label || currentPlan.destination}
-                      </span>
-                    </div>
-
-                    {socialLoading ? (
-                      <div className="inlineLoader">
-                        <CircularProgress size={18} />
-                        <span>Loading videos and shorts...</span>
+                  {insightTab === 'youtube' && (
+                    <div className="socialContentBlock">
+                      <div className="panelHeaderSplit socialContentHeader">
+                        <h4>YouTube Travel Content</h4>
+                        <span className="smallText">
+                          {socialContent?.location?.label || currentPlan.destination}
+                        </span>
                       </div>
-                    ) : socialError ? (
-                      <p className="emptyText">{socialError}</p>
-                    ) : (
-                      <>
-                        {socialVideos.length > 0 && (
-                          <div className="socialBlockSection">
-                            <p className="socialSectionLabel">Videos</p>
-                            <div className="socialVideoGrid">
-                              {socialVideos.slice(0, 4).map((video) => (
+
+                      {socialLoading ? (
+                        <div className="inlineLoader">
+                          <CircularProgress size={18} />
+                          <span>Loading videos and shorts...</span>
+                        </div>
+                      ) : socialError ? (
+                        <p className="emptyText">{socialError}</p>
+                      ) : (
+                        <>
+                          {socialVideos.length > 0 && (
+                            <div className="socialBlockSection">
+                              <p className="socialSectionLabel">Videos</p>
+                              <div className="socialVideoGrid">
+                                {socialVideos.slice(0, 4).map((video) => (
+                                  <a
+                                    key={`video-${video.id}`}
+                                    href={video.watchUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="socialVideoCard"
+                                  >
+                                    <div className="socialThumbWrap">
+                                      {video.thumbnail ? (
+                                        <img src={video.thumbnail} alt={video.title || 'YouTube video'} />
+                                      ) : (
+                                        <div className="socialThumbFallback">No preview</div>
+                                      )}
+                                    </div>
+                                    <div className="socialVideoMeta">
+                                      <strong>{video.title || 'Untitled video'}</strong>
+                                      <span>{video.channelTitle || 'YouTube channel'}</span>
+                                      <small>
+                                        {video.durationLabel || 'Watch'}
+                                        {' | '}
+                                        {formatPublishedLabel(video.publishedAt)}
+                                      </small>
+                                    </div>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {socialShorts.length > 0 && (
+                            <div className="socialBlockSection">
+                              <p className="socialSectionLabel">Shorts</p>
+                              <div className="socialVideoGrid">
+                                {socialShorts.slice(0, 4).map((video) => (
+                                  <a
+                                    key={`short-${video.id}`}
+                                    href={video.watchUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="socialVideoCard shortsCard"
+                                  >
+                                    <div className="socialThumbWrap">
+                                      {video.thumbnail ? (
+                                        <img src={video.thumbnail} alt={video.title || 'YouTube short'} />
+                                      ) : (
+                                        <div className="socialThumbFallback">No preview</div>
+                                      )}
+                                    </div>
+                                    <div className="socialVideoMeta">
+                                      <strong>{video.title || 'Untitled short'}</strong>
+                                      <span>{video.channelTitle || 'YouTube channel'}</span>
+                                      <small>
+                                        {video.durationLabel || 'Short'}
+                                        {' | '}
+                                        {formatPublishedLabel(video.publishedAt)}
+                                      </small>
+                                    </div>
+                                  </a>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {!socialVideos.length && !socialShorts.length && (
+                            <p className="emptyText">
+                              No direct video matches found yet. Use quick YouTube search links below.
+                            </p>
+                          )}
+
+                          {socialQuickLinks.length > 0 && (
+                            <div className="socialQuickLinks">
+                              {socialQuickLinks.map((item, index) => (
                                 <a
-                                  key={`video-${video.id}`}
-                                  href={video.watchUrl}
+                                  key={`${item.url}-${index}`}
+                                  href={item.url}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="socialVideoCard"
+                                  className="socialQuickLink"
                                 >
-                                  <div className="socialThumbWrap">
-                                    {video.thumbnail ? (
-                                      <img src={video.thumbnail} alt={video.title || 'YouTube video'} />
-                                    ) : (
-                                      <div className="socialThumbFallback">No preview</div>
-                                    )}
-                                  </div>
-                                  <div className="socialVideoMeta">
-                                    <strong>{video.title || 'Untitled video'}</strong>
-                                    <span>{video.channelTitle || 'YouTube channel'}</span>
-                                    <small>
-                                      {video.durationLabel || 'Watch'}
-                                      {' | '}
-                                      {formatPublishedLabel(video.publishedAt)}
-                                    </small>
-                                  </div>
+                                  {item.label}
                                 </a>
                               ))}
                             </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {insightTab === 'timeline' && (
+                    <div className="dayActivityTimeline">
+                      {selectedDayTimeline.map((stop, index) => (
+                        <button
+                          key={`${selectedDay.id}-${stop.id}`}
+                          type="button"
+                          className={`activityTimelineRow ${activeDayStop?.id === stop.id ? 'active' : ''}`}
+                          onClick={() => selectStopInDay(selectedDay.id, stop)}
+                        >
+                          <div className="activityTimelineTime">
+                            <strong>{stop.start || '--'}</strong>
+                            <span>{stop.end || '--'}</span>
                           </div>
-                        )}
-
-                        {socialShorts.length > 0 && (
-                          <div className="socialBlockSection">
-                            <p className="socialSectionLabel">Shorts</p>
-                            <div className="socialVideoGrid">
-                              {socialShorts.slice(0, 4).map((video) => (
-                                <a
-                                  key={`short-${video.id}`}
-                                  href={video.watchUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="socialVideoCard shortsCard"
-                                >
-                                  <div className="socialThumbWrap">
-                                    {video.thumbnail ? (
-                                      <img src={video.thumbnail} alt={video.title || 'YouTube short'} />
-                                    ) : (
-                                      <div className="socialThumbFallback">No preview</div>
-                                    )}
-                                  </div>
-                                  <div className="socialVideoMeta">
-                                    <strong>{video.title || 'Untitled short'}</strong>
-                                    <span>{video.channelTitle || 'YouTube channel'}</span>
-                                    <small>
-                                      {video.durationLabel || 'Short'}
-                                      {' | '}
-                                      {formatPublishedLabel(video.publishedAt)}
-                                    </small>
-                                  </div>
-                                </a>
-                              ))}
-                            </div>
+                          <div className="activityTimelineInfo">
+                            <strong>{index + 1}. {stop.name}</strong>
+                            <span>{stop.category} | {stop.segment}</span>
+                            <small>{stop.address || 'Address unavailable'}</small>
                           </div>
-                        )}
-
-                        {!socialVideos.length && !socialShorts.length && (
-                          <p className="emptyText">
-                            No direct video matches found yet. Use quick YouTube search links below.
-                          </p>
-                        )}
-
-                        {socialQuickLinks.length > 0 && (
-                          <div className="socialQuickLinks">
-                            {socialQuickLinks.map((item, index) => (
-                              <a
-                                key={`${item.url}-${index}`}
-                                href={item.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="socialQuickLink"
-                              >
-                                {item.label}
-                              </a>
-                            ))}
+                          <div className="activityTimelineMeta">
+                            <strong>{stop.duration || 'Flexible'}</strong>
+                            <span>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'No transfer'}</span>
                           </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div className="dayActivityTimeline">
-                    {selectedDayTimeline.map((stop, index) => (
-                      <button
-                        key={`${selectedDay.id}-${stop.id}`}
-                        type="button"
-                        className={`activityTimelineRow ${activeDayStop?.id === stop.id ? 'active' : ''}`}
-                        onClick={() => selectStopInDay(selectedDay.id, stop)}
-                      >
-                        <div className="activityTimelineTime">
-                          <strong>{stop.start || '--'}</strong>
-                          <span>{stop.end || '--'}</span>
-                        </div>
-                        <div className="activityTimelineInfo">
-                          <strong>{index + 1}. {stop.name}</strong>
-                          <span>{stop.category} | {stop.segment}</span>
-                          <small>{stop.address || 'Address unavailable'}</small>
-                        </div>
-                        <div className="activityTimelineMeta">
-                          <strong>{stop.duration || 'Flexible'}</strong>
-                          <span>{stop.transportFromPrev?.time ? `Travel ${stop.transportFromPrev.time}` : 'No transfer'}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
 
