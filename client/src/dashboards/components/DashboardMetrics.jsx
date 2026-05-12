@@ -1,6 +1,6 @@
 // DashboardMetrics.jsx
 // Dashboard metrics cards row for Tourist Dashboard with real data from API
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Grid from '@mui/material/Grid';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -48,8 +48,33 @@ const metricsConfig = [
   },
 ];
 
+const normalizeCountryKey = (value = '') =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+
+const extractCountryFromDestination = (destination = '') => {
+  const parts = String(destination || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  // A single-token destination like "Goa" is usually a city/state, not a country.
+  if (parts.length < 2) return '';
+
+  const candidate = parts[parts.length - 1];
+  if (!candidate || /\d/.test(candidate)) return '';
+  return candidate;
+};
+
+const resolveBookingCountry = (booking = {}) => {
+  const guideCountry = String(booking?.guideId?.country || '').trim();
+  if (guideCountry) return guideCountry;
+  return extractCountryFromDestination(booking?.destination || '');
+};
+
 export default function DashboardMetrics() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [metrics, setMetrics] = useState({
     upcomingTrips: 0,
     upcomingSubtext: 'this month',
@@ -62,22 +87,21 @@ export default function DashboardMetrics() {
   });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchMetrics();
-  }, []);
-
-  const fetchMetrics = async () => {
+  const fetchMetrics = useCallback(async (showLoader = true) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
 
-      if (!user?._id) {
-        setLoading(false);
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const touristId = String(user?._id || user?.userId || '').trim();
+
+      if (!touristId) {
+        if (showLoader) setLoading(false);
         return;
       }
 
       const [bookingsRes, userRes] = await Promise.all([
-        api.get(`/booking/tourist/${user._id}`).catch(() => ({ data: { bookings: [] } })),
-        api.get(`/tourist/${user._id}`).catch(() => ({ data: {} }))
+        api.get(`/booking/tourist/${touristId}`).catch(() => ({ data: { bookings: [] } })),
+        api.get(`/tourist/${touristId}`).catch(() => ({ data: {} })),
       ]);
 
       const bookingsData = bookingsRes?.data;
@@ -90,38 +114,51 @@ export default function DashboardMetrics() {
 
       // Count upcoming trips (confirmed bookings with future dates)
       const now = new Date();
-      const upcomingBookings = bookings.filter(b => 
+      const upcomingBookings = bookings.filter((b) =>
         b.status === 'confirmed' && new Date(b.startDateTime) > now
       );
-      const thisMonthBookings = upcomingBookings.filter(b => {
+      const thisMonthBookings = upcomingBookings.filter((b) => {
         const bookingDate = new Date(b.startDateTime);
-        return bookingDate.getMonth() === now.getMonth() && 
+        return bookingDate.getMonth() === now.getMonth() &&
                bookingDate.getFullYear() === now.getFullYear();
       });
 
-      // Get unique countries from completed tours
-      const completedBookings = bookings.filter(b => b.status === 'completed');
-      const uniqueCountries = new Set(
-        completedBookings.map(b => b.destination?.split(',').pop()?.trim()).filter(Boolean)
-      ).size || completedBookings.length;
+      // Get unique countries from completed tours using reliable country sources.
+      const completedBookings = bookings.filter((b) => b.status === 'completed');
+      const visitedCountryKeys = new Set();
+      completedBookings.forEach((booking) => {
+        const country = resolveBookingCountry(booking);
+        const key = normalizeCountryKey(country);
+        if (key) visitedCountryKeys.add(key);
+      });
+      const countriesVisited = visitedCountryKeys.size;
 
       // Get saved destinations (from user profile or from a favorites endpoint)
-      const savedDests = userData.savedDestinations || userData.favorites || [];
-      const newSavedThisMonth = savedDests.filter(d => {
+      const savedDests = Array.isArray(userData.savedDestinations)
+        ? userData.savedDestinations
+        : Array.isArray(userData.favorites)
+          ? userData.favorites
+          : [];
+      const newSavedThisMonth = savedDests.filter((d) => {
         if (!d.savedAt) return false;
         const savedDate = new Date(d.savedAt);
-        return savedDate.getMonth() === now.getMonth() && 
+        return savedDate.getMonth() === now.getMonth() &&
                savedDate.getFullYear() === now.getFullYear();
       }).length;
 
       // Get reward points
-      const rewardPoints = userData.rewardPoints || 0;
+      const rewardPoints = Number(userData.rewardPoints || 0);
 
       setMetrics({
         upcomingTrips: upcomingBookings.length,
         upcomingSubtext: `+${thisMonthBookings.length} this month`,
-        countriesVisited: uniqueCountries,
-        countriesSubtext: completedBookings.length > 0 ? `${completedBookings.length} completed tours` : 'first trip',
+        countriesVisited,
+        countriesSubtext:
+          completedBookings.length === 0
+            ? 'first trip'
+            : countriesVisited > 0
+              ? `${countriesVisited} unique countries`
+              : 'location data incomplete',
         savedDestinations: savedDests.length,
         savedSubtext: `${newSavedThisMonth} new`,
         rewardPoints: rewardPoints.toLocaleString(),
@@ -130,11 +167,35 @@ export default function DashboardMetrics() {
     } catch (err) {
       console.error('Error fetching metrics:', err);
       // Fallback to default values
-      setMetrics(m => m);
+      setMetrics((m) => m);
     } finally {
-      setLoading(false);
+      if (showLoader) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchMetrics(true);
+
+    const intervalId = setInterval(() => {
+      fetchMetrics(false);
+    }, 60000);
+
+    const handleWindowFocus = () => fetchMetrics(false);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMetrics(false);
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [fetchMetrics]);
 
   if (loading) {
     return (
