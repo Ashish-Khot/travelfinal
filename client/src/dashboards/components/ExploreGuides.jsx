@@ -19,7 +19,7 @@ import GuidesHeroSection from './GuidesHeroSection';
 import GuideFiltersBar from './GuideFiltersBar';
 import GuideCard from './GuideCard';
 import BookGuideDialog from './BookGuideDialog';
-import GuideReviewsDialog from './GuideReviewsDialog';
+import GuideDetailModal from './GuideDetailModal';
 
 import api from '../../api';
 import dayjs from 'dayjs';
@@ -94,7 +94,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
               return acc;
             }, {});
         }
-      } catch (e) {
+      } catch {
         eligibleReviewByGuideId = {};
       }
 
@@ -124,7 +124,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
                 averageRating = parseFloat((totalRating / reviews.length).toFixed(1));
               }
-            } catch (e) {
+            } catch {
               reviews = [];
             }
 
@@ -137,9 +137,11 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 daysSinceBooking = Math.floor(diffTime / (1000 * 60 * 60 * 24));
               }
 
-              // Calculate success rate
+              // Total tours guide has handled (current backend provides booking ids only)
               const completedBookings = g.bookings?.length || 0;
-              const successRate = completedBookings > 0 ? 95 + Math.floor(Math.random() * 5) : 0;
+              const guestSatisfaction = reviews.length > 0
+                ? Math.round((averageRating / 5) * 100)
+                : null;
 
               // Format languages properly
               const languageList = Array.isArray(g.languages)
@@ -190,7 +192,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 verifiedPayment: g.verifiedPayment || false,
                 lastBookingDate: g.lastBookingDate,
                 daysSinceBooking: daysSinceBooking,
-                successRate: successRate,
+                guestSatisfaction,
               };
           })
       );
@@ -298,7 +300,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
     setDialogOpen(true);
   };
 
-  const handleViewReviews = (guide) => {
+  const handleViewProfile = (guide) => {
     setDetailModalGuide(guide);
     setDetailModalOpen(true);
   };
@@ -491,7 +493,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 <GuideCard
                   guide={guide}
                   onBook={handleBook}
-                  onViewReviews={handleViewReviews}
+                  onViewReviews={handleViewProfile}
                   isFavorite={isFavorite(guide)}
                   onFavoriteToggle={toggleFavorite}
                 />
@@ -542,10 +544,14 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
         }}
       />
 
-      <GuideReviewsDialog
+      <GuideDetailModal
         open={detailModalOpen}
         guide={detailModalGuide}
         onClose={handleDetailModalClose}
+        onBook={handleBook}
+        onReviewSubmitted={fetchGuides}
+        isFavorite={detailModalGuide ? isFavorite(detailModalGuide) : false}
+        onFavoriteToggle={toggleFavorite}
       />
 
       {/* Snackbar */}

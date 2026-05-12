@@ -305,7 +305,7 @@ export default function BookGuideDialog({ open, guide, onClose, onConfirm, onVie
                       },
                     }}
                   >
-                    View Reviews
+                    View Full Profile
                   </Button>
                 </Box>
               </CardContent>
