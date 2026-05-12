@@ -17,10 +17,12 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { motion } from 'framer-motion';
+import { buildMediaUrl } from '../../utils/media';
 
 export default function GuideCard({ guide, onBook, onViewReviews, isFavorite, onFavoriteToggle }) {
   const [liked, setLiked] = React.useState(isFavorite);
   const [videoOpen, setVideoOpen] = useState(false);
+  const tourMedia = Array.isArray(guide.tourMedia) ? guide.tourMedia : [];
 
   const handleFavorite = (e) => {
     e.stopPropagation();
@@ -40,6 +42,13 @@ export default function GuideCard({ guide, onBook, onViewReviews, isFavorite, on
   };
 
   const latestReview = guide.latestReview;
+
+  const getMediaKind = (item) => {
+    const explicitType = item?.mediaType;
+    if (explicitType === 'video' || explicitType === 'image') return explicitType;
+    const source = String(item?.url || '').toLowerCase();
+    return /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(source) ? 'video' : 'image';
+  };
 
   // Format response time
   const formatResponseTime = (hours) => {
@@ -319,6 +328,64 @@ export default function GuideCard({ guide, onBook, onViewReviews, isFavorite, on
             </Typography>
           )}
 
+          {tourMedia.length > 0 && (
+            <Box sx={{ mt: 0.5 }}>
+              <Typography sx={{ fontSize: '0.72rem', color: '#475569', fontWeight: 700, mb: 0.5 }}>
+                Completed tour media
+              </Typography>
+              <Stack direction="row" gap={0.5} sx={{ flexWrap: 'wrap' }} spacing={0}>
+                {tourMedia.slice(0, 3).map((item, idx) => {
+                  const kind = getMediaKind(item);
+                  const src = buildMediaUrl(item?.url || '');
+                  return (
+                    <Box
+                      key={`${src}-${idx}`}
+                      sx={{
+                        width: 58,
+                        height: 48,
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        border: '1px solid #dbe3ef',
+                        bgcolor: '#eef2ff',
+                      }}
+                    >
+                      {kind === 'video' ? (
+                        <Box
+                          component="video"
+                          src={src}
+                          muted
+                          controls
+                          preload="metadata"
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      ) : (
+                        <Box
+                          component="img"
+                          src={src}
+                          alt="Completed tour media"
+                          sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      )}
+                    </Box>
+                  );
+                })}
+                {tourMedia.length > 3 && (
+                  <Chip
+                    label={`+${tourMedia.length - 3} more`}
+                    size="small"
+                    sx={{
+                      height: 24,
+                      fontSize: '0.68rem',
+                      bgcolor: '#f8fafc',
+                      border: '1px solid #dbe3ef',
+                      color: '#334155',
+                    }}
+                  />
+                )}
+              </Stack>
+            </Box>
+          )}
+
           {/* Tour Types / Expertise */}
           {guide.tourTypes && guide.tourTypes.length > 0 && (
             <Stack direction="row" gap={0.4} sx={{ flexWrap: 'wrap' }} spacing={0}>
@@ -525,7 +592,7 @@ export default function GuideCard({ guide, onBook, onViewReviews, isFavorite, on
         >
           <Box
             component="video"
-            src={guide.guideVideo}
+            src={buildMediaUrl(guide.guideVideo)}
             controls
             autoPlay
             sx={{ width: '100%', display: 'block' }}

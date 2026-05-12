@@ -474,9 +474,9 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
-import Stack from '@mui/material/Stack';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import { buildMediaUrl } from '../utils/media';
 
 const drawerWidth = 272;
 const collapsedDrawerWidth = 72;
@@ -1558,10 +1558,14 @@ export default function GuideDashboard() {
       avatar: account?.avatar || guideProfile?.avatar || user?.avatar || '',
     });
     const [avatarPreview, setAvatarPreview] = useState(user?.avatar || '');
+    const [tourMedia, setTourMedia] = useState(Array.isArray(guideProfile?.tourMedia) ? guideProfile.tourMedia : []);
     const [uploading, setUploading] = useState(false);
+    const [mediaUploading, setMediaUploading] = useState(false);
+    const [mediaDeletingId, setMediaDeletingId] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
     const fileInputRef = React.useRef();
+    const mediaInputRef = React.useRef();
 
     useEffect(() => {
       // Prefer avatar from user, fallback to guideProfile.userId.avatar if available
@@ -1587,6 +1591,7 @@ export default function GuideDashboard() {
         avatar,
       });
       setAvatarPreview(avatar);
+      setTourMedia(Array.isArray(guideProfile?.tourMedia) ? guideProfile.tourMedia : []);
     }, [user, guideProfile]);
 
     const handleChange = e => {
@@ -1622,6 +1627,62 @@ export default function GuideDashboard() {
         setErrorMsg('Failed to upload avatar');
       } finally {
         setUploading(false);
+      }
+    };
+
+    const mediaUrl = (value) => buildMediaUrl(value);
+
+    const getMediaKind = (item) => {
+      const explicitType = item?.mediaType;
+      if (explicitType === 'video' || explicitType === 'image') return explicitType;
+      const source = String(item?.url || '').toLowerCase();
+      return /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(source) ? 'video' : 'image';
+    };
+
+    const handleTourMediaUpload = async (event) => {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+      setMediaUploading(true);
+      setErrorMsg('');
+      setSuccessMsg('');
+      try {
+        const formData = new FormData();
+        files.forEach((file) => formData.append('media', file));
+        const response = await api.post('/guide/profile/media', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        if (response.data?.guide) {
+          setGuideProfile(response.data.guide);
+          setTourMedia(Array.isArray(response.data.guide.tourMedia) ? response.data.guide.tourMedia : []);
+        }
+        setSuccessMsg('Tour media uploaded successfully.');
+      } catch (err) {
+        console.error('Guide media upload error:', err.response?.data || err.message);
+        setErrorMsg(err.response?.data?.message || 'Failed to upload tour media');
+      } finally {
+        setMediaUploading(false);
+        if (mediaInputRef.current) mediaInputRef.current.value = '';
+      }
+    };
+
+    const handleDeleteTourMedia = async (mediaId) => {
+      if (!mediaId) return;
+      setMediaDeletingId(mediaId);
+      setErrorMsg('');
+      setSuccessMsg('');
+      try {
+        const response = await api.delete(`/guide/profile/media/${mediaId}`);
+        if (response.data?.guide) {
+          setGuideProfile(response.data.guide);
+          setTourMedia(Array.isArray(response.data.guide.tourMedia) ? response.data.guide.tourMedia : []);
+        }
+        setSuccessMsg('Tour media removed.');
+      } catch (err) {
+        console.error('Guide media delete error:', err.response?.data || err.message);
+        setErrorMsg(err.response?.data?.message || 'Failed to remove media');
+      } finally {
+        setMediaDeletingId('');
       }
     };
 
@@ -1673,36 +1734,65 @@ export default function GuideDashboard() {
       }
     };
 
+    const inputSx = {
+      '& .MuiOutlinedInput-root': {
+        bgcolor: '#f8f8f2',
+      },
+    };
+    const fieldLabelSx = { fontWeight: 700, mb: 0.75, color: '#1f2937' };
+    const avatarSrc = avatarPreview
+      ? (avatarPreview.startsWith('http') ? avatarPreview : `http://localhost:3001${avatarPreview}`)
+      : '/avatar.png';
+
     return (
-      <Box sx={{ maxWidth: 600, mx: 'auto', bgcolor: '#fafaf6', p: 4, borderRadius: 4, boxShadow: 2 }}>
-        <Typography variant="h4" fontWeight={700} mb={1}>My Profile</Typography>
-        <Typography variant="subtitle1" color="text.secondary" mb={3}>
-          Manage your account settings and preferences
-        </Typography>
-        {successMsg && (
-          <Box mb={2}>
-            <span style={{ color: 'green', fontWeight: 600 }}>{successMsg}</span>
-          </Box>
-        )}
-        {errorMsg && (
-          <Box mb={2}>
-            <span style={{ color: 'red', fontWeight: 600 }}>{errorMsg}</span>
-          </Box>
-        )}
-        <form onSubmit={handleSubmit}>
-          <Box mb={2} display="flex" alignItems="center" gap={2}>
-            <img
-              src={avatarPreview ? (avatarPreview.startsWith('http') ? avatarPreview : `http://localhost:3001${avatarPreview}`) : '/avatar.png'}
+      <Box
+        sx={{
+          width: '100%',
+          maxWidth: 1240,
+          mx: 'auto',
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '320px minmax(0, 1fr)' },
+          gap: { xs: 2.5, md: 3 },
+          alignItems: 'start',
+        }}
+      >
+        <Box
+          sx={{
+            bgcolor: '#fafaf6',
+            p: { xs: 2.5, md: 3 },
+            borderRadius: 4,
+            boxShadow: 2,
+            border: '1px solid #e7e5db',
+            position: { lg: 'sticky' },
+            top: { lg: 96 },
+          }}
+        >
+          <Typography variant="h5" fontWeight={800} mb={0.75}>My Profile</Typography>
+          <Typography variant="body2" color="text.secondary" mb={2.5}>
+            Manage your account settings and pricing details.
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.6 }}>
+            <Box
+              component="img"
+              src={avatarSrc}
               alt="Avatar"
-              style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '2px solid #ccc' }}
+              sx={{
+                width: 112,
+                height: 112,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '3px solid #dbe3ef',
+                boxShadow: '0 10px 24px rgba(15, 23, 42, 0.12)',
+              }}
             />
             <Button
               variant="outlined"
               component="label"
               disabled={uploading}
-              sx={{ height: 40 }}
+              sx={{ width: '100%', textTransform: 'none', fontWeight: 700 }}
             >
-              {uploading ? 'Uploading...' : 'Change Photo'}
+              {uploading ? 'Uploading...' : 'Change photo'}
               <input
                 type="file"
                 accept="image/*"
@@ -1712,123 +1802,293 @@ export default function GuideDashboard() {
               />
             </Button>
           </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><ProfileIcon sx={{ mr: 1, verticalAlign: 'middle' }} /> Full Name</Typography>
-            <TextField fullWidth name="name" value={form.name} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><ProfileIcon sx={{ mr: 1, verticalAlign: 'middle' }} /> Email Address</Typography>
-            <TextField fullWidth name="email" value={form.email} disabled sx={{ bgcolor: '#f8f8f2' }} />
-            <Typography variant="caption" color="text.secondary">Email cannot be changed</Typography>
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><span role="img" aria-label="phone">📞</span> Phone Number</Typography>
-            <TextField fullWidth name="phone" value={form.phone} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}>Country</Typography>
-            <TextField fullWidth name="country" value={form.country} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}>Interests</Typography>
-            <TextField fullWidth name="interests" value={form.interests} onChange={handleChange} sx={{ bgcolor: '#f8f8f2' }} />
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><span role="img" aria-label="language">🌐</span> Known Languages</Typography>
-            <TextField
-              fullWidth
-              name="language"
-              value={form.language}
-              onChange={handleChange}
-              placeholder="Hindi, English, Spanish"
-              helperText="Separate multiple languages with commas."
-              sx={{ bgcolor: '#f8f8f2' }}
-            />
-          </Box>
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}>Experience (years)</Typography>
-            <TextField
-              fullWidth
-              type="number"
-              name="experienceYears"
-              value={form.experienceYears}
-              onChange={handleChange}
-              inputProps={{ min: 0, step: 1 }}
-              sx={{ bgcolor: '#f8f8f2' }}
-            />
-          </Box>
 
-          {/* PRICING SETTINGS */}
-          <Box sx={{ bgcolor: '#f3f7fb', p: 3, borderRadius: 2, border: '2px solid #e0e7ff', mb: 2 }}>
-            <Typography fontWeight={700} mb={2.5} sx={{ fontSize: '1.1rem', color: '#1f2937' }}>💰 Pricing Settings</Typography>
-            
-            {/* Price Input */}
-            <Box mb={2}>
-              <Typography fontWeight={600} mb={0.8} sx={{ fontSize: '0.95rem' }}>Set Your Rate</Typography>
-              <Stack direction="row" spacing={1.5}>
+          <Box sx={{ mt: 2.5, display: 'grid', gap: 1.25 }}>
+            <Box sx={{ p: 1.2, borderRadius: 1.6, bgcolor: '#fff', border: '1px solid #e3e8ef' }}>
+              <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 700 }}>Email</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b', wordBreak: 'break-word' }}>
+                {form.email || 'Not provided'}
+              </Typography>
+            </Box>
+            <Box sx={{ p: 1.2, borderRadius: 1.6, bgcolor: '#fff', border: '1px solid #e3e8ef' }}>
+              <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 700 }}>Experience</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                {Number(form.experienceYears || 0)} years
+              </Typography>
+            </Box>
+            <Box sx={{ p: 1.2, borderRadius: 1.6, bgcolor: '#fff', border: '1px solid #e3e8ef' }}>
+              <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 700 }}>Current Rate</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: '#1e293b' }}>
+                INR {Number(form.price || 0)} / {form.rateType === 'hourly' ? 'hour' : 'day'}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+
+        <Box
+          sx={{
+            bgcolor: '#fafaf6',
+            p: { xs: 2.5, md: 3.25 },
+            borderRadius: 4,
+            boxShadow: 2,
+            border: '1px solid #e7e5db',
+          }}
+        >
+          {successMsg && (
+            <Box
+              sx={{
+                mb: 2,
+                p: 1.2,
+                borderRadius: 1.6,
+                border: '1px solid #86efac',
+                bgcolor: '#f0fdf4',
+                color: '#166534',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+              }}
+            >
+              {successMsg}
+            </Box>
+          )}
+          {errorMsg && (
+            <Box
+              sx={{
+                mb: 2,
+                p: 1.2,
+                borderRadius: 1.6,
+                border: '1px solid #fca5a5',
+                bgcolor: '#fef2f2',
+                color: '#b91c1c',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+              }}
+            >
+              {errorMsg}
+            </Box>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 2,
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+              }}
+            >
+              <Box>
+                <Typography sx={fieldLabelSx}><ProfileIcon sx={{ mr: 0.8, verticalAlign: 'middle', fontSize: '1rem' }} /> Full Name</Typography>
+                <TextField fullWidth name="name" value={form.name} onChange={handleChange} sx={inputSx} />
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Email Address</Typography>
+                <TextField fullWidth name="email" value={form.email} disabled sx={inputSx} />
+                <Typography variant="caption" color="text.secondary">Email cannot be changed</Typography>
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Phone Number</Typography>
+                <TextField fullWidth name="phone" value={form.phone} onChange={handleChange} sx={inputSx} />
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Country</Typography>
+                <TextField fullWidth name="country" value={form.country} onChange={handleChange} sx={inputSx} />
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Interests</Typography>
+                <TextField fullWidth name="interests" value={form.interests} onChange={handleChange} sx={inputSx} />
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Known Languages</Typography>
+                <TextField
+                  fullWidth
+                  name="language"
+                  value={form.language}
+                  onChange={handleChange}
+                  placeholder="Hindi, English, Spanish"
+                  helperText="Separate multiple languages with commas."
+                  sx={inputSx}
+                />
+              </Box>
+              <Box>
+                <Typography sx={fieldLabelSx}>Experience (years)</Typography>
+                <TextField
+                  fullWidth
+                  type="number"
+                  name="experienceYears"
+                  value={form.experienceYears}
+                  onChange={handleChange}
+                  inputProps={{ min: 0, step: 1 }}
+                  sx={inputSx}
+                />
+              </Box>
+              <Box sx={{ gridColumn: { xs: '1 / -1', md: '1 / -1' } }}>
+                <Typography sx={fieldLabelSx}>Bio</Typography>
+                <TextField fullWidth name="bio" value={form.bio} onChange={handleChange} multiline rows={3} sx={inputSx} />
+              </Box>
+            </Box>
+
+            <Box sx={{ bgcolor: '#f3f7fb', p: { xs: 2, md: 2.5 }, borderRadius: 2, border: '1px solid #d9e4f5', mt: 2.4 }}>
+              <Typography fontWeight={800} mb={1.7} sx={{ fontSize: '1rem', color: '#1f2937' }}>
+                Pricing Settings
+              </Typography>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 1.5,
+                  gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) 120px 120px' },
+                }}
+              >
                 <TextField
                   label="Amount"
                   name="price"
                   value={form.price}
                   onChange={handleChange}
                   type="number"
-                  inputProps={{ step: "1", min: "0" }}
-                  sx={{ flex: 1, bgcolor: '#fff' }}
+                  inputProps={{ step: 1, min: 0 }}
+                  sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
                   placeholder="e.g., 2500"
                 />
-                
-                {/* Currency Selector */}
                 <TextField
                   select
                   label="Currency"
                   name="currency"
                   value="INR"
                   disabled
-                  sx={{ width: 110, bgcolor: '#fff' }}
+                  sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
                 >
-                  <MenuItem value="INR">₹ INR</MenuItem>
+                  <MenuItem value="INR">INR</MenuItem>
                 </TextField>
-
-                {/* Rate Type Selector */}
                 <TextField
                   select
                   label="Rate Type"
                   name="rateType"
                   value={form.rateType}
                   onChange={handleChange}
-                  sx={{ width: 110, bgcolor: '#fff' }}
+                  sx={{ '& .MuiOutlinedInput-root': { bgcolor: '#fff' } }}
                 >
-                  <MenuItem value="hourly">/Hour</MenuItem>
-                  <MenuItem value="daily">/Day</MenuItem>
+                  <MenuItem value="hourly">Hour</MenuItem>
+                  <MenuItem value="daily">Day</MenuItem>
                 </TextField>
-              </Stack>
+              </Box>
+
+              <Box sx={{ bgcolor: '#e8f5e9', p: 1.35, borderRadius: 1.5, border: '1px solid #81c784', mt: 1.5 }}>
+                <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 700 }}>
+                  Your rate: INR {Number(form.price || 0)} per {form.rateType === 'hourly' ? 'hour' : 'day'}
+                </Typography>
+              </Box>
             </Box>
 
-            {/* Rate Preview */}
-            <Box sx={{ bgcolor: '#e8f5e9', p: 1.5, borderRadius: 1.5, border: '1px solid #81c784', mb: 2 }}>
-              <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 600 }}>
-                📊 Your Rate: <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1b5e20' }}>
-                  ₹{form.price}
-                </span> per {form.rateType === 'hourly' ? 'hour' : 'day'}
+            <Box sx={{ bgcolor: '#f5f7ff', p: { xs: 2, md: 2.5 }, borderRadius: 2, border: '1px solid #dbe3ff', mt: 2.4 }}>
+              <Typography fontWeight={800} mb={0.75} sx={{ fontSize: '1rem', color: '#1f2937' }}>
+                Completed Tour Photos and Videos
               </Typography>
-            </Box>
-
-            <Box sx={{ bgcolor: '#fff3cd', p: 1.5, borderRadius: 1.5, border: '1px solid #ffc107' }}>
-              <Typography variant="caption" sx={{ color: '#856404', fontWeight: 600 }}>
-                💡 All guide charges are shown and saved in Indian Rupees.
+              <Typography variant="body2" color="text.secondary" mb={1.7}>
+                Upload real highlights from completed tours so tourists can preview your work.
               </Typography>
+
+              <Button
+                variant="outlined"
+                component="label"
+                disabled={mediaUploading}
+                sx={{ mb: 1.25 }}
+              >
+                {mediaUploading ? 'Uploading media...' : 'Upload photos or videos'}
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  hidden
+                  ref={mediaInputRef}
+                  onChange={handleTourMediaUpload}
+                />
+              </Button>
+
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.4 }}>
+                Supported: images and videos. You can select multiple files at once.
+              </Typography>
+
+              {tourMedia.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No tour media uploaded yet.
+                </Typography>
+              ) : (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 1.2,
+                    gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+                  }}
+                >
+                  {tourMedia.map((item) => {
+                    const mediaId = String(item?._id || '');
+                    const kind = getMediaKind(item);
+                    const src = mediaUrl(item?.url || '');
+                    return (
+                      <Box
+                        key={mediaId || src}
+                        sx={{
+                          border: '1px solid #d6deed',
+                          borderRadius: 1.5,
+                          overflow: 'hidden',
+                          bgcolor: '#fff',
+                        }}
+                      >
+                        {kind === 'video' ? (
+                          <Box
+                            component="video"
+                            src={src}
+                            controls
+                            preload="metadata"
+                            sx={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : (
+                          <Box
+                            component="img"
+                            src={src}
+                            alt="Completed tour media"
+                            sx={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }}
+                          />
+                        )}
+                        <Box sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#334155' }}>
+                            {kind === 'video' ? 'Video' : 'Photo'}
+                          </Typography>
+                          <Button
+                            size="small"
+                            color="error"
+                            disabled={mediaDeletingId === mediaId}
+                            onClick={() => handleDeleteTourMedia(mediaId)}
+                            sx={{ minWidth: 0, px: 1, fontSize: '0.72rem' }}
+                          >
+                            {mediaDeletingId === mediaId ? 'Removing...' : 'Remove'}
+                          </Button>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
             </Box>
 
-          </Box>
-
-          <Box mb={2}>
-            <Typography fontWeight={600} mb={0.5}><span role="img" aria-label="bio">📝</span> Bio</Typography>
-            <TextField fullWidth name="bio" value={form.bio} onChange={handleChange} multiline rows={2} sx={{ bgcolor: '#f8f8f2' }} />
-          </Box>
-          <Button type="submit" variant="contained" color="success" fullWidth sx={{ borderRadius: 8, py: 1.5, fontWeight: 700, fontSize: 18, mt: 2 }}>
-            Save Changes
-          </Button>
-        </form>
+            <Box sx={{ mt: 2.4, display: 'flex', justifyContent: { xs: 'stretch', md: 'flex-end' } }}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="success"
+                sx={{
+                  borderRadius: 8,
+                  py: 1.3,
+                  px: 4,
+                  fontWeight: 800,
+                  fontSize: 16,
+                  width: { xs: '100%', md: 'auto' },
+                  minWidth: { md: 220 },
+                }}
+              >
+                Save Changes
+              </Button>
+            </Box>
+          </form>
+        </Box>
       </Box>
     );
   };
@@ -2047,6 +2307,7 @@ export default function GuideDashboard() {
     </ThemeProvider>
   );
 }
+
 
 
 

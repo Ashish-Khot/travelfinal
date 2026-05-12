@@ -66,6 +66,27 @@ const GuideSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  tourMedia: [{
+    mediaType: {
+      type: String,
+      enum: ['image', 'video'],
+      required: true
+    },
+    url: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    caption: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   identityProof: {
     type: String,
     trim: true,

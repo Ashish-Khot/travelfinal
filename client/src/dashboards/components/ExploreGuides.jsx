@@ -179,6 +179,7 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 eligibleReviewBooking,
                 // New fields
                 guideVideo: g.guideVideo || '',
+                tourMedia: Array.isArray(g.tourMedia) ? g.tourMedia : [],
                 cancelPolicy: g.cancelPolicy || 'Moderate',
                 tourTypes: g.tourTypes || ['Culture', 'Adventure'],
                 averageResponseTime: g.averageResponseTime || 24,
