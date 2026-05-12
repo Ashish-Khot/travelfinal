@@ -64,7 +64,7 @@ const resolveId = (value) => {
   return String(value);
 };
 
-export default function GuideChatPanel({ guideId }) {
+export default function GuideChatPanel({ guideId, preselectedTouristId, preselectToken }) {
   const [tourists, setTourists] = useState([]);
   const [filteredTourists, setFilteredTourists] = useState([]);
   const [search, setSearch] = useState('');
@@ -111,6 +111,7 @@ export default function GuideChatPanel({ guideId }) {
   const socketRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const lastAppliedPreselectTokenRef = useRef(null);
 
   // Fetch only tourists who have booked this guide.
   useEffect(() => {
@@ -167,10 +168,26 @@ export default function GuideChatPanel({ guideId }) {
       return;
     }
 
+    const targetTouristId = preselectedTouristId ? String(preselectedTouristId) : '';
+    const hasNewPreselect =
+      Boolean(targetTouristId) &&
+      preselectToken &&
+      lastAppliedPreselectTokenRef.current !== preselectToken;
+
+    if (hasNewPreselect) {
+      const targetTourist = tourists.find((tourist) => tourist._id === targetTouristId);
+      if (targetTourist) {
+        setSelectedTourist(targetTourist);
+        setSearch('');
+        lastAppliedPreselectTokenRef.current = preselectToken;
+        return;
+      }
+    }
+
     if (!selectedTourist || !tourists.some((tourist) => tourist._id === selectedTourist._id)) {
       setSelectedTourist(tourists[0]);
     }
-  }, [tourists, selectedTourist]);
+  }, [tourists, selectedTourist, preselectedTouristId, preselectToken]);
 
   // Fetch or create chat and messages when tourist is selected
   useEffect(() => {

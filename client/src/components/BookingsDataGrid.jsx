@@ -1,6 +1,6 @@
 
 import * as React from 'react';
-import { Box, Button, Chip, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Snackbar, Alert, Tabs, Tab, Grid, Avatar } from '@mui/material';
+import { Box, Button, CircularProgress, Typography, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Snackbar, Alert, Tabs, Tab, Grid, Avatar } from '@mui/material';
 import api from '../api';
 
 const getStatusConfig = (status) => {
@@ -15,7 +15,7 @@ const getStatusConfig = (status) => {
   return configs[status?.toLowerCase()] || configs.pending;
 };
 
-const BookingCard = ({ booking, isLoading, onAccept, onReject, onChat, onMessage, onCompleteTour }) => {
+const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, onCompleteTour }) => {
   const status = booking.status?.toLowerCase() || 'pending';
   const statusConfig = getStatusConfig(status);
   
@@ -34,6 +34,12 @@ const BookingCard = ({ booking, isLoading, onAccept, onReject, onChat, onMessage
   const canAccept = status === 'pending';
   const canReject = status === 'pending';
   const canCompleteTour = status === 'confirmed' || status === 'accepted';
+  const endTime = booking?.endDateTime ? new Date(booking.endDateTime) : null;
+  const hasValidEndTime = endTime && !Number.isNaN(endTime.getTime());
+  const canCompleteNow = canCompleteTour && hasValidEndTime && nowMs >= endTime.getTime();
+  const completeHint = canCompleteTour && !canCompleteNow && hasValidEndTime
+    ? `You can complete this tour after ${endTime.toLocaleString()}.`
+    : '';
 
   return (
     <Box
@@ -224,7 +230,7 @@ const BookingCard = ({ booking, isLoading, onAccept, onReject, onChat, onMessage
               }
             }}
             onClick={() => onCompleteTour && onCompleteTour(booking)}
-            disabled={isLoading}
+            disabled={isLoading || !canCompleteNow}
           >
             ✓ Complete Tour
           </Button>
@@ -252,40 +258,18 @@ const BookingCard = ({ booking, isLoading, onAccept, onReject, onChat, onMessage
           💬 Chat
         </Button>
 
-        {/* Send Message Button - Only show for confirmed/accepted */}
-        {(status === 'confirmed' || status === 'accepted' || status === 'completed') && (
-          <Button
-            variant="contained"
-            sx={{
-              flex: 1,
-              minWidth: 120,
-              textTransform: 'none',
-              fontWeight: 700,
-              borderRadius: 2,
-              bgcolor: '#06b6d4',
-              padding: '10px 20px',
-              boxShadow: '0 4px 12px rgba(6, 182, 212, 0.3)',
-              '&:hover': {
-                bgcolor: '#0891b2',
-                boxShadow: '0 6px 20px rgba(6, 182, 212, 0.4)'
-              }
-            }}
-            onClick={onMessage}
-          >
-            📧 Message
-          </Button>
-        )}
       </Box>
+      {completeHint && (
+        <Typography variant="caption" sx={{ mt: 1.5, color: '#b45309', display: 'block' }}>
+          {completeHint}
+        </Typography>
+      )}
     </Box>
   );
 };
 
 export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat }) {
-  const [msgDialogOpen, setMsgDialogOpen] = React.useState(false);
-  const [msgText, setMsgText] = React.useState('');
-  const [msgLoading, setMsgLoading] = React.useState(false);
   const [msgSuccess, setMsgSuccess] = React.useState(false);
-  const [msgError, setMsgError] = React.useState('');
   const [msgBooking, setMsgBooking] = React.useState(null);
   const [completeTourDialogOpen, setCompleteTourDialogOpen] = React.useState(false);
   const [completionMessage, setCompletionMessage] = React.useState('');
@@ -293,6 +277,7 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
   const [completionError, setCompletionError] = React.useState('');
   const [loadingIds, setLoadingIds] = React.useState([]);
   const [filterTab, setFilterTab] = React.useState('all');
+  const [nowMs, setNowMs] = React.useState(() => Date.now());
 
   // Log when bookings change for debugging
   React.useEffect(() => {
@@ -302,6 +287,11 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
       destination: b.destination
     })));
   }, [bookings]);
+
+  React.useEffect(() => {
+    const timerId = setInterval(() => setNowMs(Date.now()), 30000);
+    return () => clearInterval(timerId);
+  }, []);
 
   const handleStatus = async (id, status) => {
     setLoadingIds((prev) => [...prev, id]);
@@ -316,46 +306,6 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
     setLoadingIds((prev) => prev.filter((x) => x !== id));
   };
 
-  const handleOpenMsgDialog = (booking) => {
-    setMsgBooking(booking);
-    setMsgText('');
-    setMsgDialogOpen(true);
-    setMsgError('');
-  };
-
-  const handleSendMsg = async () => {
-    if (!msgText.trim()) {
-      setMsgError('Message cannot be empty.');
-      return;
-    }
-    setMsgLoading(true);
-    setMsgError('');
-    try {
-      console.log('[BookingsDataGrid] Sending notification:', {
-        bookingId: msgBooking._id,
-        message: msgText
-      });
-      
-      // Send notification to tourist (not chat message)
-      const response = await api.post('/notifications/guide/complete-tour', {
-        bookingId: msgBooking._id,
-        message: msgText
-      });
-      
-      console.log('[BookingsDataGrid] Notification sent successfully:', response.data);
-      
-      setMsgSuccess(true);
-      setMsgDialogOpen(false);
-      setMsgText('');
-      
-      console.log('[DEBUG] Notification sent successfully to tourist');
-    } catch (e) {
-      console.error('[BookingsDataGrid] Failed to send notification:', e);
-      setMsgError('Failed to send notification: ' + (e.response?.data?.error || e.message));
-    }
-    setMsgLoading(false);
-  };
-
   const handleOpenCompleteTourDialog = (booking) => {
     setMsgBooking(booking);
     setCompletionMessage('Thank you for booking my tour! I hope you enjoyed the experience. Please leave a review.');
@@ -366,6 +316,15 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
   const handleCompleteTour = async () => {
     if (!completionMessage.trim()) {
       setCompletionError('Please write a completion message for the tourist.');
+      return;
+    }
+    const bookingEndTime = msgBooking?.endDateTime ? new Date(msgBooking.endDateTime) : null;
+    if (!bookingEndTime || Number.isNaN(bookingEndTime.getTime())) {
+      setCompletionError('This booking has an invalid end date/time.');
+      return;
+    }
+    if (Date.now() < bookingEndTime.getTime()) {
+      setCompletionError(`Tour can be completed only after ${bookingEndTime.toLocaleString()}.`);
       return;
     }
     setCompletionLoading(true);
@@ -485,56 +444,17 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
             <Grid item xs={12} md={6} lg={4} key={booking._id || idx}>
               <BookingCard
                 booking={booking}
+                nowMs={nowMs}
                 isLoading={loadingIds.includes(booking._id)}
                 onAccept={() => handleStatus(booking._id, 'accepted')}
                 onReject={() => handleStatus(booking._id, 'rejected')}
                 onChat={() => onChat && onChat(booking)}
-                onMessage={() => handleOpenMsgDialog(booking)}
                 onCompleteTour={() => handleOpenCompleteTourDialog(booking)}
               />
             </Grid>
           ))
         )}
       </Grid>
-
-      {/* Message Dialog */}
-      <Dialog open={msgDialogOpen} onClose={() => setMsgDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: 18 }}>
-          📧 Send Message
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="subtitle2" sx={{ mb: 2, color: 'text.secondary', fontWeight: 600 }}>
-            To: {msgBooking?.touristId?.name || 'Tourist'}
-          </Typography>
-          <TextField
-            autoFocus
-            multiline
-            minRows={4}
-            maxRows={8}
-            fullWidth
-            placeholder="Write your message..."
-            value={msgText}
-            onChange={e => setMsgText(e.target.value)}
-            disabled={msgLoading}
-            error={!!msgError}
-            helperText={msgError}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setMsgDialogOpen(false)} disabled={msgLoading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSendMsg}
-            variant="contained"
-            disabled={msgLoading}
-            sx={{ minWidth: 100 }}
-          >
-            {msgLoading ? <CircularProgress size={18} color="inherit" /> : '📧 Send'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Complete Tour Dialog */}
       <Dialog open={completeTourDialogOpen} onClose={() => setCompleteTourDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -587,9 +507,11 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
       {/* Success Snackbar */}
       <Snackbar open={msgSuccess} autoHideDuration={3000} onClose={() => setMsgSuccess(false)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setMsgSuccess(false)} severity="success" variant="filled" sx={{ fontWeight: 600 }}>
-          ✅ Message sent successfully!
+          ✅ Tour completed and notification sent successfully!
         </Alert>
       </Snackbar>
     </>
   );
 }
+
+

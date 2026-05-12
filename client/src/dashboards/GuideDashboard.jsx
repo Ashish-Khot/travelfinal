@@ -1334,7 +1334,7 @@ const MyToursPage = ({ tours, onCreateTour }) => {
   );
 };
 import BookingsDataGrid from '../components/BookingsDataGrid';
-const BookingsPage = ({ bookings, refreshBookings }) => {
+const BookingsPage = ({ bookings, refreshBookings, onOpenChat }) => {
   const counts = bookings.reduce((acc, booking) => {
     const status = (booking.status || 'pending').toLowerCase();
     acc[status] = (acc[status] || 0) + 1;
@@ -1369,7 +1369,7 @@ const BookingsPage = ({ bookings, refreshBookings }) => {
           <Chip label={`${counts.completed || 0} completed`} sx={{ bgcolor: '#dcebdd', color: '#315f38', fontWeight: 800 }} />
         </Box>
       </Box>
-      <BookingsDataGrid bookings={bookings} onStatusChange={refreshBookings} />
+      <BookingsDataGrid bookings={bookings} onStatusChange={refreshBookings} onChat={onOpenChat} />
     </Box>
   );
 };
@@ -1384,8 +1384,10 @@ const CalendarPage = () => (
 import GuideChatPanel from './components/GuideChatPanel';
 
 // Placeholder for MessagesPage
-function MessagesPage({ user }) {
-  return user ? <GuideChatPanel guideId={user._id} /> : null;
+function MessagesPage({ user, preselectedTouristId, preselectToken }) {
+  return user
+    ? <GuideChatPanel guideId={user._id} preselectedTouristId={preselectedTouristId} preselectToken={preselectToken} />
+    : null;
 }
 
 
@@ -1398,6 +1400,7 @@ export default function GuideDashboard() {
   const [guideReviews, setGuideReviews] = useState([]);
   const [tours, setTours] = useState([]);
   const [selected, setSelected] = useState('Dashboard');
+  const [chatOpenRequest, setChatOpenRequest] = useState({ touristId: '', token: 0 });
   const [open, setOpen] = useState(true);
   const socketRef = useRef(null);
 // ...existing code...
@@ -1890,12 +1893,22 @@ export default function GuideDashboard() {
     }
   };
 
+  const handleOpenChatFromBooking = (booking) => {
+    const touristId = booking?.touristId?._id || booking?.touristId;
+    if (!touristId) return;
+    setChatOpenRequest({
+      touristId: String(touristId),
+      token: Date.now(),
+    });
+    setSelected('Messages');
+  };
+
   const pageMap = {
     Dashboard: <DashboardPage user={user} bookings={bookings} guideProfile={guideProfile} guideReviews={guideReviews} tours={tours} />,
     'My Tours': <MyToursPage tours={tours} onCreateTour={handleCreateTour} />,
-    Bookings: <BookingsPage bookings={bookings} refreshBookings={fetchGuideData} />,
+    Bookings: <BookingsPage bookings={bookings} refreshBookings={fetchGuideData} onOpenChat={handleOpenChatFromBooking} />,
     Calendar: <CalendarPage />,
-    Messages: <MessagesPage user={user} />,
+    Messages: <MessagesPage user={user} preselectedTouristId={chatOpenRequest.touristId} preselectToken={chatOpenRequest.token} />,
     Earnings: <EarningsPage bookings={bookings} />,
     Reviews: <ReviewsPage user={user} guideProfile={guideProfile} />,
     Profile: <ProfilePage />,

@@ -181,6 +181,24 @@ router.post('/complete/:id', verifyToken, authorizeRoles('guide'), async (req, r
     if (bookingGuideId !== req.user.userId) {
       return res.status(403).json({ message: 'Forbidden - You are not the guide for this booking' });
     }
+
+    // Only confirmed bookings can be completed
+    if (!['confirmed', 'accepted'].includes(booking.status)) {
+      return res.status(400).json({
+        message: `Booking must be confirmed before completing tour. Current status: ${booking.status}`
+      });
+    }
+
+    // Do not allow completion before the scheduled end date/time
+    const tourEnd = new Date(booking.endDateTime);
+    if (Number.isNaN(tourEnd.getTime())) {
+      return res.status(400).json({ message: 'Invalid booking end date/time.' });
+    }
+    if (Date.now() < tourEnd.getTime()) {
+      return res.status(400).json({
+        message: `Tour can be completed only after ${tourEnd.toISOString()}.`
+      });
+    }
     
     // Mark as completed
     booking.status = 'completed';
