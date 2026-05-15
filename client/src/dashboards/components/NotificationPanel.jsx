@@ -15,12 +15,16 @@ import Chip from '@mui/material/Chip';
 import Popover from '@mui/material/Popover';
 import Badge from '@mui/material/Badge';
 import IconButton from '@mui/material/IconButton';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import Divider from '@mui/material/Divider';
 import api from '../../api';
 
 export default function NotificationPanel({ onActionComplete, chatNotifications = {}, onChatClick = () => {} }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [notifications, setNotifications] = useState([]);
   const [anchorEl, setAnchorEl] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
@@ -143,8 +147,9 @@ export default function NotificationPanel({ onActionComplete, chatNotifications 
         }}
         PaperProps={{
           sx: {
-            width: 420,
-            maxHeight: 600,
+            width: { xs: 'calc(100vw - 24px)', sm: 420 },
+            maxWidth: '100vw',
+            maxHeight: { xs: 'calc(100vh - 96px)', sm: 600 },
             borderRadius: 3,
             boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
             overflow: 'hidden',
@@ -174,7 +179,7 @@ export default function NotificationPanel({ onActionComplete, chatNotifications 
           <Divider sx={{ mb: 2 }} />
 
           {/* Notifications List */}
-          <Stack spacing={2} sx={{ maxHeight: 500, overflowY: 'auto' }}>
+          <Stack spacing={2} sx={{ maxHeight: isMobile ? 'calc(100vh - 190px)' : 500, overflowY: 'auto' }}>
             {totalNotificationCount === 0 ? (
               <Box sx={{ textAlign: 'center', py: 4 }}>
                 <Typography variant="body2" color="text.secondary" fontWeight={600}>

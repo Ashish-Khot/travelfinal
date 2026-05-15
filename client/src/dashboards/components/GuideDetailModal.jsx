@@ -190,6 +190,20 @@ export default function GuideDetailModal({
   const heroKind = getMediaKind(heroMedia);
   const heroSrc = buildMediaUrl(heroMedia?.url || '');
   const isAvailable = guide.isAvailable !== false;
+  const isBookable = guide.manualAvailability !== false;
+  const availabilityReason = guide.availabilityReason || (isAvailable ? 'available_now' : 'unavailable');
+  const availabilityLabel = availabilityReason === 'booked_now'
+    ? 'Booked Now'
+    : availabilityReason === 'manual_offline'
+      ? 'Unavailable'
+      : isAvailable
+        ? 'Available'
+        : 'Unavailable';
+  const availabilityBg = availabilityReason === 'booked_now'
+    ? 'rgba(245, 158, 11, 0.96)'
+    : isAvailable
+      ? 'rgba(16, 185, 129, 0.96)'
+      : 'rgba(100, 116, 139, 0.96)';
   const responseBadge = formatResponseBadge(guide.averageResponseTime);
 
   const handleSubmitReview = async () => {
@@ -346,14 +360,14 @@ export default function GuideDetailModal({
             </Stack>
 
             <Chip
-              label={isAvailable ? 'Available' : 'Unavailable'}
+              label={availabilityLabel}
               size="small"
               sx={{
                 position: 'absolute',
                 top: 14,
                 left: 14,
                 zIndex: 3,
-                bgcolor: isAvailable ? 'rgba(16, 185, 129, 0.96)' : 'rgba(100, 116, 139, 0.96)',
+                bgcolor: availabilityBg,
                 color: '#ffffff',
                 fontWeight: 800,
               }}
@@ -932,11 +946,25 @@ export default function GuideDetailModal({
                   </Stack>
 
                   <Chip
-                    label={isAvailable ? 'Available to Book' : 'Currently Unavailable'}
+                    label={
+                      !isBookable
+                        ? 'Currently Unavailable'
+                        : availabilityReason === 'booked_now'
+                          ? 'Busy Right Now'
+                          : 'Available to Book'
+                    }
                     size="small"
                     sx={{
-                      bgcolor: isAvailable ? '#dcfce7' : '#e2e8f0',
-                      color: isAvailable ? '#166534' : '#475569',
+                      bgcolor: !isBookable
+                        ? '#e2e8f0'
+                        : availabilityReason === 'booked_now'
+                          ? '#ffedd5'
+                          : '#dcfce7',
+                      color: !isBookable
+                        ? '#475569'
+                        : availabilityReason === 'booked_now'
+                          ? '#9a3412'
+                          : '#166534',
                       fontWeight: 800,
                       mb: 1,
                     }}
@@ -961,9 +989,9 @@ export default function GuideDetailModal({
                   <Button
                     variant="contained"
                     fullWidth
-                    disabled={!isAvailable}
+                    disabled={!isBookable}
                     onClick={() => {
-                      if (!isAvailable) return;
+                      if (!isBookable) return;
                       if (onBook) onBook(guide);
                       onClose();
                     }}
@@ -973,16 +1001,16 @@ export default function GuideDetailModal({
                       py: 0.95,
                       borderRadius: 1.8,
                       fontSize: '0.9rem',
-                      bgcolor: !isAvailable ? '#cbd5e1' : '#0f766e',
+                      bgcolor: !isBookable ? '#cbd5e1' : '#0f766e',
                       '&:hover': {
-                        bgcolor: !isAvailable ? '#cbd5e1' : '#0f5f59',
+                        bgcolor: !isBookable ? '#cbd5e1' : '#0f5f59',
                       },
                       '&.Mui-disabled': {
                         color: '#475569',
                       },
                     }}
                   >
-                    {isAvailable ? 'Book This Guide' : 'Unavailable'}
+                    {isBookable ? 'Book This Guide' : 'Unavailable'}
                   </Button>
 
                   <Button
@@ -1029,9 +1057,9 @@ export default function GuideDetailModal({
               </Box>
               <Button
                 variant="contained"
-                disabled={!isAvailable}
+                disabled={!isBookable}
                 onClick={() => {
-                  if (!isAvailable) return;
+                  if (!isBookable) return;
                   if (onBook) onBook(guide);
                   onClose();
                 }}
@@ -1042,16 +1070,16 @@ export default function GuideDetailModal({
                   fontSize: '0.86rem',
                   py: 0.8,
                   borderRadius: 999,
-                  bgcolor: !isAvailable ? '#cbd5e1' : '#0f766e',
+                  bgcolor: !isBookable ? '#cbd5e1' : '#0f766e',
                   '&:hover': {
-                    bgcolor: !isAvailable ? '#cbd5e1' : '#0f5f59',
+                    bgcolor: !isBookable ? '#cbd5e1' : '#0f5f59',
                   },
                   '&.Mui-disabled': {
                     color: '#475569',
                   },
                 }}
               >
-                {isAvailable ? 'Book Guide' : 'Unavailable'}
+                {isBookable ? 'Book Guide' : 'Unavailable'}
               </Button>
             </Box>
           ) : null}

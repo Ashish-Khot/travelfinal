@@ -1,35 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import InputAdornment from '@mui/material/InputAdornment';
 import MenuItem from '@mui/material/MenuItem';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import Rating from '@mui/material/Rating';
-import Chip from '@mui/material/Chip';
-import Stack from '@mui/material/Stack';
 import Paper from '@mui/material/Paper';
-import IconButton from '@mui/material/IconButton';
-import Divider from '@mui/material/Divider';
-import GridViewIcon from '@mui/icons-material/GridView';
-import ListIcon from '@mui/icons-material/List';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import AttractionsIcon from '@mui/icons-material/Attractions';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import ShareIcon from '@mui/icons-material/Share';
-import { motion } from 'framer-motion';
+import HotelIcon from '@mui/icons-material/Hotel';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import ExploreIcon from '@mui/icons-material/Explore';
 import PremiumDestinationMap from './PremiumDestinationMap';
-import DestinationGallery from './DestinationGallery';
-import OptimizedDestinationCard from './OptimizedDestinationCard';
+import api from '../../api';
 
-const FALLBACK_DEST_IMAGE = '/no-image-fallback.png';
-
-const categories = ['All', 'Island', 'Mountain', 'City', 'Heritage', 'Beach', 'Temple', 'Fort'];
+const categories = ['All', 'Island', 'Mountain', 'City', 'Heritage', 'Beach', 'Temple', 'Fort', 'Hotel', 'Cafe'];
 const filters = [
   'All',
   'Landmark',
@@ -41,24 +31,191 @@ const filters = [
   'Temple',
   'Beach',
   'Fort',
-  'Wonder',
+  'Hotel',
+  'Cafe',
   'Popular',
   'Heritage Site',
   'Natural Wonder',
 ];
 
-// Haversine formula for distance in km
+const assistantPromptTemplates = [
+  'Best time to visit this destination',
+  'How to arrive here from major airport',
+  '3-day family friendly plan near this place',
+];
+
+function toFiniteNumber(value, fallback = null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
+
+function normalizeLower(value) {
+  return normalizeText(value).toLowerCase();
+}
+
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const aLat = toFiniteNumber(lat1, null);
+  const aLon = toFiniteNumber(lon1, null);
+  const bLat = toFiniteNumber(lat2, null);
+  const bLon = toFiniteNumber(lon2, null);
+  if (aLat == null || aLon == null || bLat == null || bLon == null) return null;
+
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLon = ((bLon - aLon) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+  return 6371 * c;
+}
+
+function mapFeatureToDestination(feature) {
+  const properties = feature?.properties || {};
+  const coordinates = Array.isArray(feature?.geometry?.coordinates)
+    ? feature.geometry.coordinates
+    : [];
+
+  return {
+    xid: properties?.xid || properties?.fsq_id || null,
+    fsqId: properties?.fsq_id || null,
+    source: properties?.source || 'search',
+    name: properties?.name || 'Unknown place',
+    lat: toFiniteNumber(coordinates[1], null),
+    lon: toFiniteNumber(coordinates[0], null),
+    city: properties?.city || '',
+    country: properties?.country || '',
+    category: properties?.kinds || 'Popular',
+    description: properties?.description || 'No description available.',
+    rating: toFiniteNumber(properties?.rating ?? properties?.rate, 0),
+    distanceKm: toFiniteNumber(properties?.distance_km, null),
+    details: {
+      kinds: properties?.kinds || '',
+      source: properties?.source || '',
+    },
+  };
+}
+
+function extractKinds(destination) {
+  const sourceKinds =
+    destination?.details?.kinds ||
+    (typeof destination?.details === 'string' ? destination.details : '') ||
+    destination?.category ||
+    destination?.kinds ||
+    '';
+
+  return String(sourceKinds)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function placeKey(destination) {
+  const xid = normalizeLower(destination?.xid || '');
+  if (xid) return `xid:${xid}`;
+
+  const fsqId = normalizeLower(destination?.fsqId || '');
+  if (fsqId) return `fsq:${fsqId}`;
+
+  const name = normalizeLower(destination?.name || 'unknown');
+  const lat = toFiniteNumber(destination?.lat, null);
+  const lon = toFiniteNumber(destination?.lon, null);
+  if (lat != null && lon != null) {
+    return `coord:${name}:${lat.toFixed(4)}:${lon.toFixed(4)}`;
+  }
+  return `name:${name}`;
+}
+
+function dedupePlaces(destinations = []) {
+  const seen = new Set();
+  const output = [];
+
+  for (const destination of destinations) {
+    if (!destination) continue;
+    const key = placeKey(destination);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    output.push(destination);
+  }
+
+  return output;
+}
+
+function samePlace(a, b) {
+  if (!a || !b) return false;
+  if (a.xid && b.xid && a.xid === b.xid) return true;
+  return placeKey(a) === placeKey(b);
+}
+
+function formatLocation(destination) {
+  return [destination?.city, destination?.country].filter(Boolean).join(', ') || 'Location not available';
+}
+
+function formatDistanceLabel(origin, destination) {
+  if (toFiniteNumber(destination?.distanceKm, null) != null) {
+    return `${Number(destination.distanceKm).toFixed(1)} km away`;
+  }
+
+  const km = getDistanceFromLatLonInKm(origin?.lat, origin?.lon, destination?.lat, destination?.lon);
+  if (!Number.isFinite(km)) return '';
+  return `${km.toFixed(1)} km away`;
+}
+
+function buildGoogleMapsUrl(destination) {
+  const lat = toFiniteNumber(destination?.lat, null);
+  const lon = toFiniteNumber(destination?.lon, null);
+  if (lat != null && lon != null) return `https://www.google.com/maps?q=${lat},${lon}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(destination?.name || 'destination')}`;
+}
+
+function buildGoogleDirectionsUrl(destination, userLocation = null) {
+  const destinationLat = toFiniteNumber(destination?.lat, null);
+  const destinationLon = toFiniteNumber(destination?.lon, null);
+  if (destinationLat == null || destinationLon == null) return buildGoogleMapsUrl(destination);
+
+  const base = `https://www.google.com/maps/dir/?api=1&destination=${destinationLat},${destinationLon}`;
+  const userLat = toFiniteNumber(userLocation?.lat, null);
+  const userLon = toFiniteNumber(userLocation?.lon, null);
+  if (userLat == null || userLon == null) return base;
+  return `${base}&origin=${userLat},${userLon}&travelmode=driving`;
+}
+
+function getQuickNearbyTopic(search = '', category = 'All', filter = 'All') {
+  const combined = normalizeLower([search, category, filter].filter(Boolean).join(' '));
+
+  if (/(beach|coast|island|sea|shore)/.test(combined)) return 'beaches';
+  if (/(hill|mountain|trek|hiking|viewpoint)/.test(combined)) return 'mountains';
+  if (/(temple|church|mosque|cathedral|religious)/.test(combined)) return 'temples';
+  if (/(fort|castle|historic|heritage|museum|monument)/.test(combined)) return 'heritage';
+  if (/(food|cafe|restaurant)/.test(combined)) return 'food spots';
+  return 'attractions';
+}
+
+function normalizeInsightPayload(raw = null) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    title: normalizeText(raw.title || ''),
+    overview: normalizeText(raw.overview || ''),
+    bestTimeToVisit: normalizeText(raw.bestTimeToVisit || ''),
+    highlights: Array.isArray(raw.highlights) ? raw.highlights.filter(Boolean) : [],
+    nearbyFocus: Array.isArray(raw.nearbyFocus) ? raw.nearbyFocus.filter(Boolean) : [],
+    hotelAdvice: Array.isArray(raw.hotelAdvice) ? raw.hotelAdvice.filter(Boolean) : [],
+    foodAdvice: Array.isArray(raw.foodAdvice) ? raw.foodAdvice.filter(Boolean) : [],
+    transportAdvice: Array.isArray(raw.transportAdvice) ? raw.transportAdvice.filter(Boolean) : [],
+    cautions: Array.isArray(raw.cautions) ? raw.cautions.filter(Boolean) : [],
+    budgetTip: normalizeText(raw.budgetTip || ''),
+    arrival: {
+      mode: normalizeText(raw?.arrival?.mode || ''),
+      estimatedTime: normalizeText(raw?.arrival?.estimatedTime || ''),
+      steps: Array.isArray(raw?.arrival?.steps) ? raw.arrival.steps.filter(Boolean) : [],
+    },
+  };
 }
 
 export default function ExploreDestinations() {
@@ -69,771 +226,828 @@ export default function ExploreDestinations() {
   const [rating, setRating] = useState(0);
   const [distance, setDistance] = useState(0);
   const [userLocation, setUserLocation] = useState(null);
-  const [selected, setSelected] = useState(null);
+
   const [destinations, setDestinations] = useState([]);
-  const [crawledDestinations, setCrawledDestinations] = useState([]);
+  const [defaultDestinations, setDefaultDestinations] = useState([]);
+  const [isSearchResult, setIsSearchResult] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
-  const [favorites, setFavorites] = useState(JSON.parse(localStorage.getItem('favorites') || '[]'));
-  const [isSearchResult, setIsSearchResult] = useState(false); // Track if showing search results
+
+  const [selected, setSelected] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const [nearbyError, setNearbyError] = useState('');
+  const [nearbyDestinations, setNearbyDestinations] = useState([]);
+  const [nearbyHotels, setNearbyHotels] = useState([]);
+  const [nearbyFood, setNearbyFood] = useState([]);
+
+  const [assistantPrompt, setAssistantPrompt] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState('');
+  const [assistantInsight, setAssistantInsight] = useState(null);
+  const [assistantMeta, setAssistantMeta] = useState(null);
 
   const normalizeSelectedDestination = (baseDest, detail = null) => {
     const detailKinds = detail?.kinds || '';
     const baseKinds =
       typeof baseDest?.details === 'string' ? baseDest.details : baseDest?.details?.kinds || '';
     const kinds = detailKinds || baseKinds || baseDest?.category || '';
-    const description =
-      detail?.wikipedia_extracts?.text ||
-      detail?.wikipedia_extract ||
-      detail?.info?.descr ||
-      baseDest?.description ||
-      'Description not available for this place.';
-    const image =
-      detail?.preview?.source ||
-      detail?.image ||
-      baseDest?.image ||
-      FALLBACK_DEST_IMAGE;
-
-    const detailObject =
-      baseDest?.details && typeof baseDest.details === 'object' ? { ...baseDest.details } : {};
 
     return {
       ...baseDest,
-      description,
-      image,
+      description:
+        detail?.wikipedia_extracts?.text ||
+        detail?.wikipedia_extract ||
+        detail?.info?.descr ||
+        baseDest?.description ||
+        'Description not available for this place.',
       city: detail?.address?.city || baseDest?.city || '',
       country: detail?.address?.country || baseDest?.country || '',
-      // OpenTripMap rate is typically low-scale; convert roughly to /10 to fit existing UI.
       rating: detail?.rate ? Number(detail.rate) * 2 : Number(baseDest?.rating || 0),
       category: baseDest?.category || kinds,
       details: {
-        ...detailObject,
+        ...(baseDest?.details && typeof baseDest.details === 'object' ? baseDest.details : {}),
         kinds,
       },
     };
   };
 
   useEffect(() => {
-    setLoading(true);
-    setError('');
-    
-    // Try to load from database first
-    fetch('http://localhost:3001/api/destination/destinations')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.length > 0) {
-          setDestinations(data);
-        } else {
-          // Fallback to popular destinations
-          return fetch('http://localhost:3001/api/opentripmap/popular')
-            .then(res => res.json())
-            .then(popData => {
-              setDestinations(popData);
-            });
+    let mounted = true;
+    const loadDestinations = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const dbResponse = await api.get('/destination/destinations');
+        const dbData = Array.isArray(dbResponse?.data) ? dbResponse.data : [];
+
+        if (!mounted) return;
+        if (dbData.length > 0) {
+          setDestinations(dbData);
+          setDefaultDestinations(dbData);
+          return;
         }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.log('DB load failed, trying popular destinations fallback...', err);
-        // Ultimate fallback - load popular destinations
-        fetch('http://localhost:3001/api/opentripmap/popular')
-          .then(res => res.json())
-          .then(popData => {
-            setDestinations(popData);
-            setLoading(false);
-          })
-          .catch(popErr => {
-            console.error('All fallbacks failed:', popErr);
-            setError('⚠️ Could not load destinations. Try using the Search feature to look for specific cities.');
-            setLoading(false);
-          });
-      });
+
+        const popularResponse = await api.get('/opentripmap/popular');
+        const popularData = Array.isArray(popularResponse?.data) ? popularResponse.data : [];
+        if (!mounted) return;
+        setDestinations(popularData);
+        setDefaultDestinations(popularData);
+      } catch {
+        if (!mounted) return;
+        setError('Could not load destinations. Try searching for beaches, temples, or new places.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    loadDestinations();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // Get user location for distance filter
-  React.useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        pos => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => setUserLocation(null)
-      );
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lon: position.coords.longitude,
+        });
+      },
+      () => {
+        setUserLocation(null);
+      }
+    );
+  }, []);
+
+  const filtered = useMemo(() => {
+    return destinations.filter((destination) => {
+      const searchText = normalizeLower(search);
+      const kinds = extractKinds(destination).map((kind) => normalizeLower(kind));
+      const categoryLower = normalizeLower(destination?.category || '');
+      const combinedKinds = `${kinds.join(' ')} ${categoryLower}`;
+
+      const matchesSearch =
+        !searchText ||
+        normalizeLower(destination?.name).includes(searchText) ||
+        normalizeLower(destination?.city).includes(searchText) ||
+        normalizeLower(destination?.country).includes(searchText) ||
+        combinedKinds.includes(searchText);
+
+      const matchesCategory = category === 'All' || combinedKinds.includes(normalizeLower(category));
+      const matchesFilter = filter === 'All' || combinedKinds.includes(normalizeLower(filter));
+      const matchesRating = Number(destination?.rating || 0) >= Number(rating || 0);
+
+      let matchesDistance = true;
+      if (Number(distance) > 0 && userLocation && destination?.lat != null && destination?.lon != null) {
+        const km = getDistanceFromLatLonInKm(userLocation.lat, userLocation.lon, destination.lat, destination.lon);
+        matchesDistance = Number.isFinite(km) ? km <= Number(distance) : true;
+      }
+
+      return matchesSearch && matchesCategory && matchesFilter && matchesRating && matchesDistance;
+    });
+  }, [category, destinations, distance, filter, rating, search, userLocation]);
+
+  const mapDestinations = useMemo(() => {
+    if (selected) {
+      return dedupePlaces([selected, ...nearbyDestinations, ...nearbyHotels, ...nearbyFood]);
     }
-  }, []);
+    return dedupePlaces(filtered);
+  }, [filtered, nearbyDestinations, nearbyFood, nearbyHotels, selected]);
 
-  // Search-triggered web crawling
+  const mapCenter = useMemo(() => {
+    if (selected?.lat != null && selected?.lon != null) {
+      return { lat: Number(selected.lat), lng: Number(selected.lon) };
+    }
+    return { lat: 20.5937, lng: 78.9629 };
+  }, [selected]);
+
+  const loadNearbyForSelected = async (anchorDestination) => {
+    const lat = toFiniteNumber(anchorDestination?.lat, null);
+    const lon = toFiniteNumber(anchorDestination?.lon, null);
+    if (lat == null || lon == null) {
+      setNearbyDestinations([]);
+      setNearbyHotels([]);
+      setNearbyFood([]);
+      setNearbyError('Coordinates missing for selected destination.');
+      return;
+    }
+
+    try {
+      setNearbyLoading(true);
+      setNearbyError('');
+
+      const paramsBase = {
+        lat,
+        lon,
+        radius: 20000,
+        limit: 10,
+        excludeXid: anchorDestination?.xid || '',
+        excludeName: anchorDestination?.name || '',
+      };
+
+      const [attractionsRes, hotelsRes, foodRes] = await Promise.all([
+        api.get('/opentripmap/nearby', {
+          params: { ...paramsBase, category: getQuickNearbyTopic(search, category, filter) || 'attractions' },
+        }),
+        api.get('/opentripmap/nearby', {
+          params: { ...paramsBase, category: 'hotels', radius: 15000 },
+        }),
+        api.get('/opentripmap/nearby', {
+          params: { ...paramsBase, category: 'food', radius: 12000 },
+        }),
+      ]);
+
+      const attractions = Array.isArray(attractionsRes?.data?.features)
+        ? attractionsRes.data.features.map((item) => mapFeatureToDestination(item))
+        : [];
+      const hotels = Array.isArray(hotelsRes?.data?.features)
+        ? hotelsRes.data.features.map((item) => mapFeatureToDestination(item))
+        : [];
+      const food = Array.isArray(foodRes?.data?.features)
+        ? foodRes.data.features.map((item) => mapFeatureToDestination(item))
+        : [];
+
+      setNearbyDestinations(
+        dedupePlaces(
+          attractions.filter((item) => item?.name && !samePlace(item, anchorDestination))
+        ).slice(0, 8)
+      );
+      setNearbyHotels(
+        dedupePlaces(
+          hotels.filter((item) => item?.name && !samePlace(item, anchorDestination))
+        ).slice(0, 8)
+      );
+      setNearbyFood(
+        dedupePlaces(
+          food.filter((item) => item?.name && !samePlace(item, anchorDestination))
+        ).slice(0, 8)
+      );
+    } catch {
+      setNearbyError('Nearby destination data could not be loaded right now.');
+      setNearbyDestinations([]);
+      setNearbyHotels([]);
+      setNearbyFood([]);
+    } finally {
+      setNearbyLoading(false);
+    }
+  };
+
+  const handleSelectDestination = async (destination) => {
+    setAssistantInsight(null);
+    setAssistantError('');
+    setAssistantMeta(null);
+
+    const base = normalizeSelectedDestination(destination);
+    setSelected(base);
+
+    let resolved = base;
+    if (destination?.xid) {
+      setDetailLoading(true);
+      try {
+        const detailResponse = await api.get(`/opentripmap/place/${encodeURIComponent(destination.xid)}`);
+        resolved = normalizeSelectedDestination(destination, detailResponse?.data || null);
+        setSelected(resolved);
+      } catch {
+        setSelected(base);
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+
+    await loadNearbyForSelected(resolved);
+  };
+
   const handleSearch = async () => {
+    const query = normalizeText(pendingSearch);
+    if (!query) {
+      setSearch('');
+      setIsSearchResult(false);
+      setDestinations(defaultDestinations);
+      return;
+    }
+
     setLoading(true);
     setError('');
-    setSearch(pendingSearch);
-    setIsSearchResult(true); // Mark that we're showing search results
+    setSearch(query);
+    setIsSearchResult(true);
+
     try {
-      const res = await fetch(`http://localhost:3001/api/opentripmap/search?query=${encodeURIComponent(pendingSearch)}&limit=12`);
-      const data = await res.json();
-      let places = [];
-      if (data.features) {
-        places = data.features.map(f => {
-              if (f.properties.kinds === 'Wikipedia') {
-                return {
-                  xid: null,
-                  name: f.properties.name,
-                  lat: null,
-                  lon: null,
-                  category: 'Wikipedia',
-                  image: f.properties.image || FALLBACK_DEST_IMAGE,
-                  description: f.properties.description || 'No description available.',
-                };
-              }
-              return {
-                xid: f.properties.xid,
-                name: f.properties.name,
-                lat: f.geometry.coordinates[1],
-                lon: f.geometry.coordinates[0],
-                category: f.properties.kinds,
-                image: f.properties.image || FALLBACK_DEST_IMAGE,
-                description: f.properties.description || '',
-              };
-            });
+      const response = await api.get('/opentripmap/search', {
+        params: { query, limit: 24 },
+      });
+      const places = Array.isArray(response?.data?.features)
+        ? response.data.features.map((item) => mapFeatureToDestination(item)).filter((item) => item?.name)
+        : [];
+
+      setDestinations(dedupePlaces(places));
+      if (places.length === 0) {
+        setError('No matching places found. Try: beaches in Thailand, temples in Kyoto, or new places in Europe.');
       }
-      console.log('✅ Search completed, found', places.length, 'results');
-      setDestinations(places);
-      setLoading(false);
-    } catch (err) {
-      console.error('❌ Search error:', err);
-      setError('Failed to load destinations.');
+    } catch {
+      setError('Search failed. Please try again.');
+    } finally {
       setLoading(false);
     }
   };
 
-  // Filter logic - when showing search results, be more lenient
-  const filteredDB = destinations.filter(dest => {
-    // When showing search results, just show all of them (already filtered by location on backend)
-    if (isSearchResult) {
-      console.log('🎯 Showing search result:', dest.name);
-      return true;
-    }
-    
-    // For browsed destinations, apply full filtering
-    const matchesCategory = category === 'All' || (dest.category || dest.details?.kinds || '').toLowerCase().includes(category.toLowerCase());
-    const matchesFilter = filter === 'All' || (dest.details?.kinds || dest.category || '').toLowerCase().includes(filter.toLowerCase()) || (dest.details?.tags || []).map(t => t.toLowerCase()).includes(filter.toLowerCase());
-    const matchesRating = (dest.rating || 0) >= rating;
-    const matchesSearch =
-      (dest.name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (dest.city || '').toLowerCase().includes(search.toLowerCase()) ||
-      (dest.country || '').toLowerCase().includes(search.toLowerCase());
-    let matchesDistance = true;
-    if (distance > 0 && userLocation && dest.lat && dest.lon) {
-      const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, dest.lat, dest.lon);
-      matchesDistance = d <= distance;
-    }
-    return matchesCategory && matchesFilter && matchesRating && matchesSearch && matchesDistance;
-  });
-
-  const filteredCrawled = crawledDestinations.filter(dest => {
-    const matchesCategory = category === 'All' || (dest.category || '').toLowerCase().includes(category.toLowerCase());
-    const matchesFilter = filter === 'All' || (dest.details?.kinds || dest.category || '').toLowerCase().includes(filter.toLowerCase()) || (dest.details?.tags || []).map(t => t.toLowerCase()).includes(filter.toLowerCase());
-    const matchesRating = (dest.rating || 0) >= rating;
-    let matchesDistance = true;
-    if (distance > 0 && userLocation && dest.lat && dest.lon) {
-      const d = getDistanceFromLatLonInKm(userLocation.lat, userLocation.lng, dest.lat, dest.lon);
-      matchesDistance = d <= distance;
-    }
-    return matchesCategory && matchesFilter && matchesRating && matchesDistance;
-  });
-
-  const filtered = [...filteredDB, ...filteredCrawled];
-
-  const toggleFavorite = (dest) => {
-    const destId = dest.xid || dest.name;
-    const newFavorites = favorites.includes(destId)
-      ? favorites.filter(f => f !== destId)
-      : [...favorites, destId];
-    setFavorites(newFavorites);
-    localStorage.setItem('favorites', JSON.stringify(newFavorites));
+  const clearSearch = () => {
+    setPendingSearch('');
+    setSearch('');
+    setIsSearchResult(false);
+    setError('');
+    setDestinations(defaultDestinations);
   };
 
-  const isFavorite = (dest) => {
-    return favorites.includes(dest.xid || dest.name);
+  const askAssistant = async () => {
+    if (!selected) return;
+    const question = normalizeText(assistantPrompt);
+    if (!question) {
+      setAssistantError('Please enter a question for AI assistant.');
+      return;
+    }
+
+    try {
+      setAssistantLoading(true);
+      setAssistantError('');
+      const response = await api.post('/opentripmap/insight', {
+        destination: selected,
+        question,
+        nearby: nearbyDestinations,
+        hotels: nearbyHotels,
+        food: nearbyFood,
+        userLocation,
+      });
+
+      const insight = normalizeInsightPayload(response?.data?.insight || null);
+      if (!insight) {
+        setAssistantError('Assistant did not return usable insight.');
+        return;
+      }
+      setAssistantInsight(insight);
+      setAssistantMeta({
+        provider: response?.data?.provider || 'unknown',
+        aiAvailable: Boolean(response?.data?.aiAvailable),
+      });
+    } catch {
+      setAssistantError('Assistant request failed right now. Please try again.');
+    } finally {
+      setAssistantLoading(false);
+    }
   };
+
+  const renderNearbyList = (title, icon, items, emptyText) => (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 1.4,
+        borderRadius: '12px',
+        border: '1px solid rgba(0,0,0,0.08)',
+        height: 240,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+        {icon}
+        <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#111827' }}>
+          {title}
+        </Typography>
+      </Stack>
+      <Box sx={{ overflowY: 'auto', pr: 0.4 }}>
+        {nearbyLoading ? (
+          <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="#6B7280">
+              Loading...
+            </Typography>
+          </Stack>
+        ) : items.length === 0 ? (
+          <Typography variant="body2" color="#6B7280">
+            {emptyText}
+          </Typography>
+        ) : (
+          <Stack spacing={1}>
+            {items.map((place) => (
+              <Paper
+                key={placeKey(place)}
+                elevation={0}
+                sx={{
+                  p: 1.1,
+                  borderRadius: '10px',
+                  border: '1px solid rgba(79,138,139,0.2)',
+                  background: '#fcfeff',
+                  cursor: 'pointer',
+                }}
+                onClick={() => handleSelectDestination(place)}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                  {place.name}
+                </Typography>
+                <Typography variant="caption" color="#6B7280" sx={{ display: 'block' }}>
+                  {formatLocation(place)}
+                  {selected && ` | ${formatDistanceLabel(selected, place)}`}
+                </Typography>
+              </Paper>
+            ))}
+          </Stack>
+        )}
+      </Box>
+    </Paper>
+  );
 
   if (loading) {
     return (
       <Box minHeight="60vh" display="flex" alignItems="center" justifyContent="center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <Box
-            sx={{
-              width: 60,
-              height: 60,
-              borderRadius: '50%',
-              border: '4px solid #f0f0f0',
-              borderTop: '4px solid #4F8A8B',
-            }}
-          />
-        </motion.div>
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box minHeight="60vh" display="flex" alignItems="center" justifyContent="center">
-        <Paper
-          elevation={3}
-          sx={{
-            p: 4,
-            textAlign: 'center',
-            borderRadius: 4,
-            border: '2px solid #FFD700',
-          }}
-        >
-          <Typography variant="h6" color="error" mb={2}>
-            ⚠️ {error}
+        <Stack direction="row" spacing={1} alignItems="center">
+          <CircularProgress size={24} />
+          <Typography variant="body1" color="#4B5563">
+            Loading destination explorer...
           </Typography>
-          <Button
-            variant="contained"
-            onClick={() => window.location.reload()}
-            sx={{
-              background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
-            }}
-          >
-            Retry
-          </Button>
-        </Paper>
+        </Stack>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ width: '100%', minHeight: '100vh', background: 'linear-gradient(135deg, #F8FAFB 0%, #f0f4f5 100%)', pb: 6 }}>
-      {/* Hero Banner */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
+    <Box sx={{ width: '100%', minHeight: '100vh', pb: 3 }}>
+      <Box
+        sx={{
+          background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
+          color: 'white',
+          p: { xs: 2.5, md: 3 },
+          borderRadius: '16px',
+          mb: 2,
+          boxShadow: '0 10px 30px rgba(79, 138, 139, 0.24)',
+        }}
       >
-        <Box
-          sx={{
-            background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
-            color: 'white',
-            p: { xs: 3, md: 5 },
-            mb: 4,
-            borderRadius: '20px',
-            boxShadow: '0 12px 40px rgba(79, 138, 139, 0.25)',
-            textAlign: 'center',
-          }}
-        >
-          <Typography variant="h3" sx={{ fontWeight: 800, mb: 1, letterSpacing: '-1px' }}>
-            🌍 Discover Amazing Destinations
-          </Typography>
-          <Typography variant="h6" sx={{ fontWeight: 300, opacity: 0.95 }}>
-            Explore {filtered.length} incredible places around the world
-          </Typography>
-        </Box>
-      </motion.div>
+        <Typography variant="h5" sx={{ fontWeight: 800 }}>
+          Smart Explore Destinations
+        </Typography>
+        <Typography variant="body2" sx={{ opacity: 0.95, mt: 0.3 }}>
+          Accurate nearby places, hotels, food, AI travel guidance, and direct arrival links.
+        </Typography>
+      </Box>
 
-      <Box sx={{ maxWidth: 1400, mx: 'auto', px: { xs: 2, sm: 3, md: 4 } }}>
-        {/* Premium Filter Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: '390px minmax(0, 1fr)' },
+          gap: 2,
+        }}
+      >
+        <Box sx={{ position: { lg: 'sticky' }, top: { lg: 12 }, alignSelf: 'start' }}>
           <Paper
             elevation={0}
             sx={{
-              p: { xs: 2.5, md: 3.5 },
-              mb: 4,
-              borderRadius: '16px',
-              background: 'white',
-              boxShadow: '0 4px 20px rgba(79, 138, 139, 0.08)',
-              border: '1px solid rgba(79, 138, 139, 0.1)',
+              p: 1.6,
+              borderRadius: '14px',
+              border: '1px solid rgba(79, 138, 139, 0.16)',
             }}
           >
-            <Stack spacing={2.5}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#1a1a1a', minWidth: 100 }}>
-                  🔍 Find Destinations
-                </Typography>
-                <TextField
-                  placeholder="Search by name, city, or country..."
-                  value={pendingSearch}
-                  onChange={e => setPendingSearch(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && handleSearch()}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <span style={{ fontSize: '18px' }}>🔍</span>
-                      </InputAdornment>
-                    ),
-                  }}
+            <Stack spacing={1.3}>
+              <TextField
+                placeholder="Try: beaches in Goa, space museums in USA"
+                value={pendingSearch}
+                onChange={(event) => setPendingSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') handleSearch();
+                }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <span style={{ fontSize: 15 }}>Search</span>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+
+              <Stack direction="row" spacing={1}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={handleSearch}
                   sx={{
-                    flex: 1,
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '10px',
-                      backgroundColor: '#f8f9fa',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        backgroundColor: '#f0f2f5',
-                      },
-                      '&.Mui-focused': {
-                        backgroundColor: '#fff',
-                        boxShadow: '0 0 0 3px rgba(79, 138, 139, 0.1)',
-                      },
-                    },
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
                   }}
+                >
+                  Search
+                </Button>
+                {isSearchResult && (
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={clearSearch}
+                    sx={{ textTransform: 'none', borderColor: '#4F8A8B', color: '#2d5a5b' }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </Stack>
+
+              <Stack direction={{ xs: 'column', sm: 'row', lg: 'column' }} spacing={1}>
+                <TextField
+                  select
+                  label="Category"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                  size="small"
+                >
+                  {categories.map((item) => (
+                    <MenuItem key={item} value={item}>
+                      {item}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  select
+                  label="Filter"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  size="small"
+                >
+                  {filters.map((item) => (
+                    <MenuItem key={item} value={item}>
+                      {item}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <TextField
+                  label="Min Rating"
+                  type="number"
+                  value={rating}
+                  onChange={(event) => setRating(Number(event.target.value))}
+                  inputProps={{ min: 0, max: 10, step: 0.1 }}
+                  size="small"
+                />
+                <TextField
+                  label="Max Distance (km)"
+                  type="number"
+                  value={distance}
+                  onChange={(event) => setDistance(Number(event.target.value))}
+                  inputProps={{ min: 0, step: 1 }}
+                  size="small"
+                  disabled={!userLocation}
+                  helperText={!userLocation ? 'Enable location for this filter.' : ''}
                 />
               </Stack>
 
               <Divider />
 
-              {/* Filters Row */}
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
-                <TextField
-                  select
-                  label="Category"
-                  value={category}
-                  onChange={e => setCategory(e.target.value)}
-                  sx={{ minWidth: 140, flex: 1 }}
-                >
-                  {categories.map(cat => (
-                    <MenuItem key={cat} value={cat}>
-                      {cat}
-                    </MenuItem>
-                  ))}
-                </TextField>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                  Results
+                </Typography>
+                <Typography variant="caption" color="#6B7280">
+                  {filtered.length} places
+                </Typography>
+              </Stack>
 
-                <TextField
-                  select
-                  label="Filter Type"
-                  value={filter}
-                  onChange={e => setFilter(e.target.value)}
-                  sx={{ minWidth: 140, flex: 1 }}
-                >
-                  {filters.map(f => (
-                    <MenuItem key={f} value={f}>
-                      {f}
-                    </MenuItem>
-                  ))}
-                </TextField>
-
-                <TextField
-                  label="Min Rating"
-                  type="number"
-                  value={rating}
-                  onChange={e => setRating(Number(e.target.value))}
-                  inputProps={{ min: 0, max: 5, step: 0.1 }}
-                  sx={{ minWidth: 130, flex: 1 }}
-                />
-
-                <TextField
-                  label="Max Distance (km)"
-                  type="number"
-                  value={distance}
-                  onChange={e => setDistance(Number(e.target.value))}
-                  inputProps={{ min: 0, step: 1 }}
-                  disabled={!userLocation}
-                  helperText={!userLocation ? 'Enable location' : ''}
-                  sx={{ minWidth: 160, flex: 1 }}
-                />
-
-                <Button
-                  variant="contained"
-                  onClick={handleSearch}
-                  sx={{
-                    background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
-                    px: 4,
-                    py: 1.5,
-                    fontWeight: 700,
-                    borderRadius: '10px',
-                    boxShadow: '0 4px 12px rgba(79, 138, 139, 0.25)',
-                    textTransform: 'none',
-                    '&:hover': {
-                      boxShadow: '0 6px 20px rgba(79, 138, 139, 0.35)',
-                      transform: 'translateY(-2px)',
-                    },
-                    transition: 'all 0.3s ease',
-                  }}
-                >
-                  Search
-                </Button>
-
-                {isSearchResult && (
-                  <Button
-                    variant="outlined"
-                    onClick={() => {
-                      setIsSearchResult(false);
-                      setPendingSearch('');
-                      setSearch('');
-                    }}
-                    sx={{
-                      borderColor: '#4F8A8B',
-                      color: '#4F8A8B',
-                      px: 3,
-                      py: 1.5,
-                      fontWeight: 700,
-                      borderRadius: '10px',
-                      textTransform: 'none',
-                      '&:hover': {
-                        backgroundColor: 'rgba(79, 138, 139, 0.05)',
-                      },
-                      transition: 'all 0.3s ease',
-                    }}
-                  >
-                    ✕ Clear Search
-                  </Button>
+              <Box
+                sx={{
+                  maxHeight: { xs: 360, lg: 'calc(100vh - 350px)' },
+                  overflowY: 'auto',
+                  pr: 0.5,
+                }}
+              >
+                {filtered.length === 0 ? (
+                  <Typography variant="body2" color="#6B7280">
+                    No destinations found with current filters.
+                  </Typography>
+                ) : (
+                  <Stack spacing={1}>
+                    {filtered.map((destination) => {
+                      const kinds = extractKinds(destination).slice(0, 3);
+                      return (
+                        <Paper
+                          key={placeKey(destination)}
+                          elevation={0}
+                          sx={{
+                            p: 1.2,
+                            borderRadius: '10px',
+                            border: '1px solid rgba(0,0,0,0.1)',
+                            cursor: 'pointer',
+                            background:
+                              selected && samePlace(selected, destination)
+                                ? 'rgba(79,138,139,0.08)'
+                                : 'white',
+                          }}
+                          onClick={() => handleSelectDestination(destination)}
+                        >
+                          <Typography variant="body2" sx={{ fontWeight: 800, color: '#111827' }}>
+                            {destination.name}
+                          </Typography>
+                          <Typography variant="caption" color="#6B7280" sx={{ display: 'block', mb: 0.6 }}>
+                            {formatLocation(destination)}
+                          </Typography>
+                          <Stack direction="row" spacing={0.7} useFlexGap flexWrap="wrap">
+                            {Number(destination?.rating || 0) > 0 && (
+                              <Chip
+                                size="small"
+                                icon={<AttractionsIcon sx={{ fontSize: '0.85rem !important' }} />}
+                                label={`${Number(destination.rating).toFixed(1)} / 10`}
+                              />
+                            )}
+                            {kinds.map((kind) => (
+                              <Chip key={`${placeKey(destination)}-${kind}`} size="small" label={kind} variant="outlined" />
+                            ))}
+                          </Stack>
+                        </Paper>
+                      );
+                    })}
+                  </Stack>
                 )}
-              </Stack>
-
-              {/* View Mode Toggle */}
-              <Stack direction="row" spacing={1} justifyContent="flex-end">
-                <IconButton
-                  onClick={() => setViewMode('grid')}
-                  sx={{
-                    backgroundColor: viewMode === 'grid' ? 'rgba(79, 138, 139, 0.1)' : 'transparent',
-                    color: viewMode === 'grid' ? '#4F8A8B' : '#999',
-                  }}
-                >
-                  <GridViewIcon />
-                </IconButton>
-                <IconButton
-                  onClick={() => setViewMode('list')}
-                  sx={{
-                    backgroundColor: viewMode === 'list' ? 'rgba(79, 138, 139, 0.1)' : 'transparent',
-                    color: viewMode === 'list' ? '#4F8A8B' : '#999',
-                  }}
-                >
-                  <ListIcon />
-                </IconButton>
-              </Stack>
+              </Box>
             </Stack>
           </Paper>
-        </motion.div>
+        </Box>
 
-        {/* Destinations Grid */}
-        {filtered.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-          >
+        <Box>
+          {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
+
+          {!selected ? (
             <Paper
               elevation={0}
               sx={{
-                p: 6,
-                textAlign: 'center',
-                borderRadius: '16px',
-                background: 'white',
-                border: '2px dashed rgba(79, 138, 139, 0.2)',
+                p: 2,
+                mb: 2,
+                borderRadius: '14px',
+                border: '1px dashed rgba(79, 138, 139, 0.4)',
+                background: '#f9fcfd',
               }}
             >
-              <Typography variant="h6" color="#6B7280" mb={1}>
-                🔍 No destinations found
+              <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                Select a destination from the left list
               </Typography>
-              <Typography variant="body2" color="#999">
-                Try adjusting your filters or search terms
+              <Typography variant="body2" color="#6B7280" sx={{ mt: 0.5 }}>
+                You will get detailed info, nearby destinations, hotels, food, AI guidance, and arrival suggestions.
               </Typography>
             </Paper>
-          </motion.div>
-        ) : (
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 
-                viewMode === 'grid' 
-                  ? { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }
-                  : '1fr',
-              gap: 3,
-              mb: 5,
-            }}
-          >
-            {filtered.map((dest) => (
-              <OptimizedDestinationCard
-                key={dest.xid || dest.name}
-                dest={dest}
-                viewMode={viewMode}
-                isFavorite={isFavorite}
-                onFavoriteClick={toggleFavorite}
-                onCardClick={async () => {
-                  if (dest.xid) {
-                    try {
-                      const detailRes = await fetch(`http://localhost:3001/api/opentripmap/place/${dest.xid}`);
-                      const detail = await detailRes.json();
-                      setSelected(normalizeSelectedDestination(dest, detail));
-                    } catch {
-                      setSelected(normalizeSelectedDestination(dest));
-                    }
-                  } else {
-                    setSelected(normalizeSelectedDestination(dest));
-                  }
-                }}
-              />
-            ))}
-          </Box>
-        )}
-
-        {/* Interactive Map Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <Box
-            sx={{
-              mt: 5,
-              mb: 4,
-            }}
-          >
-            <Typography variant="h5" sx={{ fontWeight: 700, mb: 2, color: '#1a1a1a' }}>
-              📍 Explore on Map
-            </Typography>
-            <PremiumDestinationMap
-              destinations={filtered}
-              center={{ lat: 36.3932, lng: 25.4615 }}
-              zoom={2}
-              onMarkerClick={dest => {
-                setSelected(normalizeSelectedDestination(dest));
-              }}
-            />
-          </Box>
-        </motion.div>
-      </Box>
-
-      {/* Detail Modal */}
-      <Dialog
-        open={!!selected}
-        onClose={() => setSelected(null)}
-        maxWidth="md"
-        fullWidth
-        slotProps={{
-          paper: {
-            sx: {
-              borderRadius: '16px',
-              background: 'white',
-            },
-          },
-        }}
-      >
-        {selected && (
-          <>
-            <DialogTitle
+          ) : (
+            <Paper
+              elevation={0}
               sx={{
-                background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
-                color: 'white',
-                fontWeight: 700,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                p: 3,
+                p: 2,
+                mb: 2,
+                borderRadius: '14px',
+                border: '1px solid rgba(79, 138, 139, 0.18)',
+                background: 'linear-gradient(135deg, rgba(79,138,139,0.06) 0%, #ffffff 100%)',
               }}
             >
-              <Typography variant="h6" sx={{ fontWeight: 700, color: 'white' }}>
-                {selected.name}
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <IconButton
-                  size="small"
-                  onClick={() => toggleFavorite(selected)}
-                  sx={{ color: 'white' }}
-                >
-                  {isFavorite(selected) ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-                </IconButton>
-                <IconButton
-                  size="small"
-                  onClick={() => {
-                    navigator.share?.({
-                      title: selected.name,
-                      text: selected.description,
-                    });
-                  }}
-                  sx={{ color: 'white' }}
-                >
-                  <ShareIcon />
-                </IconButton>
-              </Stack>
-            </DialogTitle>
-
-            <DialogContent sx={{ p: 3 }}>
-              {/* Gallery */}
-              <DestinationGallery
-                images={[selected.image || FALLBACK_DEST_IMAGE]}
-                title={selected.name}
-              />
-
-              {/* Location Info */}
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2.5,
-                  mb: 3,
-                  borderRadius: '12px',
-                  background: 'linear-gradient(135deg, rgba(79, 138, 139, 0.05) 0%, rgba(249, 237, 105, 0.05) 100%)',
-                  border: '1px solid rgba(79, 138, 139, 0.1)',
-                }}
-              >
-                <Stack spacing={2}>
-                  <Stack direction="row" spacing={2} alignItems="flex-start">
-                    <LocationOnIcon sx={{ color: '#4F8A8B', mt: 0.5 }} />
-                    <Box>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1a1a1a' }}>
-                        Location
-                      </Typography>
-                      <Typography variant="body2" color="#6B7280">
-                        {[selected.city, selected.country].filter(Boolean).join(', ') || 'Location not available'}
-                        {selected.lat && selected.lon && ` (${selected.lat.toFixed(2)}, ${selected.lon.toFixed(2)})`}
-                      </Typography>
-                    </Box>
-                  </Stack>
-
-                  {selected.rating && (
-                    <Stack direction="row" spacing={2} alignItems="flex-start">
-                      <AttractionsIcon sx={{ color: '#F9ED69', mt: 0.5 }} />
-                      <Box>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1a1a1a' }}>
-                          Rating
-                        </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <Rating
-                            value={selected.rating / 2}
-                            readOnly
-                            sx={{ color: '#F9ED69' }}
-                          />
-                          <Typography variant="body2" sx={{ fontWeight: 600, color: '#1a1a1a' }}>
-                            {selected.rating.toFixed(1)} / 10
-                          </Typography>
-                        </Stack>
-                      </Box>
-                    </Stack>
-                  )}
-                </Stack>
-              </Paper>
-
-              {/* Category & Description */}
-              {(selected.details || selected.category) && (
-                <Box mb={3}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#1a1a1a' }}>
-                    Category
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                    {(
-                      selected.details?.kinds ||
-                      (typeof selected.details === 'string' ? selected.details : '') ||
-                      selected.category ||
-                      ''
-                    )
-                      .split(',')
-                      .map((cat) => cat.trim())
-                      .filter(Boolean)
-                      .slice(0, 5)
-                      .map((cat, i) => (
-                        <Chip
-                          key={i}
-                          label={cat}
-                          variant="outlined"
-                          sx={{
-                            borderColor: '#4F8A8B',
-                            color: '#4F8A8B',
-                            fontWeight: 600,
-                          }}
-                        />
-                      ))}
+              <Stack spacing={1.6}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={1}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 800, color: '#0f172a' }}>
+                      {selected.name}
+                    </Typography>
+                    <Typography variant="body2" color="#4B5563">
+                      {formatLocation(selected)}
+                    </Typography>
                   </Box>
-                </Box>
-              )}
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      component="a"
+                      href={buildGoogleMapsUrl(selected)}
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="outlined"
+                      size="small"
+                      sx={{ textTransform: 'none', borderColor: '#4F8A8B', color: '#2d5a5b' }}
+                    >
+                      Open Map
+                    </Button>
+                    <Button
+                      component="a"
+                      href={buildGoogleDirectionsUrl(selected, userLocation)}
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="contained"
+                      size="small"
+                      sx={{
+                        textTransform: 'none',
+                        background: 'linear-gradient(135deg, #0f766e 0%, #0f172a 100%)',
+                      }}
+                    >
+                      How to Arrive
+                    </Button>
+                  </Stack>
+                </Stack>
 
-              <Divider sx={{ my: 2 }} />
+                {detailLoading && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={16} />
+                    <Typography variant="body2" color="#6B7280">
+                      Fetching verified details...
+                    </Typography>
+                  </Stack>
+                )}
 
-              {/* Description */}
-              <Box mb={3}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, color: '#1a1a1a' }}>
-                  About This Place
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#4B5563', lineHeight: 1.8 }}>
+                <Typography variant="body2" sx={{ color: '#374151', lineHeight: 1.8 }}>
                   {selected.description || 'Description not available for this place.'}
                 </Typography>
-              </Box>
 
-              {/* Additional Info */}
-              {(selected.history || selected.visitingHours || selected.ticketInfo) && (
-                <Paper
-                  elevation={0}
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                  <Chip icon={<LocationOnIcon sx={{ fontSize: '1rem !important' }} />} label={formatLocation(selected)} />
+                  {Number(selected?.rating || 0) > 0 && (
+                    <Chip icon={<AttractionsIcon sx={{ fontSize: '1rem !important' }} />} label={`${Number(selected.rating).toFixed(1)} / 10`} />
+                  )}
+                  {selected?.lat != null && selected?.lon != null && (
+                    <Chip label={`Coordinates: ${Number(selected.lat).toFixed(3)}, ${Number(selected.lon).toFixed(3)}`} variant="outlined" />
+                  )}
+                </Stack>
+
+                {nearbyError && <Alert severity="info">{nearbyError}</Alert>}
+
+                <Box
                   sx={{
-                    p: 2.5,
-                    borderRadius: '12px',
-                    background: '#f8f9fa',
-                    border: '1px solid rgba(79, 138, 139, 0.1)',
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+                    gap: 1.2,
                   }}
                 >
-                  {selected.history && (
-                    <Box mb={2}>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: '#4F8A8B' }}>
-                        HISTORY
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: '#6B7280', mt: 0.5 }}>
-                        {selected.history}
-                      </Typography>
-                    </Box>
+                  {renderNearbyList(
+                    'Nearby Destinations',
+                    <ExploreIcon sx={{ color: '#0f766e' }} fontSize="small" />,
+                    nearbyDestinations,
+                    'No nearby destination data.'
                   )}
-                  {selected.visitingHours && (
-                    <Box mb={2}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <AccessTimeIcon sx={{ fontSize: 16, color: '#4F8A8B' }} />
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: '#4F8A8B' }}>
-                          VISITING HOURS
-                        </Typography>
-                      </Stack>
-                      <Typography variant="body2" sx={{ color: '#6B7280', mt: 0.5 }}>
-                        {selected.visitingHours}
-                      </Typography>
-                    </Box>
+                  {renderNearbyList(
+                    'Nearby Hotels',
+                    <HotelIcon sx={{ color: '#1d4ed8' }} fontSize="small" />,
+                    nearbyHotels,
+                    'No nearby hotel data.'
                   )}
-                  {selected.ticketInfo && (
-                    <Box>
-                      <Typography variant="caption" sx={{ fontWeight: 700, color: '#4F8A8B' }}>
-                        TICKET INFO
-                      </Typography>
-                      <Typography variant="body2" sx={{ color: '#6B7280', mt: 0.5 }}>
-                        {selected.ticketInfo}
-                      </Typography>
-                    </Box>
+                  {renderNearbyList(
+                    'Nearby Food',
+                    <RestaurantIcon sx={{ color: '#ea580c' }} fontSize="small" />,
+                    nearbyFood,
+                    'No nearby cafe/restaurant data.'
                   )}
-                </Paper>
-              )}
-
-              {/* Map in Modal */}
-              {selected.lat && selected.lon && (
-                <Box mt={3}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5, color: '#1a1a1a' }}>
-                    Location Map
-                  </Typography>
-                  <PremiumDestinationMap
-                    destinations={[selected]}
-                    center={{ lat: selected.lat, lng: selected.lon }}
-                    zoom={13}
-                  />
                 </Box>
-              )}
 
-              <Box mt={3} sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={() => setSelected(null)}
-                  sx={{
-                    background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
-                    py: 1.5,
-                    textTransform: 'none',
-                    fontWeight: 600,
-                  }}
-                >
-                  Close
-                </Button>
-              </Box>
-            </DialogContent>
-          </>
-        )}
-      </Dialog>
+                <Divider />
+
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#111827' }}>
+                    Ask Travel Assistant (Gemini/OpenRouter)
+                  </Typography>
+                  <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+                    {assistantPromptTemplates.map((text) => (
+                      <Chip
+                        key={text}
+                        label={text}
+                        onClick={() => setAssistantPrompt(text)}
+                        variant="outlined"
+                        clickable
+                      />
+                    ))}
+                  </Stack>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      placeholder="Ask: best time, how to arrive, budget tips, family-friendly nearby plan"
+                      value={assistantPrompt}
+                      onChange={(event) => setAssistantPrompt(event.target.value)}
+                    />
+                    <Button
+                      variant="contained"
+                      onClick={askAssistant}
+                      disabled={assistantLoading}
+                      sx={{
+                        minWidth: 140,
+                        textTransform: 'none',
+                        fontWeight: 700,
+                        background: 'linear-gradient(135deg, #4F8A8B 0%, #2d5a5b 100%)',
+                      }}
+                    >
+                      {assistantLoading ? 'Analyzing...' : 'Ask AI'}
+                    </Button>
+                  </Stack>
+
+                  {assistantError && <Alert severity="warning">{assistantError}</Alert>}
+
+                  {assistantInsight && (
+                    <Paper elevation={0} sx={{ p: 1.5, borderRadius: '12px', border: '1px solid rgba(0,0,0,0.09)' }}>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                            {assistantInsight.title || 'AI Destination Brief'}
+                          </Typography>
+                          {assistantMeta && (
+                            <Chip
+                              size="small"
+                              label={`${assistantMeta.provider}${assistantMeta.aiAvailable ? '' : ' (fallback)'}`}
+                              variant="outlined"
+                            />
+                          )}
+                        </Stack>
+                        <Typography variant="body2" sx={{ color: '#334155', lineHeight: 1.7 }}>
+                          {assistantInsight.overview}
+                        </Typography>
+                        {assistantInsight.bestTimeToVisit && (
+                          <Typography variant="body2" sx={{ color: '#0f172a' }}>
+                            <strong>Best Time:</strong> {assistantInsight.bestTimeToVisit}
+                          </Typography>
+                        )}
+                        {assistantInsight.arrival?.steps?.length > 0 && (
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                              Arrival Guidance ({assistantInsight.arrival.mode || 'mixed'})
+                            </Typography>
+                            <Typography variant="caption" color="#475569" sx={{ display: 'block', mb: 0.5 }}>
+                              Estimated: {assistantInsight.arrival.estimatedTime || 'Not available'}
+                            </Typography>
+                            <Stack spacing={0.5}>
+                              {assistantInsight.arrival.steps.map((step) => (
+                                <Typography key={step} variant="caption" color="#475569">
+                                  - {step}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          </Box>
+                        )}
+                      </Stack>
+                    </Paper>
+                  )}
+                </Stack>
+              </Stack>
+            </Paper>
+          )}
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 1.2,
+              borderRadius: '14px',
+              border: '1px solid rgba(79, 138, 139, 0.18)',
+            }}
+          >
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, color: '#0f172a', mb: 0.5 }}>
+              Map and Navigation
+            </Typography>
+            <Typography variant="caption" color="#64748b" sx={{ display: 'block', mb: 1 }}>
+              Use map route planner for exact turn-by-turn travel time and alternate routes.
+            </Typography>
+            <PremiumDestinationMap
+              destinations={mapDestinations}
+              center={mapCenter}
+              zoom={selected ? 8 : 3}
+              hidePlaceImage
+              height={470}
+              onMarkerClick={(destination) => {
+                handleSelectDestination(destination);
+              }}
+            />
+          </Paper>
+        </Box>
+      </Box>
     </Box>
   );
 }

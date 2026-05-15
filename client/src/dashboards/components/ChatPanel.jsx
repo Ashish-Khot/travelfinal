@@ -23,7 +23,9 @@ import DialogActions from '@mui/material/DialogActions';
 import Tooltip from '@mui/material/Tooltip';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import HotelRoundedIcon from '@mui/icons-material/HotelRounded';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import io from 'socket.io-client';
 import api from '../../api';
 import PremiumAvatar from '../../components/PremiumAvatar';
@@ -101,6 +103,20 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
   const socketRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const [showConversationList, setShowConversationList] = useState(true);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setShowConversationList(true);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (isMobile && selectedContact) {
+      setShowConversationList(false);
+    }
+  }, [isMobile, selectedContact]);
 
   // Fetch user and chat contacts (guides + hotels) for this tourist
   useEffect(() => {
@@ -599,10 +615,12 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
       elevation={0}
       sx={{
         display: 'flex',
-        height: '72vh',
+        flexDirection: { xs: 'column', md: 'row' },
+        height: { xs: 'calc(100vh - 150px)', md: '72vh' },
+        minHeight: { xs: 520, md: 620 },
         bgcolor: '#f8fafc',
         background: 'linear-gradient(135deg, #f8fafc 0%, #eef2f7 55%, #ecfeff 100%)',
-        borderRadius: '36px',
+        borderRadius: { xs: '20px', md: '36px' },
         border: '1px solid rgba(148, 163, 184, 0.28)',
         boxShadow: '0 22px 48px rgba(15, 23, 42, 0.14)',
         overflow: 'hidden'
@@ -611,23 +629,25 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
       {/* Contact List */}
       <Box
         sx={{
-          width: 330,
+          width: { xs: '100%', md: 330 },
+          minWidth: 0,
+          display: isMobile && !showConversationList ? 'none' : 'flex',
           bgcolor: 'rgba(255, 255, 255, 0.9)',
-          borderRight: '1px solid rgba(148, 163, 184, 0.2)',
+          borderRight: { xs: 'none', md: '1px solid rgba(148, 163, 184, 0.2)' },
           backdropFilter: 'blur(12px)',
           p: 0,
-          display: 'flex',
           flexDirection: 'column',
-          borderTopLeftRadius: '36px',
-          borderBottomLeftRadius: '36px'
+          borderTopLeftRadius: { xs: '20px', md: '36px' },
+          borderBottomLeftRadius: { xs: 0, md: '36px' },
+          borderBottom: { xs: '1px solid rgba(148, 163, 184, 0.2)', md: 'none' },
         }}
       >
-        <Box sx={{ p: 3, pb: 1 }}>
+        <Box sx={{ p: { xs: 2, md: 3 }, pb: 1 }}>
           <Typography
             variant="h4"
             fontWeight={800}
             mb={0.5}
-            sx={{ color: '#0f172a', letterSpacing: '-0.3px' }}
+            sx={{ color: '#0f172a', letterSpacing: '-0.3px', fontSize: { xs: '1.4rem', md: '2rem' } }}
           >
             Messages
           </Typography>
@@ -714,7 +734,10 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                     transform: 'translateY(-1px)'
                   }
                 }}
-                onClick={() => setSelectedContact(contact)}
+                onClick={() => {
+                  setSelectedContact(contact);
+                  if (isMobile) setShowConversationList(false);
+                }}
               >
                 <PremiumAvatar
                   src={contact.avatar}
@@ -747,21 +770,43 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
         </Box>
       </Box>
       {/* Chat Window */}
-      <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', bgcolor: 'transparent', borderRadius: 0, p: 0 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: isMobile && showConversationList ? 'none' : 'flex',
+          flexDirection: 'column',
+          bgcolor: 'transparent',
+          borderRadius: 0,
+          p: 0
+        }}
+      >
         {selectedContact && (
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              p: 2.5,
+              p: { xs: 1.5, md: 2.5 },
               background: 'linear-gradient(90deg, rgba(255,255,255,0.9) 0%, rgba(240, 253, 250, 0.7) 100%)',
               borderBottom: '1px solid rgba(148, 163, 184, 0.2)',
               backdropFilter: 'blur(10px)',
-              borderTopRightRadius: '36px'
+              borderTopRightRadius: { xs: '20px', md: '36px' }
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {isMobile && (
+                <IconButton
+                  onClick={() => {
+                    setSelectedContact(null);
+                    setShowConversationList(true);
+                  }}
+                  sx={{ mr: 1 }}
+                  aria-label="Back to chats"
+                >
+                  <ArrowBackRoundedIcon />
+                </IconButton>
+              )}
               <PremiumAvatar
                 src={selectedContact.avatar}
                 name={selectedContact.name}
@@ -771,8 +816,12 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                 sx={{ mr: 2 }}
               />
               <Box>
-                <Typography fontWeight={800} fontSize={20} sx={{ color: '#10352c' }}>{selectedContact.name}</Typography>
-                <Typography fontSize={13} sx={{ color: '#55786c' }}>{selectedContact.subtitle || ''}</Typography>
+                <Typography fontWeight={800} fontSize={{ xs: 16, md: 20 }} sx={{ color: '#10352c' }}>
+                  {selectedContact.name}
+                </Typography>
+                <Typography fontSize={13} sx={{ color: '#55786c' }} noWrap>
+                  {selectedContact.subtitle || ''}
+                </Typography>
               </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -834,10 +883,19 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
           ) : error ? (
             <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
               <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
-              <Button onClick={() => setSelectedContact(null)} color="primary" variant="outlined">Back</Button>
+              <Button
+                onClick={() => {
+                  setSelectedContact(null);
+                  if (isMobile) setShowConversationList(true);
+                }}
+                color="primary"
+                variant="outlined"
+              >
+                Back
+              </Button>
             </Box>
           ) : (
-            <Box sx={{ flex: 1, px: 3, py: 2, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ flex: 1, px: { xs: 1.5, md: 3 }, py: 2, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
               {messages.length === 0 && (
                 <Typography sx={{ textAlign: 'center', mt: 8, color: '#597b70' }}>
                   No messages yet. Start the conversation!
@@ -909,7 +967,7 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
                       pl: selectionMode ? 4 : 2,
                       pt: selectionMode ? 2.2 : 1.2,
                       borderRadius: isMe ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
-                      maxWidth: 380,
+                      maxWidth: { xs: '90%', sm: 380 },
                       boxShadow: isMe
                         ? '0 12px 24px rgba(15, 118, 110, 0.24)'
                         : '0 12px 22px rgba(15, 23, 42, 0.12)',
@@ -1017,14 +1075,15 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
             display: 'flex',
             alignItems: 'center',
             bgcolor: 'rgba(255, 255, 255, 0.9)',
-            p: 2,
+            p: { xs: 1.25, md: 2 },
             borderTop: '1px solid rgba(148, 163, 184, 0.2)',
             boxShadow: 'none',
             mt: 'auto',
             flexDirection: 'column',
             gap: 1,
             backdropFilter: 'blur(10px)',
-            borderBottomRightRadius: '36px'
+            borderBottomRightRadius: { xs: '20px', md: '36px' },
+            borderBottomLeftRadius: { xs: '20px', md: 0 },
           }}
         >
           {emojiOpen && (
@@ -1077,12 +1136,12 @@ export default function ChatPanel({ chatTarget, onChatHandled }) {
               variant="contained"
               color="success"
               sx={{
-                minWidth: 92,
-                height: 48,
+                minWidth: { xs: 76, sm: 92 },
+                height: { xs: 42, sm: 48 },
                 borderRadius: '999px',
                 fontWeight: 700,
-                fontSize: 16,
-                px: 2.5,
+                fontSize: { xs: 14, sm: 16 },
+                px: { xs: 1.6, sm: 2.5 },
                 flexShrink: 0,
                 boxShadow: '0 10px 20px rgba(15, 118, 110, 0.25)',
                 textTransform: 'none',

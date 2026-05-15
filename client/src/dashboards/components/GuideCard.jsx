@@ -57,6 +57,20 @@ export default function GuideCard({
   const coverKind = getMediaKind(coverMedia);
   const coverSrc = coverMedia?.url || guide.avatar;
   const isAvailable = guide.isAvailable !== false;
+  const isBookable = guide.manualAvailability !== false;
+  const availabilityReason = guide.availabilityReason || (isAvailable ? 'available_now' : 'unavailable');
+  const availabilityLabel = availabilityReason === 'booked_now'
+    ? 'Booked Now'
+    : availabilityReason === 'manual_offline'
+      ? 'Unavailable'
+      : isAvailable
+        ? 'Available'
+        : 'Unavailable';
+  const availabilityBg = availabilityReason === 'booked_now'
+    ? 'rgba(245, 158, 11, 0.95)'
+    : isAvailable
+      ? 'rgba(16, 185, 129, 0.95)'
+      : 'rgba(100, 116, 139, 0.95)';
 
   const handleFavorite = (event) => {
     event.stopPropagation();
@@ -66,7 +80,7 @@ export default function GuideCard({
 
   const handleBook = (event) => {
     event.stopPropagation();
-    if (!isAvailable) return;
+    if (!isBookable) return;
     if (onBook) onBook(guide);
   };
 
@@ -130,13 +144,13 @@ export default function GuideCard({
           />
 
           <Chip
-            label={isAvailable ? 'Available' : 'Unavailable'}
+            label={availabilityLabel}
             size="small"
             sx={{
               position: 'absolute',
               top: 12,
               left: 12,
-              bgcolor: isAvailable ? 'rgba(16, 185, 129, 0.95)' : 'rgba(100, 116, 139, 0.95)',
+              bgcolor: availabilityBg,
               color: '#ffffff',
               fontWeight: 800,
               zIndex: 2,
@@ -349,7 +363,7 @@ export default function GuideCard({
             <Button
               variant="contained"
               onClick={handleBook}
-              disabled={!isAvailable}
+              disabled={!isBookable}
               sx={{
                 flex: 1.2,
                 textTransform: 'none',
@@ -358,14 +372,14 @@ export default function GuideCard({
                 minHeight: 40,
                 py: 0.65,
                 borderRadius: 10,
-                bgcolor: !isAvailable ? '#cbd5e1' : '#0f766e',
+                bgcolor: !isBookable ? '#cbd5e1' : '#0f766e',
                 whiteSpace: 'nowrap',
                 '&:hover': {
-                  bgcolor: !isAvailable ? '#cbd5e1' : '#0f5f59',
+                  bgcolor: !isBookable ? '#cbd5e1' : '#0f5f59',
                 },
               }}
             >
-              {isAvailable ? 'Book Guide' : 'Unavailable'}
+              {isBookable ? 'Book Guide' : 'Unavailable'}
             </Button>
             <Button
               variant="outlined"

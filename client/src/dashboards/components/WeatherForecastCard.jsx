@@ -108,14 +108,14 @@ export default function WeatherForecastCard({ onClick, clickable }) {
         sx={{
           borderRadius: '24px',
           boxShadow: '0 20px 50px rgba(15, 23, 42, 0.18)',
-          minWidth: 340,
-          maxWidth: 420,
+          minWidth: 0,
+          maxWidth: '100%',
           width: '100%',
-          mb: 4,
+          mb: { xs: 2, md: 4 },
           background: 'linear-gradient(135deg, #0f172a 0%, #0b3b4a 55%, #134e4a 100%)',
           border: '1px solid rgba(255,255,255,0.18)',
-          px: 3,
-          py: 3,
+          px: { xs: 2, sm: 3 },
+          py: { xs: 2.25, sm: 3 },
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
@@ -182,7 +182,8 @@ export default function WeatherForecastCard({ onClick, clickable }) {
               <Box
                 display="flex"
                 alignItems="center"
-                justifyContent="space-between"
+                justifyContent={{ xs: 'flex-start', sm: 'space-between' }}
+                flexWrap={{ xs: 'wrap', sm: 'nowrap' }}
                 mb={3}
                 pb={3}
                 borderBottom="1px solid rgba(255,255,255,0.2)"
@@ -195,14 +196,15 @@ export default function WeatherForecastCard({ onClick, clickable }) {
                     sx={{
                       color: '#ffffff',
                       lineHeight: 1,
+                      fontSize: { xs: '2rem', sm: '2.5rem' },
                       textShadow: '0 2px 10px rgba(0,0,0,0.2)',
                     }}
                   >
                     {weather.temp} deg
                   </Typography>
                 </Box>
-                <Box flex={1}>
-                  <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: '1rem' }}>
+                <Box flex={1} minWidth={0}>
+                  <Typography sx={{ color: '#ffffff', fontWeight: 700, fontSize: { xs: '0.95rem', sm: '1rem' }, wordBreak: 'break-word' }}>
                     {weather.location}
                   </Typography>
                   <Typography
@@ -241,7 +243,7 @@ export default function WeatherForecastCard({ onClick, clickable }) {
                       fontWeight={700}
                       sx={{
                         color: 'rgba(255,255,255,0.9)',
-                        minWidth: 50,
+                        minWidth: 0,
                       }}
                     >
                       {d.day}

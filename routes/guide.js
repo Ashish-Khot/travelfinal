@@ -1,5 +1,6 @@
 const express = require('express');
 const Guide = require('../models/Guide');
+const Booking = require('../models/Booking');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
 const { askGuide } = require('../controllers/guideAiController');
 
@@ -70,10 +71,77 @@ router.get('/profile/:userId', async (req, res) => {
 // Get all approved guides (for tourists to explore)
 router.get('/', async (req, res) => {
   try {
-    const guides = await Guide.find({ approved: true })
-      .populate('userId', USER_PROFILE_FIELDS);
+    const guides = await Guide.find({ approved: true }).populate('userId', USER_PROFILE_FIELDS);
+    const payloads = guides.map(toGuidePayload);
+
+    const guideUserIds = payloads
+      .map((payload) => {
+        const id = payload?.userId?._id || payload?.userId;
+        return id ? String(id) : '';
+      })
+      .filter(Boolean);
+
+    if (guideUserIds.length === 0) {
+      return res.json({ guides: payloads });
+    }
+
+    const now = new Date();
+    const busyStatuses = ['pending', 'confirmed', 'accepted'];
+
+    // Active booking means the guide is currently on a booked time slot.
+    const activeBookings = await Booking.find({
+      guideId: { $in: guideUserIds },
+      status: { $in: busyStatuses },
+      startDateTime: { $lte: now },
+      endDateTime: { $gt: now },
+    }).select('guideId endDateTime');
+
+    const activeByGuideId = new Map();
+
+    activeBookings.forEach((booking) => {
+      const guideId = String(booking.guideId || '');
+      if (!guideId) return;
+      const existing = activeByGuideId.get(guideId) || { count: 0, nextAvailableAt: null };
+      existing.count += 1;
+
+      const endAt = booking.endDateTime ? new Date(booking.endDateTime) : null;
+      if (endAt && !Number.isNaN(endAt.getTime())) {
+        if (!existing.nextAvailableAt || endAt < existing.nextAvailableAt) {
+          existing.nextAvailableAt = endAt;
+        }
+      }
+
+      activeByGuideId.set(guideId, existing);
+    });
+
+    const enriched = payloads.map((payload) => {
+      const guideId = String(payload?.userId?._id || payload?.userId || '');
+      const activeInfo = activeByGuideId.get(guideId);
+
+      const isCurrentlyBooked = Boolean(activeInfo && activeInfo.count > 0);
+      const nextAvailableAt = activeInfo?.nextAvailableAt ? activeInfo.nextAvailableAt.toISOString() : null;
+      const manualAvailability = payload.isAvailable !== false;
+      const isAvailableNow = !isCurrentlyBooked;
+
+      let availabilityReason = 'available_now';
+      if (!manualAvailability) availabilityReason = 'manual_offline';
+      else if (!isAvailableNow) availabilityReason = 'booked_now';
+
+      payload.isCurrentlyBooked = isCurrentlyBooked;
+      payload.activeBookingCount = activeInfo?.count || 0;
+      payload.nextAvailableAt = nextAvailableAt;
+      payload.manualAvailability = manualAvailability;
+      payload.isAvailableNow = isAvailableNow;
+
+      // Guide is available only if profile is online and they are not in an active overlapping slot.
+      payload.isAvailable = manualAvailability && isAvailableNow;
+      payload.availabilityReason = availabilityReason;
+
+      return payload;
+    });
+
     res.json({
-      guides: guides.map(toGuidePayload)
+      guides: enriched
     });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });

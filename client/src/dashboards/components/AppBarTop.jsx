@@ -1,5 +1,4 @@
 // Top AppBar with logo, search, notifications, and user avatar menu
-// Layout logic: Uses MUI AppBar and Toolbar for a sticky top navigation bar. Includes logo, search bar, notifications, and user avatar menu. Responsive and styled with custom theme.
 import React from 'react';
 import AppBar from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
@@ -70,14 +69,16 @@ const StyledInputBase = styled(InputBase)(({ theme }) => ({
   },
 }));
 
-export default function AppBarTop({ 
-  user, 
-  onActionComplete, 
-  isDarkMode = false, 
+export default function AppBarTop({
+  user,
+  onActionComplete,
+  isDarkMode = false,
   onThemeToggle = () => {},
   chatNotifications = {},
   onChatClick = () => {},
+  isMobile = false,
   sidebarHidden = false,
+  mobileSidebarOpen = false,
   sidebarCompact = false,
   onSidebarToggle = () => {},
   onSidebarVisibilityToggle = () => {}
@@ -87,18 +88,17 @@ export default function AppBarTop({
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
   };
+
   const handleClose = () => {
     setAnchorEl(null);
   };
 
   const handleProfileClick = () => {
-    // Dispatch event to navigate to Profile
     window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: 'Profile' } }));
     handleClose();
   };
 
   const handleSettingsClick = () => {
-    // Dispatch event to navigate to Settings
     window.dispatchEvent(new CustomEvent('navigateTab', { detail: { tab: 'Settings' } }));
     handleClose();
   };
@@ -107,6 +107,14 @@ export default function AppBarTop({
     localStorage.clear();
     window.location.href = '/login';
   };
+
+  const sidebarToggleTitle = isMobile
+    ? mobileSidebarOpen
+      ? 'Close menu'
+      : 'Open menu'
+    : sidebarHidden
+      ? 'Show sidebar'
+      : 'Hide sidebar';
 
   return (
     <AppBar
@@ -123,43 +131,60 @@ export default function AppBarTop({
         borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
       })}
     >
-      <Toolbar sx={{ gap: 1.5 }}>
-        <TravelExploreIcon sx={{ fontSize: 32, color: 'primary.main', mr: 0.5 }} />
+      <Toolbar sx={{ gap: { xs: 0.5, sm: 1.5 }, px: { xs: 1, sm: 2 }, minHeight: { xs: 64, sm: 72 } }}>
+        <TravelExploreIcon sx={{ fontSize: { xs: 26, sm: 32 }, color: 'primary.main', mr: { xs: 0, sm: 0.5 } }} />
         <Typography
           variant="h6"
           noWrap
-          sx={{ color: 'primary.main', fontWeight: 700, letterSpacing: '-0.4px' }}
+          sx={{
+            color: 'primary.main',
+            fontWeight: 700,
+            letterSpacing: '-0.4px',
+            fontSize: { xs: '1rem', sm: '1.25rem' },
+            display: { xs: 'none', sm: 'block' },
+          }}
         >
           Travelogue
         </Typography>
-        <Tooltip title={sidebarHidden ? 'Show sidebar' : 'Hide sidebar'}>
-          <IconButton onClick={onSidebarVisibilityToggle} sx={{ ml: 0.5 }}>
-            {sidebarHidden ? <ViewSidebarOutlinedIcon /> : <ViewSidebarIcon />}
+
+        <Tooltip title={sidebarToggleTitle}>
+          <IconButton onClick={onSidebarVisibilityToggle} sx={{ ml: { xs: 0, sm: 0.5 } }}>
+            {isMobile ? (
+              mobileSidebarOpen ? <MenuOpenIcon /> : <MenuIcon />
+            ) : sidebarHidden ? (
+              <ViewSidebarOutlinedIcon />
+            ) : (
+              <ViewSidebarIcon />
+            )}
           </IconButton>
         </Tooltip>
-        {!sidebarHidden && (
+
+        {!isMobile && !sidebarHidden && (
           <Tooltip title={sidebarCompact ? 'Expand sidebar' : 'Compact sidebar'}>
             <IconButton onClick={onSidebarToggle}>
               {sidebarCompact ? <MenuIcon /> : <MenuOpenIcon />}
             </IconButton>
           </Tooltip>
         )}
-        <Search>
-          <SearchIconWrapper>
-            <SearchIcon />
-          </SearchIconWrapper>
-          <StyledInputBase
-            placeholder="Search destinations, guides, travelogues..."
-            inputProps={{ 'aria-label': 'search' }}
-          />
-        </Search>
+
+        <Box sx={{ display: { xs: 'none', md: 'block' }, flex: 1, minWidth: 0 }}>
+          <Search>
+            <SearchIconWrapper>
+              <SearchIcon />
+            </SearchIconWrapper>
+            <StyledInputBase
+              placeholder="Search destinations, guides, travelogues..."
+              inputProps={{ 'aria-label': 'search' }}
+            />
+          </Search>
+        </Box>
+
         <div style={{ flexGrow: 1 }} />
-        
-        {/* Theme Toggle Button */}
+
         <Tooltip title={isDarkMode ? 'Light Mode' : 'Dark Mode'}>
-          <IconButton 
+          <IconButton
             onClick={onThemeToggle}
-            sx={{ mr: 1 }}
+            sx={{ mr: { xs: 0.25, sm: 1 } }}
           >
             {isDarkMode ? (
               <Brightness7Icon sx={{ color: '#FDB813' }} />
@@ -169,14 +194,16 @@ export default function AppBarTop({
           </IconButton>
         </Tooltip>
 
-        <NotificationPanel 
+        <NotificationPanel
           onActionComplete={onActionComplete}
           chatNotifications={chatNotifications}
           onChatClick={onChatClick}
         />
-        <IconButton onClick={handleMenu} sx={{ ml: 2 }}>
+
+        <IconButton onClick={handleMenu} sx={{ ml: { xs: 0.5, sm: 1.5 } }}>
           <Avatar alt={user?.name || 'User'} src={user?.avatar} />
         </IconButton>
+
         <Menu
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
@@ -198,16 +225,16 @@ export default function AppBarTop({
             <Box sx={{ pt: 1 }} />
           </MenuItem>
           <MenuItem onClick={handleProfileClick} sx={{ fontWeight: 500 }}>
-            👤 My Profile
+            My Profile
           </MenuItem>
           <MenuItem onClick={handleSettingsClick} sx={{ fontWeight: 500 }}>
-            ⚙️ Settings
+            Settings
           </MenuItem>
           <MenuItem sx={{ borderTop: '1px solid #eee', mt: 1 }}>
             <Box sx={{ pt: 1 }} />
           </MenuItem>
           <MenuItem onClick={handleLogout} sx={{ color: '#d32f2f', fontWeight: 500 }}>
-            🚪 Logout
+            Logout
           </MenuItem>
         </Menu>
       </Toolbar>

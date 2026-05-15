@@ -93,7 +93,7 @@ router.get("/profile/:userId", verifyToken, async (req, res) => {
 // List all hotels with owner details
 router.get("/list", verifyToken, async (req, res) => {
   try {
-    const hotels = await Hotel.find().populate("user", "name email phone country amenities address");
+    const hotels = await Hotel.find().populate("user", "name email phone country amenities address avatar");
     const payload = hotels.map((hotel) => {
       const hotelAmenities = hotel.amenities || [];
       const userAmenities = hotel.user?.amenities || [];
@@ -104,6 +104,7 @@ router.get("/list", verifyToken, async (req, res) => {
       ownerName: hotel.ownerName || hotel.user?.name || "",
       ownerEmail: hotel.user?.email || "",
       ownerPhone: hotel.user?.phone || "",
+      ownerAvatar: hotel.user?.avatar || "",
       country: hotel.country || hotel.user?.country || "",
       name: hotel.name,
       email: hotel.email,

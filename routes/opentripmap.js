@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const API_CONFIG = require('../config/apiConfig');
+const GeminiService = require('../services/geminiService');
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ const GEMINI_BASE_URL = String(
 const GEMINI_MODEL = String(API_CONFIG.GEMINI?.MODEL || 'gemini-2.5-flash').trim();
 
 const unsplashCache = new Map();
+const destinationInsightAI = new GeminiService();
 
 function hasRealKey(value) {
   const key = String(value || '').trim();
@@ -266,6 +268,42 @@ const QUERY_NOISE_WORDS = new Set([
   'trip',
 ]);
 
+const MAX_SEARCH_CENTERS = 18;
+
+const COUNTRY_THEME_SAMPLE_CENTERS = {
+  india: {
+    beach: [
+      { lat: 15.4909, lon: 73.8278 }, // Goa
+      { lat: 19.076, lon: 72.8777 }, // Mumbai
+      { lat: 12.9141, lon: 74.856 }, // Mangaluru
+      { lat: 9.9312, lon: 76.2673 }, // Kochi
+      { lat: 8.0883, lon: 77.5385 }, // Kanyakumari
+      { lat: 13.0827, lon: 80.2707 }, // Chennai
+      { lat: 17.6868, lon: 83.2185 }, // Visakhapatnam
+      { lat: 19.8135, lon: 85.8312 }, // Puri
+      { lat: 20.4283, lon: 72.8397 }, // Daman
+      { lat: 11.6234, lon: 92.7265 }, // Port Blair
+    ],
+  },
+};
+
+const THEME_LOCATION_SEED_DESTINATIONS = {
+  india: {
+    beach: [
+      { name: 'Baga Beach', city: 'Goa', lat: 15.5553, lon: 73.7517, description: 'Popular beach with vibrant cafes and water sports.' },
+      { name: 'Calangute Beach', city: 'Goa', lat: 15.5439, lon: 73.7553, description: 'One of India\'s best-known beaches and lively shoreline.' },
+      { name: 'Palolem Beach', city: 'Goa', lat: 15.01, lon: 74.0232, description: 'Scenic crescent beach ideal for sunsets and kayaking.' },
+      { name: 'Marina Beach', city: 'Chennai', lat: 13.0475, lon: 80.2824, description: 'Iconic urban beach and promenade in Chennai.' },
+      { name: 'Radhanagar Beach', city: 'Havelock Island', lat: 11.9839, lon: 92.9533, description: 'Award-winning white-sand beach in Andaman.' },
+      { name: 'Kovalam Beach', city: 'Kovalam', lat: 8.4004, lon: 76.9784, description: 'Famous Kerala beach known for lighthouse views.' },
+      { name: 'Varkala Beach', city: 'Varkala', lat: 8.7379, lon: 76.7163, description: 'Cliffside beach with dramatic Arabian Sea views.' },
+      { name: 'Puri Beach', city: 'Puri', lat: 19.7983, lon: 85.8245, description: 'Major east-coast beach with long sandy stretch.' },
+      { name: 'Gokarna Beach', city: 'Gokarna', lat: 14.5479, lon: 74.3188, description: 'Relaxed beach destination with scenic coastline.' },
+      { name: 'Digha Beach', city: 'Digha', lat: 21.6266, lon: 87.5086, description: 'Popular beach getaway in West Bengal.' },
+    ],
+  },
+};
+
 function normalizeLocationAliases(input = '') {
   const text = normalizeText(input);
   if (!text) return '';
@@ -486,11 +524,34 @@ function parseSearchIntent(rawQuery = '') {
   };
 }
 
-function buildSearchCenters(location, expand = false) {
+function getCountryThemeSamplingCenters(location = {}, themes = []) {
+  const countryKey = normalizeLower(location?.country || '');
+  if (!countryKey || !Array.isArray(themes) || themes.length === 0) return [];
+
+  const countryConfig = COUNTRY_THEME_SAMPLE_CENTERS[countryKey];
+  if (!countryConfig) return [];
+
+  const centers = [];
+  for (const theme of themes) {
+    const themeKey = normalizeLower(theme);
+    const points = Array.isArray(countryConfig[themeKey]) ? countryConfig[themeKey] : [];
+    for (const point of points) {
+      const lat = toFiniteNumber(point?.lat, null);
+      const lon = toFiniteNumber(point?.lon, null);
+      if (lat == null || lon == null) continue;
+      centers.push({ lat, lon });
+    }
+  }
+
+  return dedupeBy(centers, (point) => `${point.lat.toFixed(3)}:${point.lon.toFixed(3)}`);
+}
+
+function buildSearchCenters(location, expand = false, options = {}) {
   const lat = toFiniteNumber(location?.lat, null);
   const lon = toFiniteNumber(location?.lon, null);
   if (lat == null || lon == null) return [];
 
+  const themeCenters = getCountryThemeSamplingCenters(location, options?.themes || []);
   const centers = [{ lat, lon }];
   if (!expand) return centers;
 
@@ -519,6 +580,23 @@ function buildSearchCenters(location, expand = false) {
       { lat: midLat, lon: minLon },
       { lat: midLat, lon: maxLon },
     ];
+
+    const latSpan = Math.abs(maxLat - minLat);
+    const lonSpan = Math.abs(maxLon - minLon);
+
+    if (latSpan > 6 || lonSpan > 6) {
+      const rowCount = latSpan > 14 ? 4 : 3;
+      const colCount = lonSpan > 14 ? 5 : 4;
+      for (let row = 0; row <= rowCount; row += 1) {
+        const rowRatio = rowCount === 0 ? 0 : row / rowCount;
+        const gridLat = minLat + (latSpan * rowRatio);
+        for (let col = 0; col <= colCount; col += 1) {
+          const colRatio = colCount === 0 ? 0 : col / colCount;
+          const gridLon = minLon + (lonSpan * colRatio);
+          bboxCenters.push({ lat: gridLat, lon: gridLon });
+        }
+      }
+    }
 
     for (const point of bboxCenters) {
       if (point.lat > 85 || point.lat < -85) continue;
@@ -549,7 +627,46 @@ function buildSearchCenters(location, expand = false) {
     centers.push({ lat: nextLat, lon: nextLon });
   }
 
-  return dedupeBy(centers, (point) => `${point.lat.toFixed(3)}:${point.lon.toFixed(3)}`);
+  const mergedCenters = [...centers, ...themeCenters];
+  return dedupeBy(mergedCenters, (point) => `${point.lat.toFixed(3)}:${point.lon.toFixed(3)}`)
+    .slice(0, MAX_SEARCH_CENTERS);
+}
+
+function getThemeLocationSeedFeatures({ location = {}, themes = [], query = '' } = {}) {
+  const countryKey = normalizeLower(location?.country || '');
+  if (!countryKey || !Array.isArray(themes) || themes.length === 0) return [];
+
+  const countrySeeds = THEME_LOCATION_SEED_DESTINATIONS[countryKey];
+  if (!countrySeeds) return [];
+
+  const features = [];
+  for (const theme of themes) {
+    const themeKey = normalizeLower(theme);
+    const rows = Array.isArray(countrySeeds[themeKey]) ? countrySeeds[themeKey] : [];
+    for (const row of rows) {
+      const feature = makeFeature({
+        name: row?.name,
+        lat: row?.lat,
+        lon: row?.lon,
+        kinds: buildKinds({
+          name: row?.name || '',
+          rawKinds: `${theme},Popular`,
+          query,
+          extraTags: [theme, 'Popular'],
+        }),
+        description: row?.description || '',
+        image: '',
+        city: row?.city || '',
+        state: row?.state || '',
+        country: location?.country || '',
+        source: 'theme-seed',
+        rating: toFiniteNumber(row?.rating, 4.5),
+      });
+      if (feature) features.push(feature);
+    }
+  }
+
+  return dedupeBy(features, featureKey);
 }
 
 function inferTagsFromText(...texts) {
@@ -666,6 +783,7 @@ function computeFeatureScore(feature, query = '', intentThemes = [], searchInten
   if (source === 'opentripmap') score += 3;
   if (source === 'foursquare') score += 2;
   if (source === 'wikipedia') score += 1;
+  if (source === 'theme-seed') score += 5;
   if (hasImage) score += 2;
 
   for (const theme of intentThemes) {
@@ -673,6 +791,12 @@ function computeFeatureScore(feature, query = '', intentThemes = [], searchInten
     if (normalizedTheme && (kinds.includes(normalizedTheme) || name.includes(normalizedTheme))) {
       score += 2;
     }
+  }
+
+  const isThemeMatched = featureMatchesThemes(feature, intentThemes);
+  if (Array.isArray(intentThemes) && intentThemes.length > 0) {
+    if (isThemeMatched) score += 10;
+    if (!isThemeMatched && searchIntent?.mode !== 'direct') score -= 10;
   }
 
   const topicQuery = normalizeLower(searchIntent?.topicQuery || '');
@@ -913,6 +1037,22 @@ function extractGeoapifyBBox(feature) {
   return null;
 }
 
+function extractNominatimBBox(match) {
+  const bbox = Array.isArray(match?.boundingbox) ? match.boundingbox : null;
+  if (!bbox || bbox.length < 4) return null;
+
+  const minLat = toFiniteNumber(bbox[0], null);
+  const maxLat = toFiniteNumber(bbox[1], null);
+  const minLon = toFiniteNumber(bbox[2], null);
+  const maxLon = toFiniteNumber(bbox[3], null);
+
+  if ([minLat, maxLat, minLon, maxLon].every(Number.isFinite)) {
+    return { minLat, maxLat, minLon, maxLon };
+  }
+
+  return null;
+}
+
 async function geoapifyGeocode(query) {
   if (!hasGeoapifyKey() || !normalizeText(query)) return null;
 
@@ -990,6 +1130,7 @@ async function nominatimGeocode(query) {
         q: query,
         format: 'json',
         limit: 1,
+        addressdetails: 1,
       },
       timeout: REQUEST_TIMEOUT,
       headers: {
@@ -1004,13 +1145,28 @@ async function nominatimGeocode(query) {
     const lon = toFiniteNumber(match?.lon, null);
     if (lat == null || lon == null) return null;
 
+    const address = match?.address || {};
+    const city = normalizeText(
+      address?.city ||
+      address?.town ||
+      address?.village ||
+      address?.municipality ||
+      ''
+    );
+    const state = normalizeText(address?.state || address?.region || '');
+    const country = normalizeText(
+      address?.country ||
+      match?.display_name?.split(',')?.slice(-1)?.[0] ||
+      ''
+    );
+
     return {
       lat,
       lon,
-      city: normalizeText(match?.display_name?.split(',')?.[0] || ''),
-      state: normalizeText(match?.display_name?.split(',')?.slice(-2, -1)?.[0] || ''),
-      country: normalizeText(match?.display_name?.split(',')?.slice(-1)?.[0] || ''),
-      bbox: null,
+      city,
+      state,
+      country,
+      bbox: extractNominatimBBox(match),
       provider: 'nominatim',
     };
   } catch {
@@ -1091,7 +1247,21 @@ async function resolveSearchLocation({ query, lat, lon, fallbackQueries = [] }) 
 
   for (const candidate of candidateQueries) {
     const geoapify = await geoapifyGeocode(candidate);
-    if (geoapify) return geoapify;
+    if (!geoapify) continue;
+    if (geoapify.bbox) return geoapify;
+
+    const nominatim = await nominatimGeocode(candidate);
+    if (!nominatim) return geoapify;
+
+    return {
+      lat: geoapify.lat ?? nominatim.lat,
+      lon: geoapify.lon ?? nominatim.lon,
+      city: geoapify.city || nominatim.city || '',
+      state: geoapify.state || nominatim.state || '',
+      country: geoapify.country || nominatim.country || '',
+      bbox: geoapify.bbox || nominatim.bbox || null,
+      provider: geoapify.bbox ? 'geoapify' : 'geoapify+nominatim',
+    };
   }
 
   for (const candidate of candidateQueries) {
@@ -1174,7 +1344,9 @@ async function fetchGeoapifyThemeFeatures({
   const safeLimit = Math.min(Math.max(Number(limit) || 12, 4), 30);
   const safeRadius = Math.min(Math.max(Number(radius) || 10000, 1000), 300000);
   const expanded = Boolean(searchIntent?.locationQuery) && !normalizeText(location?.city);
-  const centers = buildSearchCenters(location, expanded).slice(0, expanded ? 10 : 3);
+  const centers = buildSearchCenters(location, expanded, {
+    themes: intentThemes,
+  }).slice(0, expanded ? 12 : 4);
   const radiusPerCenter = expanded
     ? Math.min(Math.max(Math.round(safeRadius * 0.8), 50000), 140000)
     : Math.min(Math.max(safeRadius, 15000), 80000);
@@ -1250,7 +1422,9 @@ async function fetchOpenTripMapFeatures({ query, location, radius, limit, search
   );
   const focusedKinds = buildOpenTripMapKindsFromThemes(resolvedThemes);
   const expandSampling = Boolean(searchIntent?.locationQuery) && !normalizeText(location?.city);
-  const searchCenters = buildSearchCenters(location, expandSampling);
+  const searchCenters = buildSearchCenters(location, expandSampling, {
+    themes: resolvedThemes,
+  }).slice(0, expandSampling ? 16 : 4);
   const radiusPerCenter = expandSampling
     ? Math.min(Math.max(Math.round(safeRadius * 0.9), 80000), 160000)
     : safeRadius;
@@ -1613,6 +1787,532 @@ function featureMatchesThemes(feature, themes = []) {
   return false;
 }
 
+function featureMatchesLocationIntent(feature, searchIntent = null, resolvedLocation = {}) {
+  const locationQuery = normalizeLower(searchIntent?.locationQuery || '');
+  if (!locationQuery) return true;
+
+  const city = normalizeLower(feature?.properties?.city || '');
+  const state = normalizeLower(feature?.properties?.state || '');
+  const country = normalizeLower(feature?.properties?.country || '');
+  const description = normalizeLower(feature?.properties?.description || '');
+
+  if (
+    city.includes(locationQuery) ||
+    state.includes(locationQuery) ||
+    country.includes(locationQuery) ||
+    description.includes(locationQuery)
+  ) {
+    return true;
+  }
+
+  const resolvedCountry = normalizeLower(resolvedLocation?.country || '');
+  const resolvedState = normalizeLower(resolvedLocation?.state || '');
+
+  if (resolvedState && (state.includes(resolvedState) || description.includes(resolvedState))) {
+    return true;
+  }
+
+  if (resolvedCountry && country.includes(resolvedCountry)) {
+    return true;
+  }
+
+  return false;
+}
+
+function clampNumber(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+function hasInsightAIProviderConfigured() {
+  const ai = destinationInsightAI?.aiService;
+  if (!ai) return false;
+  return Boolean(
+    ai.hasGeminiAccess ||
+      ai.hasOpenRouterAccess ||
+      ai.hasOpenAIAccess ||
+      ai.hasGroqAccess
+  );
+}
+
+function haversineDistanceKm(lat1, lon1, lat2, lon2) {
+  const aLat = toFiniteNumber(lat1, null);
+  const aLon = toFiniteNumber(lon1, null);
+  const bLat = toFiniteNumber(lat2, null);
+  const bLon = toFiniteNumber(lon2, null);
+  if (aLat == null || aLon == null || bLat == null || bLon == null) return Infinity;
+
+  const dLat = ((bLat - aLat) * Math.PI) / 180;
+  const dLon = ((bLon - aLon) * Math.PI) / 180;
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLon / 2);
+  const a =
+    s1 * s1 +
+    Math.cos((aLat * Math.PI) / 180) *
+      Math.cos((bLat * Math.PI) / 180) *
+      s2 *
+      s2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371 * c;
+}
+
+function normalizeNearbyCategory(raw = '') {
+  const value = normalizeLower(raw || 'attractions');
+  if (!value) return 'attractions';
+  if (value === 'all') return 'all';
+  if (/(hotel|stay|resort|accommodation|lodging)/.test(value)) return 'hotels';
+  if (/(food|cafe|restaurant|dining|eat)/.test(value)) return 'food';
+  return 'attractions';
+}
+
+function getNearbyCategoryMatcher(category = 'attractions') {
+  if (category === 'hotels') {
+    return /(hotel|resort|hostel|lodging|accommodation|guesthouse|inn|stay)/i;
+  }
+  if (category === 'food') {
+    return /(restaurant|cafe|coffee|food|diner|eatery|bistro|bar)/i;
+  }
+  return /(museum|monument|park|beach|historic|heritage|temple|landmark|attraction|viewpoint|nature|fort|palace|lake|waterfall|mountain)/i;
+}
+
+function featureMatchesNearbyCategory(feature, category = 'attractions') {
+  if (category === 'all') return true;
+  const matcher = getNearbyCategoryMatcher(category);
+  const source = normalizeLower(
+    [
+      feature?.properties?.name || '',
+      feature?.properties?.kinds || '',
+      feature?.properties?.description || '',
+    ].join(' ')
+  );
+  return matcher.test(source);
+}
+
+async function fetchOpenTripMapNearbyRadius({
+  lat,
+  lon,
+  radius = 15000,
+  limit = 12,
+  kinds = '',
+} = {}) {
+  if (!hasOpenTripMapKey()) return [];
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return [];
+
+  const safeRadius = clampNumber(radius, 1000, 50000, 15000);
+  const safeLimit = clampNumber(limit, 1, 30, 12);
+
+  try {
+    const params = {
+      lat: Number(lat),
+      lon: Number(lon),
+      radius: safeRadius,
+      limit: Math.min(safeLimit * 3, 60),
+      format: 'geojson',
+      apikey: OPENTRIPMAP_API_KEY,
+    };
+    if (normalizeText(kinds)) params.kinds = kinds;
+
+    const { data } = await axios.get(`${OPENTRIPMAP_BASE_URL}/radius`, {
+      params,
+      timeout: REQUEST_TIMEOUT,
+    });
+
+    const radiusFeatures = Array.isArray(data?.features) ? data.features : [];
+    const baseItems = radiusFeatures
+      .map((feature) => {
+        const props = feature?.properties || {};
+        const coords = Array.isArray(feature?.geometry?.coordinates)
+          ? feature.geometry.coordinates
+          : [];
+        const featureLat = toFiniteNumber(coords[1], null);
+        const featureLon = toFiniteNumber(coords[0], null);
+        const name = normalizeText(props?.name || '');
+        if (!name || featureLat == null || featureLon == null) return null;
+
+        return {
+          xid: normalizeText(props?.xid || ''),
+          name,
+          lat: featureLat,
+          lon: featureLon,
+          kinds: normalizeText(props?.kinds || ''),
+          rating: toFiniteNumber(props?.rate, 0),
+          description: normalizeText(props?.wikipedia_extracts?.text || ''),
+          source: 'opentripmap-nearby',
+        };
+      })
+      .filter(Boolean)
+      .slice(0, Math.min(safeLimit * 2, 20));
+
+    const enriched = await Promise.all(
+      baseItems.map(async (item) => {
+        const detail = item.xid ? await fetchOpenTripMapDetails(item.xid) : null;
+        return makeFeature({
+          name: item.name,
+          lat: item.lat,
+          lon: item.lon,
+          xid: item.xid || null,
+          kinds: buildKinds({
+            name: item.name,
+            rawKinds: detail?.kinds || item.kinds || '',
+            query: '',
+          }),
+          description:
+            normalizeText(
+              detail?.wikipedia_extracts?.text ||
+                detail?.wikipedia_extract ||
+                detail?.info?.descr ||
+                item.description
+            ) || '',
+          image:
+            normalizeText(detail?.preview?.source || detail?.image || '') ||
+            placeholderImage(item.name),
+          city: normalizeText(detail?.address?.city || ''),
+          state: normalizeText(detail?.address?.state || ''),
+          country: normalizeText(detail?.address?.country || ''),
+          source: item.source,
+          rating: toFiniteNumber(detail?.rate ?? item.rating, 0),
+        });
+      })
+    );
+
+    return dedupeBy(enriched.filter(Boolean), featureKey);
+  } catch {
+    return [];
+  }
+}
+
+async function fetchFoursquareNearbyStrict({
+  lat,
+  lon,
+  radius = 15000,
+  limit = 12,
+  query = '',
+} = {}) {
+  if (!hasFoursquareKey()) return [];
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) return [];
+
+  const safeRadius = clampNumber(radius, 1000, 50000, 15000);
+  const safeLimit = clampNumber(limit, 1, 30, 12);
+
+  try {
+    const { data } = await axios.get(`${FOURSQUARE_BASE_URL}/places/search`, {
+      params: {
+        query: normalizeText(query) || 'tourist attraction',
+        ll: `${Number(lat)},${Number(lon)}`,
+        radius: safeRadius,
+        limit: Math.min(safeLimit * 3, 50),
+      },
+      timeout: REQUEST_TIMEOUT,
+      headers: {
+        Accept: 'application/json',
+        Authorization: FOURSQUARE_API_KEY,
+      },
+    });
+
+    const places = Array.isArray(data?.results) ? data.results : [];
+    const mapped = places
+      .map((place) => {
+        const featureLat = toFiniteNumber(place?.geocodes?.main?.latitude, null);
+        const featureLon = toFiniteNumber(place?.geocodes?.main?.longitude, null);
+        const name = normalizeText(place?.name || '');
+        if (!name || featureLat == null || featureLon == null) return null;
+
+        const categoryNames = mapFoursquareCategoryNames(place?.categories || []);
+        const formattedLocation = place?.location || {};
+        const rawKinds = mergeKinds(categoryNames).join(',');
+
+        return makeFeature({
+          name,
+          lat: featureLat,
+          lon: featureLon,
+          fsqId: place?.fsq_id || null,
+          kinds: buildKinds({
+            name,
+            rawKinds,
+            query: normalizeText(query),
+          }),
+          description:
+            normalizeText(formattedLocation?.formatted_address) ||
+            normalizeText(
+              place?.distance != null
+                ? `Approx. ${Math.max(0, Number(place.distance))}m from selected area`
+                : ''
+            ),
+          image: '',
+          city: normalizeText(formattedLocation?.locality || ''),
+          state: normalizeText(formattedLocation?.region || ''),
+          country: normalizeText(formattedLocation?.country || ''),
+          source: 'foursquare-nearby',
+          rating: 0,
+        });
+      })
+      .filter(Boolean);
+
+    return dedupeBy(mapped, featureKey);
+  } catch {
+    return [];
+  }
+}
+
+function filterSortNearbyFeatures({
+  features = [],
+  lat,
+  lon,
+  limit = 12,
+  category = 'attractions',
+  excludeXid = '',
+  excludeName = '',
+} = {}) {
+  const safeLimit = clampNumber(limit, 1, 30, 12);
+  const lowerExcludeName = normalizeLower(excludeName);
+  const safeExcludeXid = normalizeText(excludeXid);
+
+  const prepared = dedupeBy(features.filter(Boolean), featureKey)
+    .filter((feature) => {
+      const xid = normalizeText(feature?.properties?.xid || '');
+      const name = normalizeLower(feature?.properties?.name || '');
+      if (safeExcludeXid && xid && xid === safeExcludeXid) return false;
+      if (lowerExcludeName && name && name === lowerExcludeName) return false;
+      return featureMatchesNearbyCategory(feature, category);
+    })
+    .map((feature) => {
+      const featureLat = toFiniteNumber(feature?.geometry?.coordinates?.[1], null);
+      const featureLon = toFiniteNumber(feature?.geometry?.coordinates?.[0], null);
+      const distanceKm = haversineDistanceKm(lat, lon, featureLat, featureLon);
+      return { feature, distanceKm };
+    })
+    .filter((entry) => Number.isFinite(entry.distanceKm));
+
+  prepared.sort((a, b) => {
+    if (a.distanceKm !== b.distanceKm) return a.distanceKm - b.distanceKm;
+    const ratingA = toFiniteNumber(a.feature?.properties?.rating, 0);
+    const ratingB = toFiniteNumber(b.feature?.properties?.rating, 0);
+    return ratingB - ratingA;
+  });
+
+  return prepared.slice(0, safeLimit).map((entry) => ({
+    ...entry.feature,
+    properties: {
+      ...(entry.feature?.properties || {}),
+      distance_km: Number(entry.distanceKm.toFixed(2)),
+      dist: Math.round(entry.distanceKm * 1000),
+    },
+  }));
+}
+
+function buildArrivalGuidance(destination = {}, userLocation = null) {
+  const destinationLat = toFiniteNumber(destination?.lat, null);
+  const destinationLon = toFiniteNumber(destination?.lon, null);
+  const userLat = toFiniteNumber(userLocation?.lat, null);
+  const userLon = toFiniteNumber(userLocation?.lon, null);
+
+  if (destinationLat == null || destinationLon == null) {
+    return {
+      mode: 'mixed',
+      estimatedTime: 'Depends on your starting city',
+      steps: [
+        'Open the destination on the map and confirm exact coordinates first.',
+        'Choose flight, train, or road based on your departure city and budget.',
+        'For final local transfer, use taxi/metro/bus from the nearest station.',
+      ],
+    };
+  }
+
+  if (userLat == null || userLon == null) {
+    return {
+      mode: 'mixed',
+      estimatedTime: 'Depends on your starting city',
+      steps: [
+        'Set your starting point in the map route planner for exact directions.',
+        'For long distance trips, combine flight/train with local cab transfer.',
+        'Keep 20-40 minutes extra for local traffic near arrival time.',
+      ],
+    };
+  }
+
+  const distanceKm = haversineDistanceKm(userLat, userLon, destinationLat, destinationLon);
+  if (!Number.isFinite(distanceKm)) {
+    return {
+      mode: 'mixed',
+      estimatedTime: 'Unavailable',
+      steps: [
+        'Set your starting point in the map route planner to generate route steps.',
+      ],
+    };
+  }
+
+  if (distanceKm <= 3) {
+    return {
+      mode: 'walk-or-local',
+      estimatedTime: '10-25 mins',
+      steps: [
+        'Walking is usually fastest for this short distance.',
+        'If carrying luggage, use local auto or taxi.',
+        'Follow the map turn-by-turn walking route for safe streets.',
+      ],
+    };
+  }
+
+  if (distanceKm <= 25) {
+    return {
+      mode: 'city-commute',
+      estimatedTime: '25-70 mins',
+      steps: [
+        'Use metro or city bus if available for cheaper transfer.',
+        'For direct arrival, book a taxi to the destination entrance.',
+        'Start early during peak city traffic hours.',
+      ],
+    };
+  }
+
+  if (distanceKm <= 350) {
+    return {
+      mode: 'road-or-rail',
+      estimatedTime: `${Math.max(2, Math.round(distanceKm / 45))}-${Math.max(3, Math.round(distanceKm / 35))} hours`,
+      steps: [
+        'Compare train and highway travel before departure.',
+        'Choose daytime arrival when local transport is easier.',
+        'Reserve the last-mile transfer in advance if arriving late.',
+      ],
+    };
+  }
+
+  return {
+    mode: 'long-distance',
+    estimatedTime: 'Usually flight + local transfer',
+    steps: [
+      'Use flight or overnight rail for the main leg.',
+      'From arrival airport or station, use prepaid taxi/ride-share.',
+      'Keep at least 60-90 minutes buffer for airport exits and baggage.',
+    ],
+  };
+}
+
+function sampleNearbyNames(items = [], limit = 6) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => normalizeText(item?.name || item?.properties?.name || ''))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function buildDeterministicInsight({
+  destination = {},
+  question = '',
+  nearby = [],
+  hotels = [],
+  food = [],
+  userLocation = null,
+} = {}) {
+  const destinationName = normalizeText(destination?.name || 'Destination');
+  const destinationCity = normalizeText(destination?.city || '');
+  const destinationCountry = normalizeText(destination?.country || '');
+  const kinds = normalizeText(destination?.kinds || destination?.category || destination?.details?.kinds || '');
+  const overviewFallback =
+    normalizeText(destination?.description || '') ||
+    `${destinationName} is a good choice for travelers looking to explore local highlights.`;
+  const arrival = buildArrivalGuidance(destination, userLocation);
+  const nearbyNames = sampleNearbyNames(nearby, 5);
+  const hotelNames = sampleNearbyNames(hotels, 4);
+  const foodNames = sampleNearbyNames(food, 4);
+  const locationText = [destinationCity, destinationCountry].filter(Boolean).join(', ') || 'this area';
+
+  return {
+    title: `${destinationName} Quick Travel Brief`,
+    overview: overviewFallback,
+    bestTimeToVisit:
+      'Visit in stable-weather months and avoid heavy rain windows for smoother local movement.',
+    highlights: [
+      `Explore local highlights around ${locationText}.`,
+      'Start with top nearby attractions and then move to food spots.',
+      'Use the map route planner for exact turn-by-turn arrival.',
+    ],
+    nearbyFocus: nearbyNames.length ? nearbyNames : ['Nearby attractions are being updated.'],
+    hotelAdvice: hotelNames.length
+      ? [`Shortlist stays near: ${hotelNames.join(', ')}`]
+      : ['Compare hotel ratings, distance, and check-in flexibility before booking.'],
+    foodAdvice: foodNames.length
+      ? [`Try local food around: ${foodNames.join(', ')}`]
+      : ['Choose food places with recent reviews and clear hygiene ratings.'],
+    transportAdvice: [
+      'Use live map navigation to avoid traffic-heavy roads.',
+      'For first-time visits, daytime arrival is usually easier.',
+      'Keep a backup ride option during peak hours.',
+    ],
+    arrival: {
+      mode: arrival.mode,
+      estimatedTime: arrival.estimatedTime,
+      steps: arrival.steps,
+    },
+    cautions: [
+      'Keep offline map backup for low-signal areas.',
+      'Confirm opening hours for major attractions before departure.',
+    ],
+    budgetTip:
+      'Save cost by clustering nearby spots on the same day and reducing repeat transport.',
+    userQuestionHandled: normalizeText(question) || null,
+    source: 'deterministic-fallback',
+    meta: {
+      location: locationText,
+      kinds: kinds || null,
+      nearbyCount: Array.isArray(nearby) ? nearby.length : 0,
+      hotelCount: Array.isArray(hotels) ? hotels.length : 0,
+      foodCount: Array.isArray(food) ? food.length : 0,
+    },
+  };
+}
+
+function normalizeInsightResult(raw = {}, fallback = {}) {
+  const toArray = (value, limit = 8) =>
+    (Array.isArray(value) ? value : [])
+      .map((item) => normalizeText(item))
+      .filter(Boolean)
+      .slice(0, limit);
+
+  const arrivalRaw = raw?.arrival || {};
+  const arrivalSteps = toArray(arrivalRaw?.steps, 8);
+
+  return {
+    title: normalizeText(raw?.title) || fallback.title,
+    overview: normalizeText(raw?.overview) || fallback.overview,
+    bestTimeToVisit: normalizeText(raw?.bestTimeToVisit) || fallback.bestTimeToVisit,
+    highlights: toArray(raw?.highlights, 8).length
+      ? toArray(raw?.highlights, 8)
+      : fallback.highlights,
+    nearbyFocus: toArray(raw?.nearbyFocus, 8).length
+      ? toArray(raw?.nearbyFocus, 8)
+      : fallback.nearbyFocus,
+    hotelAdvice: toArray(raw?.hotelAdvice, 8).length
+      ? toArray(raw?.hotelAdvice, 8)
+      : fallback.hotelAdvice,
+    foodAdvice: toArray(raw?.foodAdvice, 8).length
+      ? toArray(raw?.foodAdvice, 8)
+      : fallback.foodAdvice,
+    transportAdvice: toArray(raw?.transportAdvice, 8).length
+      ? toArray(raw?.transportAdvice, 8)
+      : fallback.transportAdvice,
+    arrival: {
+      mode: normalizeText(arrivalRaw?.mode) || fallback.arrival?.mode || 'mixed',
+      estimatedTime:
+        normalizeText(arrivalRaw?.estimatedTime) ||
+        fallback.arrival?.estimatedTime ||
+        'Depends on starting location',
+      steps: arrivalSteps.length ? arrivalSteps : fallback.arrival?.steps || [],
+    },
+    cautions: toArray(raw?.cautions, 8).length
+      ? toArray(raw?.cautions, 8)
+      : fallback.cautions,
+    budgetTip: normalizeText(raw?.budgetTip) || fallback.budgetTip,
+    userQuestionHandled:
+      normalizeText(raw?.userQuestionHandled) || fallback.userQuestionHandled || null,
+    source: normalizeText(raw?.source) || 'ai',
+    meta: {
+      ...(fallback.meta || {}),
+      ...(raw?.meta && typeof raw.meta === 'object' ? raw.meta : {}),
+    },
+  };
+}
+
 router.get('/search', async (req, res) => {
   const query = normalizeText(req.query.query || '');
   const lat = req.query.lat;
@@ -1640,13 +2340,16 @@ router.get('/search', async (req, res) => {
     (theme) => normalizeLower(theme)
   );
   const normalizedLocationQuery = normalizeLower(searchIntent.locationQuery || '');
+  const normalizedCity = normalizeLower(location?.city || '');
+  const normalizedCountry = normalizeLower(location?.country || '');
+  const hasSpecificCity = Boolean(normalizedCity && normalizedCity !== normalizedCountry);
   const isCountryLevelMatch =
     Boolean(normalizedLocationQuery) &&
-    !normalizeText(location?.city) &&
-    normalizeLower(location?.country || '') === normalizedLocationQuery;
+    !hasSpecificCity &&
+    normalizedCountry === normalizedLocationQuery;
   const isBroadLocationQuery =
     Boolean(normalizedLocationQuery) &&
-    (searchIntent.mode !== 'direct' || !normalizeText(location?.city) || isCountryLevelMatch);
+    (searchIntent.mode !== 'direct' || !hasSpecificCity || isCountryLevelMatch);
   const effectiveRadius = isCountryLevelMatch
     ? Math.max(radius, 250000)
     : isBroadLocationQuery
@@ -1693,37 +2396,82 @@ router.get('/search', async (req, res) => {
       featureKey
     );
 
+    if (intentThemes.length > 0 && searchIntent.mode !== 'direct') {
+      const seedFeatures = getThemeLocationSeedFeatures({
+        location,
+        themes: intentThemes,
+        query,
+      });
+      if (seedFeatures.length > 0) {
+        merged = dedupeBy([...seedFeatures, ...merged], featureKey);
+      }
+    }
+
     if (intentThemes.length > 0) {
+      const isThemeGuidedQuery = searchIntent.mode !== 'direct';
       const themedMatches = merged.filter((feature) => featureMatchesThemes(feature, intentThemes));
-      if (themedMatches.length > 0 && searchIntent.mode !== 'direct') {
+
+      if (isThemeGuidedQuery && themedMatches.length > 0) {
         merged = themedMatches;
-      } else if (themedMatches.length === 0 && searchIntent.mode !== 'direct') {
-        const nominatimQuery = [searchIntent.topicQuery, searchIntent.locationQuery]
-          .filter(Boolean)
-          .join(' in ')
-          .trim();
-        const nominatimCandidates = await searchNominatimPlaces(
-          nominatimQuery || searchIntent.normalizedQuery || query,
-          Math.max(limit, 8)
+      } else if (isThemeGuidedQuery && themedMatches.length === 0) {
+        const themeKeyword = getPrimaryThemeKeyword(intentThemes);
+        const nominatimQueryCandidates = dedupeBy(
+          [
+            [searchIntent.topicQuery, searchIntent.locationQuery].filter(Boolean).join(' ').trim(),
+            [themeKeyword, searchIntent.locationQuery].filter(Boolean).join(' ').trim(),
+            [searchIntent.locationQuery, themeKeyword].filter(Boolean).join(' ').trim(),
+            searchIntent.normalizedQuery,
+            query,
+          ]
+            .map((entry) => normalizeText(entry))
+            .filter(Boolean),
+          (entry) => normalizeLower(entry)
         );
-        const nominatimThemeMatches = nominatimCandidates.filter((feature) =>
-          featureMatchesThemes(feature, intentThemes)
+
+        const nominatimCollections = await Promise.all(
+          nominatimQueryCandidates.map((candidateQuery) =>
+            searchNominatimPlaces(candidateQuery, Math.max(limit, 12))
+          )
         );
-        if (nominatimThemeMatches.length > 0) {
-          merged = dedupeBy([...nominatimThemeMatches, ...merged], featureKey);
-        } else if (merged.length === 0) {
+        const nominatimThemeMatches = dedupeBy(
+          nominatimCollections
+            .flat()
+            .filter((feature) => featureMatchesThemes(feature, intentThemes)),
+          featureKey
+        );
+        const focusedThemeResults = dedupeBy(
+          [...nominatimThemeMatches, ...themedMatches],
+          featureKey
+        );
+
+        if (focusedThemeResults.length > 0) {
+          merged = focusedThemeResults;
+        } else {
           const themedFallback = popularFeaturesForQuery(searchIntent.topicQuery || query).filter((feature) =>
             featureMatchesThemes(feature, intentThemes)
           );
-          if (themedFallback.length > 0) {
-            merged = themedFallback;
-          }
+          merged = themedFallback;
         }
       }
     }
 
+    if (searchIntent.mode !== 'direct' && searchIntent.locationQuery) {
+      const locationMatched = merged.filter((feature) =>
+        featureMatchesLocationIntent(feature, searchIntent, location)
+      );
+      if (locationMatched.length > 0) {
+        merged = locationMatched;
+      }
+    }
+
     if (merged.length === 0) {
-      merged = popularFeaturesForQuery(query);
+      const themedFallback =
+        intentThemes.length > 0 && searchIntent.mode !== 'direct'
+          ? popularFeaturesForQuery(searchIntent.topicQuery || query).filter((feature) =>
+              featureMatchesThemes(feature, intentThemes)
+            )
+          : [];
+      merged = themedFallback.length > 0 ? themedFallback : popularFeaturesForQuery(query);
     }
 
     merged = await enrichImagesWithUnsplash(merged);
@@ -1794,6 +2542,241 @@ router.get('/place/:xid', async (req, res) => {
     return res.status(500).json({
       error: 'Failed to fetch place details',
       details: err.message,
+    });
+  }
+});
+
+router.get('/nearby', async (req, res) => {
+  const lat = toFiniteNumber(req.query.lat, null);
+  const lon = toFiniteNumber(req.query.lon, null);
+  const category = normalizeNearbyCategory(req.query.category || 'attractions');
+  const radius = clampNumber(req.query.radius, 1000, 50000, 15000);
+  const limit = clampNumber(req.query.limit, 1, 30, 12);
+  const excludeXid = normalizeText(req.query.excludeXid || '');
+  const excludeName = normalizeText(req.query.excludeName || '');
+
+  if (lat == null || lon == null) {
+    return res.status(400).json({
+      error: 'Valid lat and lon query parameters are required.',
+      features: [],
+    });
+  }
+
+  const collected = [];
+
+  if (category === 'attractions' || category === 'all') {
+    const [otmAttractions, fsqAttractions] = await Promise.all([
+      fetchOpenTripMapNearbyRadius({
+        lat,
+        lon,
+        radius,
+        limit,
+        kinds:
+          'interesting_places,natural,beaches,islands,lakes,mountains,waterfalls,historic,cultural',
+      }),
+      fetchFoursquareNearbyStrict({
+        lat,
+        lon,
+        radius,
+        limit,
+        query: 'tourist attraction landmark viewpoint',
+      }),
+    ]);
+    collected.push(...otmAttractions, ...fsqAttractions);
+  }
+
+  if (category === 'hotels' || category === 'all') {
+    const [fsqHotels, otmHotels] = await Promise.all([
+      fetchFoursquareNearbyStrict({
+        lat,
+        lon,
+        radius,
+        limit,
+        query: 'hotel resort hostel accommodation',
+      }),
+      fetchOpenTripMapNearbyRadius({
+        lat,
+        lon,
+        radius,
+        limit,
+        kinds: 'accomodations,other_hotels,interesting_places',
+      }),
+    ]);
+    collected.push(...fsqHotels, ...otmHotels);
+  }
+
+  if (category === 'food' || category === 'all') {
+    const [fsqFood, otmFood] = await Promise.all([
+      fetchFoursquareNearbyStrict({
+        lat,
+        lon,
+        radius,
+        limit,
+        query: 'restaurant cafe food',
+      }),
+      fetchOpenTripMapNearbyRadius({
+        lat,
+        lon,
+        radius,
+        limit,
+        kinds: 'restaurants,cafes,foods,interesting_places',
+      }),
+    ]);
+    collected.push(...fsqFood, ...otmFood);
+  }
+
+  const features = filterSortNearbyFeatures({
+    features: collected,
+    lat,
+    lon,
+    limit,
+    category,
+    excludeXid,
+    excludeName,
+  });
+
+  return res.json({
+    features,
+    count: features.length,
+    category,
+    center: { lat, lon },
+    provider: 'nearby-strict',
+    configured: {
+      opentripmap: hasOpenTripMapKey(),
+      foursquare: hasFoursquareKey(),
+      aiInsight: hasInsightAIProviderConfigured(),
+    },
+  });
+});
+
+router.post('/insight', async (req, res) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const destinationInput =
+    body.destination && typeof body.destination === 'object' ? body.destination : {};
+  const question = normalizeText(body.question || '');
+  const userLocationInput =
+    body.userLocation && typeof body.userLocation === 'object' ? body.userLocation : null;
+
+  const destination = {
+    name: normalizeText(destinationInput.name || ''),
+    city: normalizeText(destinationInput.city || ''),
+    country: normalizeText(destinationInput.country || ''),
+    lat: toFiniteNumber(destinationInput.lat, null),
+    lon: toFiniteNumber(destinationInput.lon, null),
+    category: normalizeText(destinationInput.category || destinationInput.kinds || ''),
+    kinds: normalizeText(destinationInput.kinds || destinationInput.category || ''),
+    description: normalizeText(destinationInput.description || ''),
+  };
+
+  if (!destination.name) {
+    return res.status(400).json({
+      error: 'destination.name is required in request body.',
+    });
+  }
+
+  const nearby = Array.isArray(body.nearby) ? body.nearby : [];
+  const hotels = Array.isArray(body.hotels) ? body.hotels : [];
+  const food = Array.isArray(body.food) ? body.food : [];
+
+  const userLocation = userLocationInput
+    ? {
+        lat: toFiniteNumber(userLocationInput.lat, null),
+        lon: toFiniteNumber(userLocationInput.lon, null),
+      }
+    : null;
+
+  const fallbackInsight = buildDeterministicInsight({
+    destination,
+    question,
+    nearby,
+    hotels,
+    food,
+    userLocation,
+  });
+
+  const aiAvailable = hasInsightAIProviderConfigured();
+  if (!aiAvailable) {
+    return res.json({
+      success: true,
+      aiAvailable: false,
+      provider: 'deterministic-fallback',
+      insight: fallbackInsight,
+    });
+  }
+
+  const aiPrompt = `
+You are a travel destination assistant.
+Use the context JSON only. If a detail is unknown, write "Not available in provided data".
+Never invent exact prices, schedules, or distances.
+Return strict valid JSON with this shape:
+{
+  "title": "string",
+  "overview": "string",
+  "bestTimeToVisit": "string",
+  "highlights": ["string"],
+  "nearbyFocus": ["string"],
+  "hotelAdvice": ["string"],
+  "foodAdvice": ["string"],
+  "transportAdvice": ["string"],
+  "arrival": {
+    "mode": "string",
+    "estimatedTime": "string",
+    "steps": ["string"]
+  },
+  "cautions": ["string"],
+  "budgetTip": "string",
+  "userQuestionHandled": "string",
+  "meta": {
+    "confidence": "high|medium|low",
+    "groundedOnly": true
+  }
+}
+
+Context JSON:
+${JSON.stringify(
+  {
+    destination,
+    question: question || null,
+    nearbySample: sampleNearbyNames(nearby, 8),
+    hotelsSample: sampleNearbyNames(hotels, 8),
+    foodSample: sampleNearbyNames(food, 8),
+    userLocation,
+  },
+  null,
+  2
+)}
+`;
+
+  try {
+    const aiRaw = await destinationInsightAI.generateStructuredJson({
+      prompt: aiPrompt,
+      maxOutputTokens: 2200,
+      temperature: 0.15,
+      validateJson: (payload) => {
+        if (!payload || typeof payload !== 'object') return 'Insight response must be an object.';
+        if (!normalizeText(payload.overview)) return 'overview is required.';
+        if (!Array.isArray(payload.highlights)) return 'highlights must be an array.';
+        if (!payload.arrival || typeof payload.arrival !== 'object') return 'arrival object is required.';
+        if (!Array.isArray(payload.arrival.steps)) return 'arrival.steps must be an array.';
+        return true;
+      },
+    });
+
+    const normalizedInsight = normalizeInsightResult(aiRaw, fallbackInsight);
+    return res.json({
+      success: true,
+      aiAvailable: true,
+      provider: 'ai-structured',
+      providersTried: destinationInsightAI.providerSequence,
+      insight: normalizedInsight,
+    });
+  } catch (error) {
+    return res.json({
+      success: true,
+      aiAvailable: true,
+      provider: 'deterministic-fallback',
+      aiError: error.message,
+      insight: fallbackInsight,
     });
   }
 });

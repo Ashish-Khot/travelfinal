@@ -57,6 +57,19 @@ const TRAVEL_MODES = [
   { key: 'cycling-regular', label: 'Bike' },
 ];
 
+const getDefaultNavPanelExpanded = () => {
+  if (typeof window === 'undefined') return true;
+  return window.innerWidth > 1024;
+};
+
+const getRouteProviderLabel = (provider = '') => {
+  const normalized = String(provider || '').toLowerCase();
+  if (normalized === 'osrm') return 'OSRM Roads';
+  if (normalized === 'openrouteservice') return 'OpenRouteService Roads';
+  if (normalized === 'estimated') return 'Estimated Path';
+  return 'Road Routing';
+};
+
 const renderTravelModeIcon = (modeKey) => {
   if (modeKey === 'driving-car') {
     return (
@@ -341,6 +354,8 @@ const PremiumDestinationMap = ({
   zoom = DEFAULT_ZOOM,
   onMarkerClick = null,
   mapProvider = 'osm',
+  hidePlaceImage = false,
+  height = 640,
 }) => {
   const normalizedProvider = String(mapProvider || 'osm').toLowerCase();
   const tilePresets = useMemo(() => getTilePresets(normalizedProvider), [normalizedProvider]);
@@ -403,7 +418,7 @@ const PremiumDestinationMap = ({
   const [isLiveNavigation, setIsLiveNavigation] = useState(false);
   const [navigationStatus, setNavigationStatus] = useState('');
   const [activeInstructionIndex, setActiveInstructionIndex] = useState(0);
-  const [routePanelExpanded, setRoutePanelExpanded] = useState(true);
+  const [routePanelExpanded, setRoutePanelExpanded] = useState(getDefaultNavPanelExpanded);
   const [mapOptionsOpen, setMapOptionsOpen] = useState(false);
   const [placesPanelOpen, setPlacesPanelOpen] = useState(false);
 
@@ -989,7 +1004,7 @@ const PremiumDestinationMap = ({
       .filter((route) => route.id !== selectedRoute.id)
       .forEach((route) => {
         if (!route?.waypoints?.length) return;
-        const alternativeCoordinates = simplifyPolylineWaypoints(route.waypoints);
+        const alternativeCoordinates = simplifyPolylineWaypoints(route.waypoints, 1400);
         L.polyline(alternativeCoordinates, {
           color: '#64748b',
           weight: 4,
@@ -1000,7 +1015,7 @@ const PremiumDestinationMap = ({
         }).addTo(routeLayer);
       });
 
-    const activeCoordinates = simplifyPolylineWaypoints(selectedRoute.waypoints);
+    const activeCoordinates = simplifyPolylineWaypoints(selectedRoute.waypoints, 6000);
     const outerLine = L.polyline(activeCoordinates, { color: '#0f172a', weight: 8, opacity: 0.22, lineCap: 'round', lineJoin: 'round' }).addTo(routeLayer);
     L.polyline(activeCoordinates, { color: '#14b8a6', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(routeLayer);
     L.polyline(activeCoordinates, { color: '#ffffff', weight: 2, opacity: 0.48, dashArray: '10 10' }).addTo(routeLayer);
@@ -1084,6 +1099,11 @@ const PremiumDestinationMap = ({
       const mainRoute = routes[0];
       if (!mainRoute?.waypoints?.length) {
         setRouteError('No route found for this selection.');
+        return false;
+      }
+
+      if (routeResponse?.provider === 'estimated') {
+        setRouteError('Road route data is unavailable for this trip right now. Please try another start/end pair.');
         return false;
       }
 
@@ -1222,9 +1242,16 @@ const PremiumDestinationMap = ({
   }, [routeMode, routePreference, trafficMode]);
 
   const activeInstruction = routeSummary?.instructions?.[activeInstructionIndex] || null;
+  const containerHeight =
+    typeof height === 'number'
+      ? `${height}px`
+      : (String(height || '').trim() || '640px');
 
   return (
-    <div className="relative h-[640px] w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.2)]">
+    <div
+      className="relative w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.2)]"
+      style={{ height: containerHeight }}
+    >
       <style>{`
         .travel-marker{position:relative;width:44px;height:56px;display:flex;align-items:center;justify-content:center}
         .travel-marker-main{width:38px;height:38px;border-radius:9999px;border:3px solid #fff;box-shadow:0 12px 24px rgba(15,23,42,.28);display:flex;align-items:center;justify-content:center;transition:transform .22s ease,box-shadow .22s ease}
@@ -1248,7 +1275,7 @@ const PremiumDestinationMap = ({
         .travel-map-3d .leaflet-marker-pane,.travel-map-3d .leaflet-popup-pane{transform:none !important}
         .travel-map-3d .leaflet-control-container{opacity:.96}
         @keyframes travel-ping{0%{transform:scale(1);opacity:.25}80%,100%{transform:scale(1.65);opacity:0}}
-        .travel-map-left-panel{width:min(450px,calc(100% - 420px));display:flex;flex-direction:column;gap:12px}
+        .travel-map-left-panel{width:min(420px,calc(100% - 420px));display:flex;flex-direction:column;gap:12px}
         .travel-ui-card{border-radius:22px;border:1px solid rgba(255,255,255,.72);background:linear-gradient(145deg,rgba(255,255,255,.96) 0%,rgba(247,250,252,.93) 55%,rgba(241,245,249,.9) 100%);padding:14px;box-shadow:0 26px 50px rgba(15,23,42,.3);backdrop-filter:blur(14px)}
         .travel-ui-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
         .travel-ui-header-actions{display:flex;align-items:center;gap:8px}
@@ -1375,8 +1402,8 @@ const PremiumDestinationMap = ({
         .travel-route-step-copy small{display:block;margin-top:2px;font-size:11px;color:#64748b}
         .travel-route-steps::-webkit-scrollbar{width:6px}
         .travel-route-steps::-webkit-scrollbar-thumb{background:rgba(148,163,184,.55);border-radius:999px}
-        @media (max-width: 1280px){.travel-map-left-panel{width:min(430px,calc(100% - 380px))}}
-        @media (max-width: 1180px){.travel-map-left-panel{width:min(420px,calc(100% - 340px))}}
+        @media (max-width: 1280px){.travel-map-left-panel{width:min(410px,calc(100% - 360px))}}
+        @media (max-width: 1180px){.travel-map-left-panel{width:min(390px,calc(100% - 320px))}}
         @media (max-width: 980px){.travel-map-left-panel{width:min(460px,calc(100% - 2rem))}.travel-map-tools{transform:scale(.96);transform-origin:top right}}
         @media (max-width: 720px){.travel-map-left-panel{width:calc(100% - 2rem)}.travel-map-tools{display:none}}
       `}</style>
@@ -1413,7 +1440,7 @@ const PremiumDestinationMap = ({
                 onClick={() => setRoutePanelExpanded((prev) => !prev)}
                 className="travel-ui-locate"
               >
-                {routePanelExpanded ? 'Hide Nav' : 'Show Nav'}
+                {routePanelExpanded ? 'Hide Navigation' : 'Show Navigation'}
               </button>
               <button type="button" onClick={handleLocateUser} className="travel-ui-locate">Locate Me</button>
             </div>
@@ -1719,7 +1746,7 @@ const PremiumDestinationMap = ({
             <div className="travel-route-meta">
               <span>{routeSummary.origin?.name || 'Start'} to {routeSummary.destination?.name || 'Destination'}</span>
               <span className="travel-route-pill">
-                Engine: {routeSummary.provider === 'osrm' ? 'OSRM' : routeSummary.provider === 'estimated' ? 'Estimated' : 'OpenRouteService'}
+                Engine: {getRouteProviderLabel(routeSummary.provider)}
               </span>
             </div>
             {routeSummary.lastUpdatedAt && (
@@ -1804,16 +1831,23 @@ const PremiumDestinationMap = ({
       <div className={`absolute inset-x-0 bottom-0 z-[1000] px-4 pb-4 transition-all duration-500 ${panelOpen && selectedPlace ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-[calc(100%+1.5rem)] opacity-0'}`}>
         {selectedPlace && (
           <div className="mx-auto max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_60px_rgba(2,6,23,0.34)]">
-            <div className="grid grid-cols-1 md:grid-cols-[240px_1fr]">
-              <div className="relative h-48 md:h-full">
-                <img src={selectedPlace.image || 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=900&q=80'} alt={selectedPlace.name} className="h-full w-full object-cover" />
-                <span className="absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur">{(PLACE_TYPES[selectedPlace.type] || PLACE_TYPES.attraction).label}</span>
-              </div>
+            <div className={`grid grid-cols-1 ${hidePlaceImage ? '' : 'md:grid-cols-[240px_1fr]'}`}>
+              {!hidePlaceImage && (
+                <div className="relative h-48 md:h-full">
+                  <img src={selectedPlace.image || 'https://images.unsplash.com/photo-1488085061387-422e29b40080?auto=format&fit=crop&w=900&q=80'} alt={selectedPlace.name} className="h-full w-full object-cover" />
+                  <span className="absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1 text-xs font-semibold text-white backdrop-blur">{(PLACE_TYPES[selectedPlace.type] || PLACE_TYPES.attraction).label}</span>
+                </div>
+              )}
               <div className="flex flex-col gap-3 p-4 md:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h3 className="line-clamp-1 text-lg font-bold text-slate-900">{selectedPlace.name}</h3>
                     <p className="text-sm text-slate-500">{[selectedPlace.city, selectedPlace.country].filter(Boolean).join(', ') || selectedPlace.categoryLabel}</p>
+                    {hidePlaceImage && (
+                      <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        {(PLACE_TYPES[selectedPlace.type] || PLACE_TYPES.attraction).label}
+                      </span>
+                    )}
                   </div>
                   <button type="button" onClick={() => setPanelOpen(false)} className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">Close</button>
                 </div>

@@ -34,9 +34,9 @@ import GridViewIcon from '@mui/icons-material/GridView';
 import ViewListIcon from '@mui/icons-material/ViewList';
 import api from '../../api';
 import { io } from 'socket.io-client';
+import { buildMediaUrl } from '../../utils/media';
 
-const FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1501117716987-c8e1ecb210d4?auto=format&fit=crop&w=1200&q=80';
+const FALLBACK_IMAGE = '/no-image-fallback.png';
 
 const fallbackRoomTypes = ['Standard', 'Deluxe', 'Suite', 'Family'];
 const statusColors = {
@@ -86,11 +86,64 @@ const formatCurrency = (value) =>
   }).format(Number(value) || 0);
 
 const getImageSrc = (src) => {
-  if (!src) return FALLBACK_IMAGE;
-  if (src.startsWith('/uploads/')) {
-    return `http://localhost:3001${src}`;
+  if (!src || typeof src !== 'string') return '';
+  const trimmed = src.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('data:')) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  const normalizedPath = trimmed.replace(/\\/g, '/');
+  const uploadsIndex = normalizedPath.toLowerCase().indexOf('/uploads/');
+  if (uploadsIndex >= 0) {
+    return buildMediaUrl(normalizedPath.slice(uploadsIndex));
   }
-  return src;
+  if (normalizedPath.toLowerCase().startsWith('uploads/')) {
+    return buildMediaUrl(`/${normalizedPath}`);
+  }
+  return buildMediaUrl(normalizedPath);
+};
+
+const toImageArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean);
+        }
+      } catch {
+        // Ignore parse errors and treat as a direct URL/path string.
+      }
+    }
+    return [trimmed];
+  }
+  return [];
+};
+
+const getHotelImageCandidates = (hotel) => {
+  const rawCandidates = [
+    ...toImageArray(hotel?.images),
+    ...toImageArray(hotel?.profile?.images),
+    hotel?.ownerAvatar,
+    hotel?.user?.avatar,
+    hotel?.avatar,
+  ];
+  const normalizedCandidates = Array.from(
+    new Set(rawCandidates.map(getImageSrc).filter(Boolean))
+  );
+
+  if (normalizedCandidates.length === 0) {
+    return [FALLBACK_IMAGE];
+  }
+
+  // Prefer locally uploaded images first because external hotlinked URLs can expire.
+  const localUploads = normalizedCandidates.filter((url) => url.includes('/uploads/'));
+  const remoteImages = normalizedCandidates.filter((url) => !url.includes('/uploads/'));
+  return [...localUploads, ...remoteImages, FALLBACK_IMAGE];
 };
 
 const normalizeAmenityItem = (item) => {
@@ -155,12 +208,17 @@ export default function ExploreHotels({ onOpenChat }) {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [bookingsViewMode, setBookingsViewMode] = useState('grid');
+  const [hotelImageCursor, setHotelImageCursor] = useState({});
   const socketRef = useRef(null);
   const selectedHotelRef = useRef(null);
 
   useEffect(() => {
     selectedHotelRef.current = selectedHotel;
   }, [selectedHotel]);
+
+  useEffect(() => {
+    setHotelImageCursor({});
+  }, [hotels]);
 
   const getHotelOwnerId = (hotel) => hotel?.user || hotel?.ownerId || hotel?.userId;
 
@@ -614,11 +672,12 @@ export default function ExploreHotels({ onOpenChat }) {
       setSnackbar({ open: true, message: 'Hotel owner not available for chat.', severity: 'warning' });
       return;
     }
+    const imageCandidates = getHotelImageCandidates(hotel);
     onOpenChat({
       userId: ownerId,
       name: hotel.name || hotel.ownerName || 'Hotel',
       subtitle: hotel.ownerName ? `Owner: ${hotel.ownerName}` : 'Hotel admin',
-      avatar: getImageSrc(hotel.images?.[0]),
+      avatar: imageCandidates[0] || FALLBACK_IMAGE,
       email: hotel.ownerEmail || hotel.email || '',
       type: 'hotel'
     });
@@ -882,6 +941,13 @@ export default function ExploreHotels({ onOpenChat }) {
             const hotelAddress = hotel.address || 'Address not provided';
             const hotelCityState = hotel.cityState || '';
             const hotelType = hotel.hotelType || '';
+            const hotelKey = getId(hotel?._id) || getId(hotel?.user) || hotelName;
+            const imageCandidates = getHotelImageCandidates(hotel);
+            const currentImageIndex = Math.min(
+              hotelImageCursor[hotelKey] || 0,
+              Math.max(imageCandidates.length - 1, 0)
+            );
+            const hotelImageSrc = imageCandidates[currentImageIndex] || FALLBACK_IMAGE;
             const reviews = getReviewsForHotel(hotel._id);
             const avgRating = getAverageRating(hotel._id);
             const ownerId = getHotelOwnerId(hotel);
@@ -944,12 +1010,19 @@ export default function ExploreHotels({ onOpenChat }) {
                     <CardMedia
                       component="img"
                       height="190"
-                      image={getImageSrc(hotel.images?.[0])}
+                      image={hotelImageSrc}
                       alt={hotelName}
-                      onError={(event) => {
-                        if (event.currentTarget.src !== FALLBACK_IMAGE) {
-                          event.currentTarget.src = FALLBACK_IMAGE;
-                        }
+                      onError={() => {
+                        setHotelImageCursor((prev) => {
+                          const current = prev[hotelKey] || 0;
+                          if (current >= imageCandidates.length - 1) {
+                            return prev;
+                          }
+                          return {
+                            ...prev,
+                            [hotelKey]: current + 1,
+                          };
+                        });
                       }}
                       sx={{
                         width: '100%',

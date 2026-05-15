@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Grid, Paper, Chip, Avatar, Stack, CircularProgress, TextField, InputAdornment, IconButton, MenuItem, Select, Dialog, DialogTitle, DialogContent, DialogActions, Card, Tab, Tabs } from '@mui/material';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import LocalPoliceIcon from '@mui/icons-material/LocalPolice';
 import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
@@ -100,6 +102,8 @@ const EMERGENCY_PROTOCOLS = [
 ];
 
 function EmergencySupportPanel() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [selectedLocation, setSelectedLocation] = useState('delhi');
   const [hospitals, setHospitals] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -195,16 +199,16 @@ function EmergencySupportPanel() {
   return (
     <Box sx={{
       p: { xs: 2, md: 4 },
-      minHeight: '100vh',
+      minHeight: { xs: 'auto', md: '100vh' },
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
     }}>
       {/* Header Section */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" spacing={2.5} mb={4} sx={{ bgcolor: '#fff', p: 3, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} alignItems="center" spacing={isMobile ? 2 : 2.5} mb={4} sx={{ bgcolor: '#fff', p: 3, borderRadius: 4, boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
           <Avatar sx={{ bgcolor: '#D32F2F', width: 64, height: 64, boxShadow: 3 }}>
             <WarningIcon sx={{ fontSize: 38 }} />
           </Avatar>
-          <Box>
+          <Box sx={{ textAlign: { xs: 'center', sm: 'left' } }}>
             <Typography variant="h3" fontWeight={900} sx={{ color: '#D32F2F', fontSize: { xs: 28, md: 36 } }}>
               Emergency Support
             </Typography>
@@ -228,7 +232,7 @@ function EmergencySupportPanel() {
                 onChange={(e) => { setSelectedLocation(e.target.value); setSearchLoc(null); }}
                 size="small"
                 sx={{ 
-                  minWidth: 220, 
+                  minWidth: { xs: '100%', sm: 220 }, 
                   borderRadius: 2, 
                   bgcolor: '#f5f7fa',
                   '& .MuiOutlinedInput-root': {
@@ -249,7 +253,7 @@ function EmergencySupportPanel() {
                 size="small"
                 sx={{ 
                   flex: 1,
-                  minWidth: 200,
+                  minWidth: { xs: '100%', sm: 200 },
                   borderRadius: 2,
                   bgcolor: '#f5f7fa',
                   '& .MuiOutlinedInput-root': {
@@ -287,14 +291,17 @@ function EmergencySupportPanel() {
         <Tabs 
           value={tabValue} 
           onChange={(e, val) => setTabValue(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
             borderBottom: '2px solid #f0f0f0',
             bgcolor: '#f8f9fa',
             '& .MuiTab-root': {
               fontWeight: 600,
-              fontSize: '0.95rem',
+              fontSize: { xs: '0.85rem', sm: '0.95rem' },
               textTransform: 'none',
-              minWidth: 150,
+              minWidth: { xs: 128, sm: 150 },
               color: '#666',
               '&.Mui-selected': { color: '#D32F2F' }
             },
@@ -306,7 +313,7 @@ function EmergencySupportPanel() {
           <Tab label="📋 Safety Protocols" />
         </Tabs>
 
-        <Box sx={{ p: 4 }}>
+        <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
           {/* Tab 1: Emergency Contacts */}
           {tabValue === 0 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -397,16 +404,17 @@ function EmergencySupportPanel() {
                     <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, delay: idx * 0.05 }}>
                       <Card
                         sx={{
-                          p: 3,
+                          p: { xs: 2, sm: 3 },
                           display: 'flex',
-                          alignItems: 'center',
+                          flexDirection: { xs: 'column', sm: 'row' },
+                          alignItems: { xs: 'flex-start', sm: 'center' },
                           justifyContent: 'space-between',
                           borderLeft: '5px solid #388E3C',
                           '&:hover': { boxShadow: '0 8px 20px rgba(0,0,0,0.12)' },
                           transition: 'all 0.3s'
                         }}
                       >
-                        <Box display="flex" alignItems="center" gap={2} sx={{ flex: 1 }}>
+                        <Box display="flex" alignItems="center" gap={2} sx={{ flex: 1, width: '100%' }}>
                           <Avatar sx={{ bgcolor: '#388E3C', width: 50, height: 50 }}>
                             <LocalHospitalIcon />
                           </Avatar>
@@ -426,7 +434,9 @@ function EmergencySupportPanel() {
                             color: '#388E3C', 
                             fontWeight: 800, 
                             fontSize: '0.9rem',
-                            px: 2
+                            px: 2,
+                            mt: { xs: 1.5, sm: 0 },
+                            alignSelf: { xs: 'flex-start', sm: 'center' },
                           }}
                         />
                       </Card>

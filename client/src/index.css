@@ -42,4 +42,20 @@ body {
 	background: var(--bg);
 	font-family: 'Plus Jakarta Sans', 'Sora', 'Segoe UI', sans-serif;
 	color: #222;
+	margin: 0;
+	width: 100%;
+	overflow-x: hidden;
+}
+
+html,
+#root {
+	width: 100%;
+	max-width: 100%;
+	overflow-x: hidden;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
 }

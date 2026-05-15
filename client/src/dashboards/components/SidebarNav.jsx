@@ -2,6 +2,7 @@
 // Layout logic: Uses MUI Drawer for a permanent sidebar. Navigation items are mapped with icons and labels. Collapsible with a toggle button. Responsive width for mobile/desktop.
 import React from 'react';
 import Drawer from '@mui/material/Drawer';
+import Box from '@mui/material/Box';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -11,6 +12,8 @@ import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Badge from '@mui/material/Badge';
+import Typography from '@mui/material/Typography';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import ExploreIcon from '@mui/icons-material/TravelExplore';
 import HotelIcon from '@mui/icons-material/Hotel';
@@ -26,6 +29,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MenuOpenIcon from '@mui/icons-material/MenuOpen';
 import MenuIcon from '@mui/icons-material/Menu';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import EventNoteIcon from '@mui/icons-material/EventNote';
 import { alpha, styled } from '@mui/material/styles';
@@ -68,6 +72,8 @@ const StyledDrawer = styled(Drawer)(({ theme }) => ({
 export default function SidebarNav({
   open,
   hidden = false,
+  mobileOpen = false,
+  onRequestClose = () => {},
   onToggle,
   onHide = () => {},
   navItems = [],
@@ -75,25 +81,72 @@ export default function SidebarNav({
   onSelect,
   chatUnreadCount = 0
 }) {
-  if (hidden) {
+  const isMobile = useMediaQuery('(max-width:900px)');
+
+  if (!isMobile && hidden) {
     return null;
   }
 
+  const desktopWidth = open ? drawerWidth : collapsedWidth;
+  const mobileDrawerWidth = 'min(84vw, 320px)';
+  const navLabelVisible = isMobile || open;
+
+  const handleSelect = (value) => {
+    if (onSelect) onSelect(value);
+    if (isMobile) onRequestClose();
+  };
+
+  const handleVisibilityToggle = () => {
+    if (isMobile) {
+      onRequestClose();
+      return;
+    }
+    onHide();
+  };
+
   return (
     <StyledDrawer
-      variant="permanent"
-      open={open}
+      variant={isMobile ? 'temporary' : 'permanent'}
+      open={isMobile ? mobileOpen : true}
+      onClose={isMobile ? onRequestClose : undefined}
+      ModalProps={{ keepMounted: true }}
       sx={{
-        width: open ? drawerWidth : collapsedWidth,
-        flexShrink: 0,
+        width: isMobile ? 0 : desktopWidth,
+        flexShrink: isMobile ? 1 : 0,
         '& .MuiDrawer-paper': {
-          width: open ? drawerWidth : collapsedWidth,
+          width: isMobile ? mobileDrawerWidth : desktopWidth,
+          maxWidth: '100%',
           overflowX: 'hidden',
           bgcolor: 'background.paper',
+          borderTopRightRadius: isMobile ? 22 : 0,
+          borderBottomRightRadius: isMobile ? 22 : 0,
+          pt: isMobile ? 1 : 0,
         },
       }}
     >
-      <List sx={{ pt: 2 }}>
+      <List sx={{ pt: isMobile ? 0 : 2 }}>
+        {isMobile && (
+          <ListItem
+            disablePadding
+            sx={{
+              px: 2,
+              py: 1,
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800, color: 'text.primary' }}>
+                Travelogue Menu
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                Navigate your dashboard
+              </Typography>
+            </Box>
+            <IconButton onClick={onRequestClose} size="large" aria-label="close menu">
+              <CloseRoundedIcon />
+            </IconButton>
+          </ListItem>
+        )}
         <ListItem
           disablePadding
           sx={{
@@ -101,7 +154,8 @@ export default function SidebarNav({
             py: 1,
             px: 1,
             gap: 0.5,
-            flexDirection: open ? 'row' : 'column',
+            flexDirection: navLabelVisible ? 'row' : 'column',
+            display: isMobile ? 'none' : 'flex',
           }}
         >
           <Tooltip title={open ? 'Collapse' : 'Expand'} placement="right">
@@ -110,7 +164,7 @@ export default function SidebarNav({
             </IconButton>
           </Tooltip>
           <Tooltip title="Hide sidebar" placement="right">
-            <IconButton onClick={onHide} size="large">
+            <IconButton onClick={handleVisibilityToggle} size="large">
               <VisibilityOffIcon />
             </IconButton>
           </Tooltip>
@@ -118,14 +172,14 @@ export default function SidebarNav({
         <Divider sx={{ mb: 1 }} />
         {navItems.map((item) => (
           <ListItem key={item.label} disablePadding sx={{ display: 'block', mb: 0.5 }}>
-            <Tooltip title={open ? '' : item.label} placement="right" disableHoverListener={open}>
+            <Tooltip title={navLabelVisible ? '' : item.label} placement="right" disableHoverListener={navLabelVisible}>
               <ListItemButton
                 selected={selectedTab === item.value}
-                onClick={() => onSelect && onSelect(item.value)}
+                onClick={() => handleSelect(item.value)}
                 sx={{
-                  minHeight: 48,
-                  justifyContent: open ? 'initial' : 'center',
-                  px: 2.5,
+                  minHeight: isMobile ? 52 : 48,
+                  justifyContent: navLabelVisible ? 'initial' : 'center',
+                  px: isMobile ? 2 : 2.5,
                   borderRadius: 3,
                   my: 0.5,
                   transition: 'all 0.2s ease',
@@ -139,7 +193,7 @@ export default function SidebarNav({
                 <ListItemIcon
                   sx={{
                     minWidth: 0,
-                    mr: open ? 2 : 'auto',
+                    mr: navLabelVisible ? 2 : 'auto',
                     justifyContent: 'center',
                   }}
                 >
@@ -154,7 +208,7 @@ export default function SidebarNav({
                 <ListItemText
                   primary={item.label}
                   sx={{
-                    opacity: open ? 1 : 0,
+                    opacity: navLabelVisible ? 1 : 0,
                     transition: 'opacity 0.2s',
                     fontWeight: selectedTab === item.value ? 700 : 500,
                     color: selectedTab === item.value ? 'primary.main' : 'text.primary',

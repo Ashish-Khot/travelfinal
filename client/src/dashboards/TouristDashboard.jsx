@@ -43,6 +43,7 @@ function TouristDashboard() {
     return saved ? JSON.parse(saved) : false;
   });
   const isMobile = useMediaQuery('(max-width:900px)');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState('Dashboard');
   const [weatherModal, setWeatherModal] = useState(false);
   const [travelogueSubTab, setTravelogueSubTab] = useState('create');
@@ -125,19 +126,19 @@ function TouristDashboard() {
   const handleSidebarToggle = () => setSidebarCompact((compact) => !compact);
 
   const handleSidebarVisibilityToggle = () => {
+    if (isMobile) {
+      setMobileSidebarOpen((prev) => !prev);
+      return;
+    }
+
     setSidebarHidden((hidden) => {
       const nextHidden = !hidden;
-      if (!nextHidden && isMobile) {
-        setSidebarCompact(true);
-      }
       return nextHidden;
     });
   };
 
   useEffect(() => {
-    if (isMobile) {
-      setSidebarHidden(true);
-    }
+    if (!isMobile) setMobileSidebarOpen(false);
   }, [isMobile]);
 
   // Theme toggle handler
@@ -218,14 +219,14 @@ function TouristDashboard() {
 
       // Close sidebar on mobile after navigation
       if (isMobile) {
-        setSidebarHidden(true);
+        setMobileSidebarOpen(false);
       }
     };
 
     const handleNavigateTab = (event) => {
       setSelectedTab(event.detail.tab);
       if (isMobile) {
-        setSidebarHidden(true);
+        setMobileSidebarOpen(false);
       }
     };
 
@@ -254,7 +255,6 @@ function TouristDashboard() {
   // Sidebar navigation items (Profile and Settings removed - now in top-right profile menu)
   const navItems = [
     { label: 'Dashboard', value: 'Dashboard' },
-    { label: 'Explore Destinations', value: 'Explore Destinations' },
     { label: 'Explore Guides', value: 'Explore Guides' },
     { label: 'Virtual Guide', value: 'Virtual Guide' },
     { label: 'Itinerary Planner', value: 'Itinerary Planner' },
@@ -278,7 +278,9 @@ function TouristDashboard() {
         onThemeToggle={handleThemeToggle}
         chatNotifications={chatNotifications}
         onChatClick={() => setSelectedTab('Chat')}
+        isMobile={isMobile}
         sidebarHidden={sidebarHidden}
+        mobileSidebarOpen={mobileSidebarOpen}
         sidebarCompact={sidebarCompact}
         onSidebarToggle={handleSidebarToggle}
         onSidebarVisibilityToggle={handleSidebarVisibilityToggle}
@@ -287,6 +289,8 @@ function TouristDashboard() {
         sx={(theme) => ({
           display: 'flex',
           minHeight: '100vh',
+          width: '100%',
+          overflowX: 'clip',
           bgcolor: 'background.default',
           backgroundImage:
             theme.palette.mode === 'dark'
@@ -298,11 +302,16 @@ function TouristDashboard() {
         <SidebarNav
           open={!sidebarCompact}
           hidden={sidebarHidden}
+          mobileOpen={mobileSidebarOpen}
+          onRequestClose={() => setMobileSidebarOpen(false)}
           onToggle={handleSidebarToggle}
           onHide={handleSidebarVisibilityToggle}
           navItems={navItems}
           selectedTab={selectedTab}
-          onSelect={setSelectedTab}
+          onSelect={(tab) => {
+            setSelectedTab(tab);
+            if (isMobile) setMobileSidebarOpen(false);
+          }}
           chatUnreadCount={Object.values(chatNotifications).reduce((sum, n) => sum + n.unreadCount, 0)}
         />
         {/* Main Content */}
@@ -310,11 +319,13 @@ function TouristDashboard() {
           component="main"
           sx={{
             flexGrow: 1,
-            p: { xs: 2, sm: 4 },
-            pt: { xs: 9, sm: 11 }, // Add top padding for fixed AppBar
+            minWidth: 0,
+            p: { xs: 1.5, sm: 3 },
+            pt: { xs: 8.5, sm: 10.5 }, // Add top padding for fixed AppBar
             maxWidth: '1600px',
             mx: 'auto',
             width: '100%',
+            overflowX: 'clip',
             transition: 'padding 0.2s ease, max-width 0.2s ease',
           }}
         >
@@ -325,11 +336,18 @@ function TouristDashboard() {
               {/* Metrics Row */}
               <DashboardMetrics />
               {/* Recommendations + Weather Row */}
-              <Box display={{ xs: 'block', md: 'flex' }} gap={3}>
-                <Box flex={2} minWidth={0}>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gap: 3,
+                  gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 2fr) minmax(0, 1fr)' },
+                  alignItems: 'stretch',
+                }}
+              >
+                <Box sx={{ minWidth: 0 }}>
                   <AIRecommendations />
                 </Box>
-                <Box flex={1} minWidth={260} maxWidth={420}>
+                <Box sx={{ minWidth: 0 }}>
                   <WeatherForecastCard onClick={() => setWeatherModal(true)} clickable />
                 </Box>
                 <WeatherSearch open={weatherModal} onClose={() => setWeatherModal(false)} />
@@ -419,14 +437,17 @@ function TouristDashboard() {
                 <Tabs
                   value={travelogueSubTab}
                   onChange={(e, newValue) => setTravelogueSubTab(newValue)}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  allowScrollButtonsMobile
                   sx={{
                     borderBottom: '1px solid rgba(79,138,139,0.1)',
                     '& .MuiTab-root': {
                       textTransform: 'none',
                       fontWeight: 700,
-                      fontSize: '0.95rem',
+                      fontSize: { xs: '0.85rem', sm: '0.95rem' },
                       color: '#6B7280',
-                      minWidth: 120,
+                      minWidth: { xs: 96, sm: 120 },
                       '&.Mui-selected': {
                         color: '#4F8A8B'
                       }

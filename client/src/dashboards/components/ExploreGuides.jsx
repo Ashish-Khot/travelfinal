@@ -187,6 +187,11 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
                 averageResponseTime: g.averageResponseTime || 24,
                 highlights: g.highlights || [],
                 isAvailable: g.isAvailable !== false,
+                isAvailableNow: g.isAvailableNow !== false,
+                isCurrentlyBooked: Boolean(g.isCurrentlyBooked),
+                manualAvailability: g.manualAvailability !== false,
+                availabilityReason: g.availabilityReason || (g.isAvailable === false ? 'unavailable' : 'available_now'),
+                nextAvailableAt: g.nextAvailableAt || null,
                 verifiedPhone: g.verifiedPhone || false,
                 verifiedID: g.verifiedID || false,
                 verifiedPayment: g.verifiedPayment || false,
@@ -291,8 +296,8 @@ export default function ExploreGuides({ refreshTrigger = 0 }) {
   };
 
   const handleBook = (guide) => {
-    if (guide?.isAvailable === false) {
-      setSuccessMsg('This guide is currently unavailable for booking.');
+    if (guide?.manualAvailability === false) {
+      setSuccessMsg('This guide has paused bookings right now.');
       setSnackbarSeverity('warning');
       return;
     }
