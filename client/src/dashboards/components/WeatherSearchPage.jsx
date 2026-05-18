@@ -12,7 +12,7 @@ import WbSunnyRoundedIcon from '@mui/icons-material/WbSunnyRounded';
 import CloudQueueRoundedIcon from '@mui/icons-material/CloudQueueRounded';
 
 
-const API_KEY = 'b3d31044024d27916dfdcd9a4530b279';
+const API_KEY = String(import.meta.env.VITE_OPENWEATHER_API_KEY || '').trim();
 
 function getIconByWeatherCode(code) {
   // OpenWeatherMap icon code mapping (simplified)
@@ -31,6 +31,10 @@ export default function WeatherSearchPage() {
 
   // Real search handler
   const handleSearch = async () => {
+    if (!API_KEY) {
+      setError('Weather API is not configured. Set VITE_OPENWEATHER_API_KEY in client/.env.');
+      return;
+    }
     setLoading(true);
     setError('');
     setWeather(null);

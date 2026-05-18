@@ -55,13 +55,38 @@ const allowedDevOrigins = new Set([
   'http://127.0.0.1:5174',
 ]);
 
+const corsAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+for (const origin of corsAllowedOrigins) {
+  allowedDevOrigins.add(origin);
+}
+
+const allowedDevOriginPatterns = [
+  /^https?:\/\/localhost:\d{2,5}$/,
+  /^https?:\/\/127\.0\.0\.1:\d{2,5}$/,
+  /^https?:\/\/192\.168\.\d{1,3}\.\d{1,3}:\d{2,5}$/,
+  /^https?:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{2,5}$/,
+  /^https?:\/\/172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}:\d{2,5}$/,
+];
+
+function isAllowedOrigin(origin) {
+  if (allowedDevOrigins.has(origin)) {
+    return true;
+  }
+  return allowedDevOriginPatterns.some((pattern) => pattern.test(origin));
+}
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedDevOrigins.has(origin)) {
+    if (!origin || isAllowedOrigin(origin)) {
       callback(null, true);
       return;
     }
 
+    console.warn(`[CORS] Blocked origin: ${origin}`);
     callback(new Error(`CORS blocked origin: ${origin}`));
   },
   credentials: true

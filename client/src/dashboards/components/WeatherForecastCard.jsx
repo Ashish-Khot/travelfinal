@@ -13,7 +13,7 @@ import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
 import NightlightRoundedIcon from '@mui/icons-material/NightlightRounded';
 import { motion } from 'framer-motion';
 
-const API_KEY = 'b3d31044024d27916dfdcd9a4530b279';
+const API_KEY = String(import.meta.env.VITE_OPENWEATHER_API_KEY || '').trim();
 const DEFAULT_LOCATION = 'Santorini, Greece';
 
 function getIconByWeatherCodeAndTemp(code, temp, isNight = false) {
@@ -45,6 +45,11 @@ export default function WeatherForecastCard({ onClick, clickable }) {
     async function fetchWeather() {
       setLoading(true);
       setError('');
+      if (!API_KEY) {
+        setError('Weather API is not configured. Set VITE_OPENWEATHER_API_KEY in client/.env.');
+        setLoading(false);
+        return;
+      }
       try {
         const geoRes = await fetch(
           `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(location)}&limit=1&appid=${API_KEY}`
