@@ -439,7 +439,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import api from '../api';
 import { io } from 'socket.io-client';
 import { useNavigate } from 'react-router-dom';
-import { styled, useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
+import { styled, ThemeProvider, createTheme } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import MuiDrawer from '@mui/material/Drawer';
 import MuiAppBar from '@mui/material/AppBar';
@@ -476,6 +476,7 @@ import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { buildMediaUrl } from '../utils/media';
 
 const drawerWidth = 272;
@@ -1204,7 +1205,7 @@ const MyToursPage = ({ tours, onCreateTour }) => {
 
   return (
     <Box>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={4}>
+      <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 1.5, flexDirection: { xs: 'column', sm: 'row' }, mb: 4 }}>
         <Box>
           <Typography variant="h5" fontWeight={700} mb={0.5}>My Tours</Typography>
           <Typography variant="body2" color="text.secondary">Manage and create your tour experiences</Typography>
@@ -1216,7 +1217,7 @@ const MyToursPage = ({ tours, onCreateTour }) => {
             setForm({ title: '', price: '', duration: '', description: '', image: '' });
             setOpen(true);
           }}
-          sx={{ borderRadius: 2, fontWeight: 700 }}
+          sx={{ borderRadius: 2, fontWeight: 700, width: { xs: '100%', sm: 'auto' } }}
           size="large"
         >
           + Create Tour
@@ -1402,8 +1403,16 @@ export default function GuideDashboard() {
   const [selected, setSelected] = useState('Dashboard');
   const [chatOpenRequest, setChatOpenRequest] = useState({ touristId: '', token: 0 });
   const [open, setOpen] = useState(true);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const socketRef = useRef(null);
 // ...existing code...
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileDrawerOpen(false);
+    }
+  }, [isMobile]);
 
   // Move fetchGuideData to top-level so it's available in JSX
   const fetchGuideData = async () => {
@@ -2106,7 +2115,7 @@ export default function GuideDashboard() {
           </Box>
 
           <Box mb={3} pb={3} borderBottom="1px solid #e5e7eb">
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 2, gap: 1.2, flexDirection: { xs: 'column', sm: 'row' } }}>
               <Box>
                 <Typography variant="subtitle2" fontWeight={600}>Email Notifications</Typography>
                 <Typography variant="caption" color="text.secondary">Receive updates about bookings</Typography>
@@ -2116,7 +2125,7 @@ export default function GuideDashboard() {
           </Box>
 
           <Box mb={3} pb={3} borderBottom="1px solid #e5e7eb">
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 2, gap: 1.2, flexDirection: { xs: 'column', sm: 'row' } }}>
               <Box>
                 <Typography variant="subtitle2" fontWeight={600}>SMS Alerts</Typography>
                 <Typography variant="caption" color="text.secondary">Get instant alerts on your phone</Typography>
@@ -2163,6 +2172,13 @@ export default function GuideDashboard() {
     setSelected('Messages');
   };
 
+  const handleSectionSelect = (sectionLabel) => {
+    setSelected(sectionLabel);
+    if (isMobile) {
+      setMobileDrawerOpen(false);
+    }
+  };
+
   const pageMap = {
     Dashboard: <DashboardPage user={user} bookings={bookings} guideProfile={guideProfile} guideReviews={guideReviews} tours={tours} />,
     'My Tours': <MyToursPage tours={tours} onCreateTour={handleCreateTour} />,
@@ -2193,8 +2209,64 @@ export default function GuideDashboard() {
     );
   }
 
-  const activeDrawerWidth = open ? drawerWidth : collapsedDrawerWidth;
+  const desktopDrawerWidth = open ? drawerWidth : collapsedDrawerWidth;
+  const contentOffset = isMobile ? 0 : desktopDrawerWidth;
+  const drawerExpanded = isMobile ? true : open;
   const avatarLetter = (user?.name || 'G').charAt(0).toUpperCase();
+  const drawerContent = (
+    <>
+      <Box sx={{ px: drawerExpanded ? 2.25 : 1.25, py: 2.5, minHeight: 88, borderBottom: '1px solid rgba(148, 163, 184, 0.16)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: drawerExpanded ? 'flex-start' : 'center' }}>
+          <Avatar sx={{ width: 42, height: 42, bgcolor: guideColors.accent, color: guideColors.ink, fontWeight: 900, boxShadow: '0 8px 18px rgba(23, 35, 38, 0.2)' }}>
+            {avatarLetter}
+          </Avatar>
+          {drawerExpanded && (
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" sx={{ color: '#fff', fontWeight: 900, lineHeight: 1.2 }} noWrap>
+                {user?.name || 'Guide'}
+              </Typography>
+              <Typography variant="caption" sx={{ color: guideColors.sidebarMuted, fontWeight: 700 }}>
+                Guide Dashboard
+              </Typography>
+            </Box>
+          )}
+        </Box>
+      </Box>
+      <List sx={{ px: 1.25, py: 2 }}>
+        {navItems.map((item) => (
+          <ListItem key={item.label} disablePadding sx={{ display: 'block' }}>
+            <ListItemButton
+              sx={{
+                minHeight: 48,
+                justifyContent: drawerExpanded ? 'initial' : 'center',
+                px: 2.5,
+                borderRadius: 2.5,
+                my: 0.65,
+                color: selected === item.label ? guideColors.ink : guideColors.sidebarText,
+                background: selected === item.label ? guideColors.activeNavBackground : 'transparent',
+                boxShadow: selected === item.label ? '0 10px 22px rgba(23, 35, 38, 0.16)' : 'none',
+                transition: 'background 0.2s, color 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  bgcolor: selected === item.label ? undefined : 'rgba(216, 231, 225, 0.16)',
+                },
+              }}
+              selected={selected === item.label}
+              onClick={() => handleSectionSelect(item.label)}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: drawerExpanded ? 2 : 'auto', justifyContent: 'center', color: 'inherit' }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{ fontWeight: selected === item.label ? 900 : 700, fontSize: 14 }}
+                sx={{ opacity: drawerExpanded ? 1 : 0, transition: 'opacity 0.2s' }}
+              />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+    </>
+  );
 
   return (
     <ThemeProvider theme={theme}>
@@ -2209,61 +2281,37 @@ export default function GuideDashboard() {
         }}
       >
         <CssBaseline />
-        {/* Sidebar */}
-        <Drawer variant="permanent" open={open} sx={{ position: 'fixed', left: 0, top: 0, height: '100vh', zIndex: 1200 }}>
-          <Box sx={{ px: open ? 2.25 : 1.25, py: 2.5, minHeight: 88, borderBottom: '1px solid rgba(148, 163, 184, 0.16)' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, justifyContent: open ? 'flex-start' : 'center' }}>
-              <Avatar sx={{ width: 42, height: 42, bgcolor: guideColors.accent, color: guideColors.ink, fontWeight: 900, boxShadow: '0 8px 18px rgba(23, 35, 38, 0.2)' }}>
-                {avatarLetter}
-              </Avatar>
-              {open && (
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle1" sx={{ color: '#fff', fontWeight: 900, lineHeight: 1.2 }} noWrap>
-                    {user?.name || 'Guide'}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: guideColors.sidebarMuted, fontWeight: 700 }}>
-                    Guide Dashboard
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Box>
-          <List sx={{ px: 1.25, py: 2 }}>
-            {navItems.map((item) => (
-              <ListItem key={item.label} disablePadding sx={{ display: 'block' }}>
-                <ListItemButton
-                  sx={{
-                    minHeight: 48,
-                    justifyContent: open ? 'initial' : 'center',
-                    px: 2.5,
-                    borderRadius: 2.5,
-                    my: 0.65,
-                    color: selected === item.label ? guideColors.ink : guideColors.sidebarText,
-                    background: selected === item.label ? guideColors.activeNavBackground : 'transparent',
-                    boxShadow: selected === item.label ? '0 10px 22px rgba(23, 35, 38, 0.16)' : 'none',
-                    transition: 'background 0.2s, color 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      bgcolor: selected === item.label ? undefined : 'rgba(216, 231, 225, 0.16)',
-                    },
-                  }}
-                  selected={selected === item.label}
-                  onClick={() => setSelected(item.label)}
-                >
-                  <ListItemIcon sx={{ minWidth: 0, mr: open ? 2 : 'auto', justifyContent: 'center', color: 'inherit' }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={item.label}
-                    primaryTypographyProps={{ fontWeight: selected === item.label ? 900 : 700, fontSize: 14 }}
-                    sx={{ opacity: open ? 1 : 0, transition: 'opacity 0.2s' }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </List>
-        </Drawer>
+        {/* Desktop Sidebar */}
+        {!isMobile && (
+          <Drawer variant="permanent" open={open} sx={{ position: 'fixed', left: 0, top: 0, height: '100vh', zIndex: 1200 }}>
+            {drawerContent}
+          </Drawer>
+        )}
+        {/* Mobile Sidebar */}
+        {isMobile && (
+          <MuiDrawer
+            variant="temporary"
+            open={mobileDrawerOpen}
+            onClose={() => setMobileDrawerOpen(false)}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              display: { xs: 'block', md: 'none' },
+              '& .MuiDrawer-paper': {
+                width: { xs: '86vw', sm: 320 },
+                maxWidth: drawerWidth,
+                boxSizing: 'border-box',
+                background: guideColors.sidebarBackground,
+                color: guideColors.sidebarText,
+                borderRight: '1px solid rgba(237, 247, 242, 0.12)',
+                boxShadow: '14px 0 30px rgba(23, 35, 38, 0.2)',
+              },
+            }}
+          >
+            {drawerContent}
+          </MuiDrawer>
+        )}
         {/* Main Content */}
-        <Box sx={{ flex: 1, marginLeft: `${activeDrawerWidth}px`, width: `calc(100% - ${activeDrawerWidth}px)`, minHeight: '100vh', display: 'flex', flexDirection: 'column', transition: theme.transitions.create(['margin-left', 'width'], { duration: theme.transitions.duration.shorter }) }}>
+        <Box sx={{ flex: 1, marginLeft: isMobile ? 0 : `${desktopDrawerWidth}px`, width: isMobile ? '100%' : `calc(100% - ${desktopDrawerWidth}px)`, minHeight: '100vh', display: 'flex', flexDirection: 'column', transition: theme.transitions.create(['margin-left', 'width'], { duration: theme.transitions.duration.shorter }) }}>
           <AppBar
             position="fixed"
             open={open}
@@ -2271,8 +2319,8 @@ export default function GuideDashboard() {
             color="inherit"
             sx={{
               marginLeft: 0,
-              left: `${activeDrawerWidth}px`,
-              width: `calc(100% - ${activeDrawerWidth}px)`,
+              left: `${contentOffset}px`,
+              width: isMobile ? '100%' : `calc(100% - ${contentOffset}px)`,
               backdropFilter: 'blur(18px)',
               background: glassBg(theme),
               borderBottom: '1px solid rgba(148, 163, 184, 0.22)',
@@ -2281,8 +2329,20 @@ export default function GuideDashboard() {
             }}
           >
             <Toolbar sx={{ minHeight: 76, px: { xs: 2, md: 4 } }}>
-              <IconButton color="inherit" aria-label="open drawer" onClick={() => setOpen(!open)} edge="start" sx={{ mr: 2 }}>
-                {open ? <ChevronLeftIcon /> : <MenuIcon />}
+              <IconButton
+                color="inherit"
+                aria-label="open drawer"
+                onClick={() => {
+                  if (isMobile) {
+                    setMobileDrawerOpen(true);
+                  } else {
+                    setOpen(!open);
+                  }
+                }}
+                edge="start"
+                sx={{ mr: 2 }}
+              >
+                {isMobile ? <MenuIcon /> : open ? <ChevronLeftIcon /> : <MenuIcon />}
               </IconButton>
               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                 <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 900, color: guideColors.ink }}>
@@ -2300,6 +2360,29 @@ export default function GuideDashboard() {
             </Toolbar>
           </AppBar>
           <Main open={open} sx={{ pt: 12, px: { xs: 2, md: 4 }, maxWidth: '1680px', width: '100%', mx: 'auto', marginLeft: 0 }}>
+            {isMobile && (
+              <Box sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 1, mb: 2, pr: 1, '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}>
+                {navItems.map((item) => (
+                  <Button
+                    key={item.label}
+                    variant={selected === item.label ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => handleSectionSelect(item.label)}
+                    sx={{
+                      flexShrink: 0,
+                      textTransform: 'none',
+                      borderRadius: 999,
+                      fontWeight: 700,
+                      px: 1.75,
+                      py: 0.6,
+                      minHeight: 34,
+                    }}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </Box>
+            )}
             {pageMap[selected]}
           </Main>
         </Box>

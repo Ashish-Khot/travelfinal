@@ -368,7 +368,92 @@ export default function HotelBookings({ showHeader = true }) {
             />
           </Stack>
         </Box>
-        <TableContainer sx={{ overflowX: "auto" }}>
+        <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.5, p: 2 }}>
+          {loading ? (
+            <Typography variant="body2" color="text.secondary">
+              {t("hotelBookings.table.loading")}
+            </Typography>
+          ) : filteredBookings.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              {t("hotelBookings.table.noData")}
+            </Typography>
+          ) : (
+            filteredBookings.map((booking) => {
+              const roomCount = Math.max(1, Number(booking.roomCount) || 1);
+              const nights = getNights(booking.checkIn, booking.checkOut);
+              return (
+                <Box
+                  key={`mobile-${booking._id}`}
+                  sx={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 2,
+                    p: 1.5,
+                    bgcolor: "#fff",
+                    boxShadow: "0 6px 16px rgba(15, 23, 42, 0.06)",
+                  }}
+                >
+                  <Stack direction="row" spacing={1.25} alignItems="center" mb={1}>
+                    <Avatar
+                      src={booking.touristId?.avatar || ""}
+                      alt={booking.touristId?.name || t("hotelBookings.fallback.tourist")}
+                      sx={{ width: 36, height: 36, bgcolor: "#2563eb", fontWeight: 800 }}
+                    />
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="body2" fontWeight={800} noWrap>
+                        {booking.touristId?.name || t("hotelBookings.fallback.tourist")}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {booking.touristId?.phone || t("hotelBookings.fallback.na")}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={getStatusLabel(booking.status)}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        ...(statusChipSx[booking.status] || statusChipSx[STATUS_COMPLETED]),
+                        borderRadius: 1.25,
+                        fontWeight: 800,
+                      }}
+                    />
+                  </Stack>
+                  <Typography variant="body2" fontWeight={700}>
+                    {formatDate(booking.checkIn)} {t("hotelBookings.table.to")} {formatDate(booking.checkOut)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    {nights} {nights === 1 ? "night" : "nights"} | {booking.roomType || t("hotelBookings.fallback.standard")} x {roomCount}
+                  </Typography>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1.5}>
+                    <Typography variant="body2" fontWeight={800}>
+                      {formatCurrency(booking.totalAmount)}
+                    </Typography>
+                    <Select
+                      size="small"
+                      value={booking.status}
+                      onChange={(event) => handleStatusChange(booking._id, event.target.value)}
+                      disabled={updatingId === booking._id || booking.status === STATUS_COMPLETED}
+                      sx={{
+                        minWidth: 138,
+                        borderRadius: 1.5,
+                        bgcolor: "#fff",
+                        "& .MuiSelect-select": { py: 0.75, fontWeight: 700, fontSize: 13.5 },
+                      }}
+                    >
+                      {statusOptions
+                        .filter((status) => status !== STATUS_ALL)
+                        .map((status) => (
+                          <MenuItem key={status} value={status}>
+                            {getStatusLabel(status)}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </Stack>
+                </Box>
+              );
+            })
+          )}
+        </Box>
+        <TableContainer sx={{ overflowX: "auto", display: { xs: "none", md: "block" } }}>
           <Table size="small" sx={{ minWidth: 1060 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f8fafc" }}>

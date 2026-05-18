@@ -58,7 +58,7 @@ const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, on
       }}
     >
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2.5 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 2.5, gap: 1.5, flexDirection: { xs: 'column', sm: 'row' } }}>
         <Box sx={{ flex: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
             <Avatar sx={{ bgcolor: '#dbeafe', color: '#1976d2', fontWeight: 700 }}>
@@ -147,14 +147,13 @@ const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, on
       </Grid>
 
       {/* Action Buttons */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ display: 'grid', gap: 1.25, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' } }}>
         {/* Accept Button */}
         {canAccept && (
           <Button
             variant="contained"
+            fullWidth
             sx={{
-              flex: 1,
-              minWidth: 120,
               textTransform: 'none',
               fontWeight: 700,
               borderRadius: 2,
@@ -181,9 +180,8 @@ const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, on
         {canReject && (
           <Button
             variant="outlined"
+            fullWidth
             sx={{
-              flex: 1,
-              minWidth: 120,
               textTransform: 'none',
               fontWeight: 700,
               borderRadius: 2,
@@ -212,9 +210,8 @@ const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, on
         {canCompleteTour && (
           <Button
             variant="contained"
+            fullWidth
             sx={{
-              flex: 1,
-              minWidth: 120,
               textTransform: 'none',
               fontWeight: 700,
               borderRadius: 2,
@@ -239,9 +236,8 @@ const BookingCard = ({ booking, nowMs, isLoading, onAccept, onReject, onChat, on
         {/* Chat Button */}
         <Button
           variant="outlined"
+          fullWidth
           sx={{
-            flex: 1,
-            minWidth: 120,
             textTransform: 'none',
             fontWeight: 700,
             borderRadius: 2,
@@ -407,6 +403,9 @@ export default function BookingsDataGrid({ bookings = [], onStatusChange, onChat
         <Tabs
           value={filterTab}
           onChange={(e, val) => setFilterTab(val)}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
             '& .MuiTab-root': {
               textTransform: 'none',

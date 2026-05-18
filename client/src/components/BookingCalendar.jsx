@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -14,13 +15,14 @@ const sampleBookings = [
 
 export default function BookingCalendar() {
   const [value, setValue] = React.useState(dayjs());
+  const isMobile = useMediaQuery('(max-width:600px)');
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Paper elevation={3} sx={{ borderRadius: 4, p: 2, bgcolor: 'background.paper', maxWidth: 400, mx: 'auto' }}>
+      <Paper elevation={3} sx={{ borderRadius: 4, p: { xs: 1.2, sm: 2 }, bgcolor: 'background.paper', maxWidth: { xs: '100%', sm: 420 }, mx: 'auto', overflow: 'hidden' }}>
         <Typography variant="h6" fontWeight={700} mb={2}>Booking Calendar</Typography>
         <StaticDatePicker
-          displayStaticWrapperAs="desktop"
+          displayStaticWrapperAs={isMobile ? 'mobile' : 'desktop'}
           value={value}
           onChange={setValue}
           renderDay={(day, _value, DayComponentProps) => {

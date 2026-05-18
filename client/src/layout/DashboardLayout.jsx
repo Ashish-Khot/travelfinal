@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Box } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import Sidebar from "./Sidebar";
 import TopNavbar from "./TopNavbar";
 
@@ -11,9 +13,17 @@ export default function DashboardLayout({
   selected,
   onSelect,
 }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleDrawerToggle = () => setMobileOpen((prev) => !prev);
+
+  useEffect(() => {
+    if (!isMobile && mobileOpen) {
+      setMobileOpen(false);
+    }
+  }, [isMobile, mobileOpen]);
 
   return (
     <Box
@@ -48,7 +58,8 @@ export default function DashboardLayout({
           display: "flex",
           flexDirection: "column",
           minWidth: 0,
-          height: "100vh",
+          minHeight: "100vh",
+          height: { xs: "auto", md: "100vh" },
           background:
             "radial-gradient(circle at top right, rgba(37,99,235,0.10), transparent 34%), radial-gradient(circle at bottom left, rgba(15,118,110,0.12), transparent 30%), #f4f7fb",
         }}

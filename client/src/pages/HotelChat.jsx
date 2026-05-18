@@ -18,6 +18,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import SearchIcon from "@mui/icons-material/Search";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import EmojiEmotionsOutlinedIcon from "@mui/icons-material/EmojiEmotionsOutlined";
@@ -25,6 +26,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/Send";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { io } from "socket.io-client";
 import api from "../api";
 
@@ -105,6 +107,7 @@ const emojiList = ["😀", "😊", "😍", "👍", "🙏", "🎉", "😢", "😮
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 export default function HotelChat({ showHeader = true }) {
+  const isNarrow = useMediaQuery("(max-width:900px)");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [tourists, setTourists] = useState([]);
@@ -137,6 +140,13 @@ export default function HotelChat({ showHeader = true }) {
   const messages = selectedTourist?.chatId
     ? messagesByChat[selectedTourist.chatId] || []
     : [];
+
+  useEffect(() => {
+    if (!isNarrow && !selectedId && tourists.length > 0) {
+      setSelectedId(tourists[0].id);
+    }
+  }, [isNarrow, selectedId, tourists]);
+
   const selectedMessages = useMemo(() => {
     if (!selectedMessageIds.length) return [];
     const idSet = new Set(selectedMessageIds);
@@ -279,10 +289,11 @@ export default function HotelChat({ showHeader = true }) {
 
         setTourists(mapped);
         if (mapped.length > 0) {
-          const exists = selectedId && mapped.some((item) => item.id === selectedId);
-          if (!exists) {
-            setSelectedId(mapped[0].id);
-          }
+          setSelectedId((prevSelectedId) => {
+            const hasCurrent = prevSelectedId && mapped.some((item) => item.id === prevSelectedId);
+            if (hasCurrent) return prevSelectedId;
+            return isNarrow ? null : mapped[0].id;
+          });
         } else {
           setSelectedId(null);
         }
@@ -295,7 +306,7 @@ export default function HotelChat({ showHeader = true }) {
 
     refreshTouristsRef.current = loadTourists;
     loadTourists();
-  }, [userId]);
+  }, [userId, isNarrow]);
 
   useEffect(() => {
     if (!selectedTourist?.id || !userId) return;
@@ -593,12 +604,14 @@ export default function HotelChat({ showHeader = true }) {
         resolveId(message?.senderId) === userIdValue &&
         isWithinDeleteWindow(message.createdAt)
     );
+  const showTouristListPane = !isNarrow || !selectedTourist;
+  const showThreadPane = !isNarrow || Boolean(selectedTourist);
 
   return (
     <Box
       sx={{
-        height: { xs: "auto", md: "calc(100vh - 220px)" },
-        minHeight: 600,
+        height: { xs: "calc(100dvh - 190px)", md: "calc(100vh - 220px)" },
+        minHeight: { xs: 520, md: 600 },
         display: "flex",
         flexDirection: { xs: "column", md: "row" },
         gap: 2.5,
@@ -614,7 +627,7 @@ export default function HotelChat({ showHeader = true }) {
           borderRadius: 3,
           border: "1px solid #d7e8df",
           boxShadow: "0 16px 36px rgba(13, 86, 67, 0.12)",
-          display: "flex",
+          display: showTouristListPane ? "flex" : "none",
           flexDirection: "column",
         }}
       >
@@ -706,12 +719,12 @@ export default function HotelChat({ showHeader = true }) {
                       />
                     )}
                   </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography fontWeight={700}>{tourist.name}</Typography>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontWeight={700} noWrap>{tourist.name}</Typography>
                     <Typography variant="caption" sx={{ color: "#6b857b", display: "block" }}>
                       Room {tourist.room}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "#6b857b" }}>
+                    <Typography variant="body2" sx={{ color: "#6b857b" }} noWrap>
                       {tourist.lastMessage}
                     </Typography>
                   </Box>
@@ -745,22 +758,28 @@ export default function HotelChat({ showHeader = true }) {
           bgcolor: "#f8fafc",
           borderRadius: 3,
           boxShadow: "0 12px 30px rgba(15, 23, 42, 0.12)",
-          display: "flex",
+          display: showThreadPane ? "flex" : "none",
           flexDirection: "column",
           overflow: "hidden",
         }}
       >
         <Box
           sx={{
-            p: 2.5,
+            p: { xs: 1.5, md: 2.5 },
             borderBottom: "1px solid #e2e8f0",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             background: "#fff",
+            gap: 1,
           }}
         >
           <Stack direction="row" spacing={1.5} alignItems="center">
+            {isNarrow && (
+              <IconButton size="small" onClick={() => setSelectedId(null)} aria-label="Back to tourists">
+                <ArrowBackIcon fontSize="small" />
+              </IconButton>
+            )}
             <Avatar sx={{ bgcolor: "#14b8a6" }}>
               {selectedTourist?.name
                 ?.split(" ")
@@ -768,13 +787,13 @@ export default function HotelChat({ showHeader = true }) {
                 .join("")}
             </Avatar>
             <Box>
-              <Typography fontWeight={700}>{selectedTourist?.name}</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography fontWeight={700} sx={{ fontSize: { xs: 15, md: 16 } }}>{selectedTourist?.name}</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", maxWidth: { xs: 170, sm: 380 } }} noWrap>
                 Room {selectedTourist?.room ?? "--"} - Booking {selectedTourist?.bookingId ?? "N/A"}
               </Typography>
             </Box>
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
             {selectionMode ? (
               <>
                 <Chip
@@ -807,7 +826,7 @@ export default function HotelChat({ showHeader = true }) {
           </Stack>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: "auto", p: 3 }}>
+        <Box sx={{ flex: 1, overflowY: "auto", p: { xs: 1.5, md: 3 } }}>
           <Stack spacing={2.5} mt={2}>
             {messageRows.map((row) => {
               if (row.type === "divider") {
@@ -867,7 +886,7 @@ export default function HotelChat({ showHeader = true }) {
                 >
                   <Box
                     sx={{
-                      maxWidth: "75%",
+                      maxWidth: { xs: "84%", md: "75%" },
                       bgcolor: isAdmin ? "#14b8a6" : "#e2e8f0",
                       color: isAdmin ? "#fff" : "#0f172a",
                       px: selectionMode ? 2.5 : 2,
@@ -971,7 +990,7 @@ export default function HotelChat({ showHeader = true }) {
 
         <Box
           sx={{
-            p: 2,
+            p: { xs: 1.25, md: 2 },
             borderTop: "1px solid #e2e8f0",
             background: "#fff",
             position: "sticky",
@@ -995,10 +1014,10 @@ export default function HotelChat({ showHeader = true }) {
             sx={{
               display: "flex",
               alignItems: "center",
-              gap: 1.5,
+              gap: 1,
               p: 1,
-              px: 2,
-              borderRadius: 999,
+              px: { xs: 1.25, md: 2 },
+              borderRadius: { xs: 2.5, md: 999 },
               bgcolor: "#fff",
               boxShadow: "0 6px 18px rgba(15, 23, 42, 0.08)",
             }}
@@ -1013,7 +1032,7 @@ export default function HotelChat({ showHeader = true }) {
               onKeyDown={(event) => {
                 if (event.key === "Enter") handleSend();
               }}
-              sx={{ flex: 1, px: 1 }}
+              sx={{ flex: 1, px: 1, fontSize: { xs: 14, md: 15 } }}
             />
             <IconButton size="small" onClick={() => fileInputRef.current?.click()}>
               <AttachFileIcon />

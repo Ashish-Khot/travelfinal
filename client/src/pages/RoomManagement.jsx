@@ -615,15 +615,17 @@ export default function RoomManagement({ showHeader = true }) {
             />
           </Stack>
         </Box>
-        <TableContainer sx={{ overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 900 }}>
+        <TableContainer sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+          <Table size="small" sx={{ minWidth: 760 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f8fafc" }}>
                 <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.roomType")}</TableCell>
                 <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.price")}</TableCell>
                 <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.status")}</TableCell>
                 <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.vacantTotal")}</TableCell>
-                <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.booked")}</TableCell>
+                <TableCell sx={{ ...tableHeadCellSx, display: { xs: "none", sm: "table-cell" } }}>
+                  {t("roomManagement.table.columns.booked")}
+                </TableCell>
                 <TableCell sx={tableHeadCellSx}>{t("roomManagement.table.columns.occupancy")}</TableCell>
                 <TableCell align="right" sx={tableHeadCellSx}>{t("roomManagement.table.columns.actions")}</TableCell>
               </TableRow>
@@ -747,7 +749,7 @@ export default function RoomManagement({ showHeader = true }) {
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ display: { xs: "none", sm: "table-cell" } }}>
                         <Typography variant="body2" fontWeight={700}>
                           {bookedCount}
                         </Typography>

@@ -13,9 +13,11 @@ import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EmojiEmotionsOutlinedIcon from '@mui/icons-material/EmojiEmotionsOutlined';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import io from 'socket.io-client';
 import api from '../../api';
 import PremiumAvatar from '../../components/PremiumAvatar';
@@ -438,6 +440,9 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
   };
 
   const guideIdValue = guideId ? String(guideId) : '';
+  const isNarrow = useMediaQuery('(max-width:960px)');
+  const showTouristListPane = !isNarrow || !selectedTourist;
+  const showThreadPane = !isNarrow || Boolean(selectedTourist);
   const canBulkDeleteForEveryone =
     selectedMessages.length > 0 &&
     selectedMessages.every(
@@ -448,11 +453,22 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
     );
 
   return (
-    <Paper elevation={4} sx={{ display: 'flex', height: '70vh', bgcolor: '#f8fdf7', borderRadius: 4, boxShadow: 3, overflow: 'hidden' }}>
+    <Paper
+      elevation={4}
+      sx={{
+        display: 'flex',
+        height: { xs: 'calc(100vh - 190px)', md: '70vh' },
+        minHeight: { xs: 520, md: 620 },
+        bgcolor: '#f8fdf7',
+        borderRadius: { xs: 2.5, md: 4 },
+        boxShadow: 3,
+        overflow: 'hidden',
+      }}
+    >
       {/* Tourist List */}
-      <Box sx={{ width: 320, bgcolor: '#fff', borderRight: '1.5px solid #e0e0e0', p: 0, display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ p: 3, pb: 1 }}>
-          <Typography variant="h4" fontWeight={800} mb={0.5} sx={{ fontFamily: 'serif' }}>Messages</Typography>
+      <Box sx={{ width: { xs: '100%', md: 320 }, bgcolor: '#fff', borderRight: { xs: 'none', md: '1.5px solid #e0e0e0' }, p: 0, display: showTouristListPane ? 'flex' : 'none', flexDirection: 'column' }}>
+        <Box sx={{ p: { xs: 2, md: 3 }, pb: 1 }}>
+          <Typography variant="h4" fontWeight={800} mb={0.5} sx={{ fontFamily: 'serif', fontSize: { xs: '1.5rem', md: '2rem' } }}>Messages</Typography>
           <Typography variant="subtitle2" color="text.secondary" mb={2}>
             Chat with your tourists in real-time
           </Typography>
@@ -508,7 +524,7 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
                 sx={{ border: selectedTourist?._id === tourist._id ? '2px solid #388e3c' : '2px solid #fff' }}
               />
               <Box>
-                <Typography fontWeight={700} fontSize={17}>{tourist.name || 'No Name'}</Typography>
+                <Typography fontWeight={700} fontSize={{ xs: 15, md: 17 }}>{tourist.name || 'No Name'}</Typography>
                 <Typography fontSize={13} color="text.secondary">{tourist.country || ''}</Typography>
               </Box>
             </Box>
@@ -516,10 +532,15 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
         </Box>
       </Box>
       {/* Chat Window */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#f8fdf7', borderRadius: 0, p: 0 }}>
+      <Box sx={{ flex: 1, display: showThreadPane ? 'flex' : 'none', flexDirection: 'column', bgcolor: '#f8fdf7', borderRadius: 0, p: 0 }}>
         {selectedTourist && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 3, bgcolor: '#f4fbf6', borderBottom: '1.5px solid #e0e0e0' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: { xs: 1.5, md: 3 }, bgcolor: '#f4fbf6', borderBottom: '1.5px solid #e0e0e0', gap: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              {isNarrow && (
+                <IconButton size="small" onClick={() => setSelectedTourist(null)} sx={{ mr: 1 }} aria-label="Back to tourist list">
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+              )}
               <PremiumAvatar
                 src={selectedTourist.avatar}
                 name={selectedTourist.name}
@@ -527,11 +548,11 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
                 sx={{ mr: 2 }}
               />
               <Box>
-                <Typography fontWeight={700} fontSize={18}>{selectedTourist.name}</Typography>
+                <Typography fontWeight={700} fontSize={{ xs: 16, md: 18 }}>{selectedTourist.name}</Typography>
                 <Typography fontSize={13} color="text.secondary">{selectedTourist.country}</Typography>
               </Box>
             </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {selectionMode ? (
                 <>
                   <Chip
@@ -578,7 +599,7 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
               <Button onClick={() => setSelectedTourist(null)} color="primary" variant="outlined">Back</Button>
             </Box>
           ) : (
-            <Box sx={{ flex: 1, px: 3, py: 2, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ flex: 1, px: { xs: 1.5, md: 3 }, py: { xs: 1.5, md: 2 }, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
               {messages.length === 0 && (
                 <Typography color="text.secondary" sx={{ textAlign: 'center', mt: 8 }}>
                   No messages yet. Start the conversation!
@@ -648,7 +669,7 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
                       pl: selectionMode ? 4 : 2,
                       pt: selectionMode ? 2.2 : 1.2,
                       borderRadius: isMe ? '16px 16px 0 16px' : '16px 16px 16px 0',
-                      maxWidth: 380,
+                      maxWidth: { xs: '78vw', md: 380 },
                       boxShadow: 1,
                       position: 'relative',
                       outline: isSelected ? '2px solid #0ea67f' : 'none',
@@ -748,7 +769,7 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
           sx={{
             display: 'flex',
             bgcolor: '#fafafa',
-            p: 2,
+            p: { xs: 1.25, md: 2 },
             borderTop: '1.5px solid #e0e0e0',
             boxShadow: '0 1px 4px 0 rgba(76,175,80,0.04)',
             mt: 'auto',
@@ -806,7 +827,7 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
               value={input}
               onChange={e => setInput(e.target.value)}
               variant="outlined"
-              size="medium"
+              size={isNarrow ? 'small' : 'medium'}
               sx={{ bgcolor: '#fff', borderRadius: 3, fontSize: 16, minWidth: 0 }}
               onKeyDown={e => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -815,12 +836,12 @@ export default function GuideChatPanel({ guideId, preselectedTouristId, preselec
                 }
               }}
               disabled={isInputDisabled || loading || uploadingAttachment || !!error || !chatId}
-              inputProps={{ style: { fontSize: 16, padding: '12px' } }}
+              inputProps={{ style: { fontSize: isNarrow ? 15 : 16, padding: isNarrow ? '10px' : '12px' } }}
             />
             <Button
               variant="contained"
               color="success"
-              sx={{ minWidth: 48, minHeight: 48, borderRadius: 2, fontWeight: 700, fontSize: 16, boxShadow: 'none', textTransform: 'none', flexShrink: 0 }}
+              sx={{ minWidth: { xs: 42, md: 48 }, minHeight: { xs: 42, md: 48 }, borderRadius: 2, fontWeight: 700, fontSize: { xs: 14, md: 16 }, boxShadow: 'none', textTransform: 'none', flexShrink: 0, px: { xs: 1.6, md: 2.2 } }}
               onClick={e => {
                 e.preventDefault();
                 handleSend();

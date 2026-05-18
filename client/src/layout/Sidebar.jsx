@@ -315,7 +315,8 @@ export default function Sidebar({
         sx={{
           display: { xs: "block", md: "none" },
           "& .MuiDrawer-paper": {
-            width,
+            width: { xs: "85vw", sm: width },
+            maxWidth: width,
             boxSizing: "border-box",
             borderRight: "none",
             bgcolor: "transparent",

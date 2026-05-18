@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Button,
   Box,
   FormControl,
   Grid,
@@ -298,8 +299,100 @@ export default function HotelCustomerIntelligence({ showHeader = true }) {
         <Typography variant="h6" fontWeight={700} mb={2}>
           Customer Loyalty Table
         </Typography>
-        <TableContainer>
-          <Table>
+        <Box sx={{ display: { xs: "grid", md: "none" }, gap: 1.5, mb: 1.5 }}>
+          {loading ? (
+            <Typography color="text.secondary">Loading customers...</Typography>
+          ) : customers.length === 0 ? (
+            <Typography color="text.secondary">No customers found.</Typography>
+          ) : (
+            customers.map((customer) => {
+              const isEditing = editingId === customer.touristId;
+              const loyaltyScore = Number.isFinite(customer.loyaltyScore)
+                ? customer.loyaltyScore
+                : ((customer.stays || 0) * 2 + Math.round((customer.spending || 0) / 1000));
+              return (
+                <Paper
+                  key={`mobile-${customer.touristId || customer.name}`}
+                  variant="outlined"
+                  sx={{ p: 1.5, borderRadius: 2, borderColor: "#e2e8f0" }}
+                >
+                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1.5} mb={1}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography fontWeight={700} noWrap>{customer.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {customer.stays} stays • Loyalty {loyaltyScore}
+                      </Typography>
+                    </Box>
+                    <Typography fontWeight={700}>
+                      ₹{Number(customer.spending || 0).toLocaleString("en-IN")}
+                    </Typography>
+                  </Stack>
+                  {isEditing ? (
+                    <Stack spacing={1.25}>
+                      <FormControl size="small">
+                        <Select
+                          value={editForm.segment}
+                          onChange={(event) =>
+                            setEditForm((prev) => ({ ...prev, segment: event.target.value }))
+                          }
+                        >
+                          {segmentOptions.map((option) => (
+                            <MenuItem key={option.label} value={option.value}>
+                              {option.label}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <TextField
+                        size="small"
+                        value={editForm.notes}
+                        onChange={(event) =>
+                          setEditForm((prev) => ({ ...prev, notes: event.target.value }))
+                        }
+                        placeholder="Add note"
+                      />
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<SaveOutlinedIcon />}
+                          onClick={() => saveEdit(customer.touristId)}
+                          disabled={savingId === customer.touristId}
+                        >
+                          Save
+                        </Button>
+                        <Button variant="outlined" size="small" startIcon={<CloseIcon />} onClick={cancelEdit}>
+                          Cancel
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  ) : (
+                    <Stack spacing={0.6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Segment: {customer.segment || "Other"}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Notes: {customer.notes || "N/A"}
+                      </Typography>
+                      <Box>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          startIcon={<EditOutlinedIcon />}
+                          onClick={() => startEdit(customer)}
+                        >
+                          Edit
+                        </Button>
+                      </Box>
+                    </Stack>
+                  )}
+                </Paper>
+              );
+            })
+          )}
+        </Box>
+        <TableContainer sx={{ overflowX: "auto", display: { xs: "none", md: "block" } }}>
+          <Table sx={{ minWidth: 920 }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: "#f8fafc" }}>
                 <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>

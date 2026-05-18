@@ -1,6 +1,6 @@
 
 import React, { useState } from "react";
-import { Box, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Paper, Stack, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import DashboardLayout from "../layout/DashboardLayout";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
@@ -23,6 +23,7 @@ import HotelProfile from "./HotelProfile";
 export default function HotelDashboard() {
   const { t } = useTranslation();
   const [section, setSection] = useState("overview");
+  const handleSectionSelect = (nextSection) => setSection(nextSection);
   const menuItems = [
     { id: "overview", label: t("dashboard.menu.overview"), icon: <DashboardRoundedIcon /> },
     { id: "rooms", label: t("dashboard.menu.rooms"), icon: <BedRoundedIcon /> },
@@ -70,7 +71,7 @@ export default function HotelDashboard() {
   const renderSection = () => {
     switch (section) {
       case "overview":
-        return <HotelDashboardOverview showHeader={false} onQuickAction={setSection} />;
+        return <HotelDashboardOverview showHeader={false} onQuickAction={handleSectionSelect} />;
       case "rooms":
         return <RoomManagement showHeader={false} />;
       case "bookings":
@@ -86,7 +87,7 @@ export default function HotelDashboard() {
       case "profile":
         return <HotelProfile showHeader={false} />;
       default:
-        return <HotelDashboardOverview showHeader={false} onQuickAction={setSection} />;
+        return <HotelDashboardOverview showHeader={false} onQuickAction={handleSectionSelect} />;
     }
   };
 
@@ -94,7 +95,7 @@ export default function HotelDashboard() {
     <DashboardLayout
       menuItems={menuItems}
       selected={section}
-      onSelect={setSection}
+      onSelect={handleSectionSelect}
     >
       <Paper
         elevation={0}
@@ -127,9 +128,43 @@ export default function HotelDashboard() {
             >
               {meta.title}
             </Typography>
+            <Typography sx={{ mt: 0.75, color: "#64748b", fontSize: { xs: 14, md: 16 } }}>
+              {meta.subtitle}
+            </Typography>
           </Box>
         </Stack>
       </Paper>
+      <Box
+        sx={{
+          display: { xs: "flex", md: "none" },
+          gap: 1,
+          mb: 2,
+          overflowX: "auto",
+          pr: 0.5,
+          "&::-webkit-scrollbar": { display: "none" },
+          scrollbarWidth: "none",
+        }}
+      >
+        {menuItems.map((item) => (
+          <Button
+            key={item.id}
+            onClick={() => handleSectionSelect(item.id)}
+            variant={section === item.id ? "contained" : "outlined"}
+            size="small"
+            sx={{
+              flexShrink: 0,
+              textTransform: "none",
+              borderRadius: 999,
+              fontWeight: 700,
+              minHeight: 34,
+              px: 1.6,
+              boxShadow: section === item.id ? "0 8px 18px rgba(37, 99, 235, 0.24)" : "none",
+            }}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </Box>
       {renderSection()}
     </DashboardLayout>
   );
